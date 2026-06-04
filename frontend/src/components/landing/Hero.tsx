@@ -1,7 +1,7 @@
 import { 
   FiCreditCard, FiFileText, FiBell, 
   FiBarChart2, FiHome, FiCpu, 
-  FiTool, FiCheckSquare, FiArrowRight 
+  FiTool, FiCheckSquare 
 } from "react-icons/fi";
 import { FaApple, FaGooglePlay } from "react-icons/fa";
 import logo from "../../assets/img/consorcia.png";
