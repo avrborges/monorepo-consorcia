@@ -1,20 +1,24 @@
-// backend/index.js
-const express = require("express");
-const cors = require("cors");
-
-const userRoutes = require("./routes/userRoutes")
+// backend/src/index.js
+const express = require('express');
+const cors = require('cors');
+const userRoutes = require('./routes/userRoutes');
 
 const app = express();
+const PORT = process.env.PORT || 5000;
 
-app.use(cors());
+// MIDDLEWARES
+// Permite que tu frontend de Vite (ej. http://localhost:5173) consulte al backend sin bloqueos de CORS
+app.use(cors()); 
 app.use(express.json());
 
-app.use("/users", userRoutes);
+// RUTAS GLOBALES
+app.use('/api/users', userRoutes);
 
-app.get("/", (req, res) => {
-  res.send("Backend funcionando 🚀");
+// Ruta de testeo inicial
+app.get('/', (req, res) => {
+  res.send('Consorcia API funcionando correctamente 🚀');
 });
 
-app.listen(4000, () => {
-  console.log("Servidor en http://localhost:4000");
+app.listen(PORT, () => {
+  console.log(`Servidor corriendo en http://localhost:${PORT}`);
 });
