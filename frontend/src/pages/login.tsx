@@ -1,28 +1,63 @@
 // src/pages/Login.tsx
-import { Link } from "react-router-dom";
+import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { FiArrowLeft } from "react-icons/fi";
+import { MdErrorOutline } from "react-icons/md";
+import { CiCircleCheck } from "react-icons/ci";
 import logo from "../assets/img/consorcia.png";
+import { loginRequest } from "../api"; // Importamos la función del Paso 1
 
 export default function Login() {
+  const navigate = useNavigate();
+
+  // ESTADOS para controlar los inputs del formulario
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  
+  // ESTADOS para el manejo de feedback al usuario
+  const [errorMsg, setErrorMsg] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Función que se ejecuta al hacer clic en "Iniciar Sesión"
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault(); // Evita que la página se recargue por defecto
+    setErrorMsg("");
+    setSuccessMsg("");
+    setIsLoading(true);
+
+    // Llamamos a la API enviando los estados actuales de email y password
+    const result = await loginRequest(email, password);
+    setIsLoading(false);
+
+    if (result.success) {
+      setSuccessMsg(result.message);
+      
+      // Simulamos una pequeña pausa de 1.5 segundos para que el usuario vea el mensaje de éxito
+      setTimeout(() => {
+        navigate("/"); // Por ahora redirigimos a la Landing. ¡Luego será al Dashboard!
+      }, 1500);
+    } else {
+      // Si las credenciales fallan, mostramos el error que nos mandó el Backend
+      setErrorMsg(result.message);
+    }
+  };
+
   return (
     <div className="min-h-screen w-full grid grid-cols-1 lg:grid-cols-2">
       
-      {/* ─── SECCIÓN IZQUIERDA: ESTILO LANDING OSCURO (Solo visible en Desktop) ─── */}
+      {/* ─── SECCIÓN IZQUIERDA: ESTILO LANDING OSCURO (Desktop) ─── */}
       <div className="hidden lg:flex relative flex-col justify-between p-12 bg-[#0b132b] bg-consorcia-grid overflow-hidden border-r border-white/5">
-        
-        {/* Capa de efectos Glow */}
         <div className="absolute -top-20 -left-20 w-[400px] h-[400px] bg-glow-radial pointer-events-none mix-blend-screen opacity-70" />
         <div className="absolute bottom-10 right-10 w-[300px] h-[300px] bg-glow-purple animate-glow-slow pointer-events-none mix-blend-screen opacity-50" />
         
-        {/* Header de la sección izquierda */}
         <div className="relative z-10">
           <Link to="/" className="inline-flex items-center gap-2 group text-slate-400 hover:text-white transition-colors">
             <FiArrowLeft className="transition-transform group-hover:-translate-x-1" />
-            <span className="text-sm font-medium">Volver</span>
+            <span className="text-sm font-medium">Volver a la landing</span>
           </Link>
         </div>
 
-        {/* Contenido Central Branding */}
         <div className="relative z-10 max-w-md my-auto space-y-6">
           <div className="flex items-center gap-3 animate-fade-in">
             <img src={logo} alt="Consorcia" className="h-14 w-auto drop-shadow-[0_0_20px_rgba(56,189,248,0.3)]" />
@@ -30,20 +65,17 @@ export default function Login() {
               CONSOR<span className="text-orange-400">CIA</span>
             </span>
           </div>
-          
           <h1 className="text-4xl font-extrabold text-white leading-tight tracking-tight">
             Gestiona tu comunidad <br />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-teal-400 to-blue-400">
               en un solo lugar.
             </span>
           </h1>
-          
           <p className="text-slate-400 text-lg font-light leading-relaxed">
             Accede a tus expensas, reportes, documentos y canales de comunicación de manera 100% online y transparente.
           </p>
         </div>
 
-        {/* Footer de la sección izquierda */}
         <div className="relative z-10 text-xs text-slate-600 tracking-wider">
           © 2026 CONSORCIA • by ARTHEMYSA
         </div>
@@ -53,15 +85,12 @@ export default function Login() {
       {/* ─── SECCIÓN DERECHA: FORMULARIO DE LOGIN (PANEL CLARO) ─── */}
       <div className="flex items-center justify-center p-6 sm:p-12 bg-slate-50 relative selection:bg-teal-500/20">
         
-        {/* Botón de volver atrás visible solo en Mobile (Adaptado a fondo claro) */}
         <Link to="/" className="lg:hidden absolute top-6 left-6 inline-flex items-center gap-2 text-slate-500 hover:text-slate-800 transition-colors text-sm font-medium">
           <FiArrowLeft /> Volver
         </Link>
 
-        {/* Contenedor del Formulario (Tarjeta flotante en mobile, limpio en desktop) */}
         <div className="w-full max-w-md bg-white lg:bg-transparent border border-slate-200/80 lg:border-none p-8 sm:p-10 lg:p-0 rounded-2xl shadow-xl shadow-slate-200/50 lg:shadow-none z-10">
           
-          {/* Logo visible solo en Mobile (Versión con texto oscuro) */}
           <div className="flex flex-col items-center lg:items-start mb-8">
             <div className="lg:hidden flex items-center gap-2 mb-4">
               <img src={logo} alt="Consorcia" className="h-7 w-auto filter drop-shadow-sm" />
@@ -69,7 +98,6 @@ export default function Login() {
                 CONSOR<span className="text-orange-500">CIA</span>
               </span>
             </div>
-            
             <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight text-center lg:text-left">
               Bienvenido de nuevo
             </h2>
@@ -78,8 +106,26 @@ export default function Login() {
             </p>
           </div>
 
-          {/* Formulario con mejoras de contraste y máscara */}
-          <form className="space-y-5" onSubmit={(e) => e.preventDefault()}>
+          {/* MENSAJES DE ALERTA DINÁMICOS */}
+            {errorMsg && (
+            <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-600 font-medium flex items-center gap-2">
+                <MdErrorOutline className="text-lg shrink-0" />
+                <span>{errorMsg}</span>
+            </div>
+            )}
+
+
+
+            {successMsg && (
+            <div className="mb-4 flex items-center gap-2 rounded-xl border border-teal-200 bg-teal-50 p-3 text-sm font-medium text-teal-700 animate-pulse">
+                <CiCircleCheck className="text-lg shrink-0" />
+                <span>{successMsg} Redirigiendo...</span>
+            </div>
+            )}
+
+
+          {/* FORMULARIO CONECTADO */}
+          <form className="space-y-5" onSubmit={handleSubmit}>
             
             {/* Campo: Correo Electrónico */}
             <div>
@@ -89,6 +135,8 @@ export default function Login() {
               <input 
                 type="email" 
                 required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)} // Vincula lo escrito con el estado
                 placeholder="nombre@tu-edificio.com"
                 className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm 
                            text-slate-800 placeholder-slate-400/80
@@ -110,6 +158,8 @@ export default function Login() {
               <input 
                 type="password" 
                 required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)} // Vincula lo escrito con el estado
                 placeholder="Password"
                 className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm 
                            text-slate-800 placeholder-slate-400/80
@@ -131,13 +181,19 @@ export default function Login() {
               </label>
             </div>
 
-            {/* Botón Ingresar */}
-            <button type="submit" className="w-full bg-[#1e6f65] hover:bg-[#16524b] text-white py-3 rounded-xl font-semibold transition duration-300 shadow-lg shadow-teal-700/10 hover:scale-[1.01] active:scale-[0.99] cursor-pointer mt-2">
-              Iniciar sesión
+            {/* Botón Ingresar con Estado de Carga */}
+            <button 
+              type="submit" 
+              disabled={isLoading}
+              className={`w-full bg-[#1e6f65] hover:bg-[#16524b] text-white py-3 rounded-xl font-semibold 
+                         transition duration-300 shadow-lg shadow-teal-700/10 hover:scale-[1.01] active:scale-[0.99] 
+                         cursor-pointer mt-2 flex items-center justify-center gap-2
+                         ${isLoading ? "opacity-75 cursor-not-allowed" : ""}`}
+            >
+              {isLoading ? "Validando credenciales..." : "Iniciar sesión"}
             </button>
           </form>
 
-          {/* Enlace de Registro */}
           <p className="text-center lg:text-left text-sm text-slate-500 mt-8 font-medium">
             ¿Tu consorcio aún no cuenta con el servicio?{" "}
             <a href="#" className="text-teal-600 font-bold hover:text-teal-700 transition-colors">
