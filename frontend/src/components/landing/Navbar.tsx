@@ -1,5 +1,6 @@
 import { FiArrowUpRight } from "react-icons/fi";
 import logo from "../../assets/img/consorcia.png";
+import { Link } from "react-router-dom";
 
 export const Navbar = () => {
   return (
@@ -17,9 +18,11 @@ export const Navbar = () => {
 
         {/* Acciones: 'hidden' por defecto (mobile) y 'flex' a partir de pantallas medianas (md) */}
         <div className="hidden md:flex items-center gap-4 ml-auto">
+          <Link to="/login">
           <button className="text-gray-300 hover:text-white px-4 py-2 text-sm font-medium border border-gray-700/50 rounded-lg bg-slate-900/40 backdrop-blur-sm transition">
             Iniciar sesión
           </button>
+          </Link>
           <button className="bg-teal-700 hover:bg-teal-600 text-white px-4 py-2 text-sm font-medium rounded-lg flex items-center gap-1 transition">
             Registrarse <FiArrowUpRight />
           </button>

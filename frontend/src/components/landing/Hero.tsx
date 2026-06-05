@@ -5,6 +5,7 @@ import {
 } from "react-icons/fi";
 import { FaApple, FaGooglePlay } from "react-icons/fa";
 import logo from "../../assets/img/consorcia.png";
+import { Link } from "react-router-dom";
 
 export const Hero = () => {
   return (
@@ -49,14 +50,17 @@ export const Hero = () => {
         </button>
         
         {/* Botón Secundario: Ya tengo cuenta */}
-        <button className="w-full bg-slate-900/20 text-white py-3 px-6 rounded-xl font-medium
-                          border border-white/10 backdrop-blur-sm
-                          transition-all duration-300 ease-out
-                          hover:bg-white/5 hover:border-white/20 hover:text-white
-                          active:scale-[0.98] cursor-pointer">
+        <Link 
+          to="/login"
+          className="w-full bg-slate-900/20 text-white py-3 px-6 rounded-xl font-medium
+                    border border-white/10 backdrop-blur-sm
+                    transition-all duration-300 ease-out
+                    hover:bg-white/5 hover:border-white/20 hover:text-white
+                    active:scale-[0.98] cursor-pointer
+                    flex items-center justify-center text-center"
+        >
           Ya tengo cuenta
-        </button>
-
+        </Link>
       </div>
 
       {/* Tags de Características (Pills) */}
