@@ -35,14 +35,28 @@ export const Hero = () => {
         La plataforma que conecta propietarios, inquilinos y administradores en un solo lugar.
       </p>
 
-      {/* Botones de Acción (CTAs) */}
+      {/* Botones de Acción (CTAs) - Hover Premium Mejorado */}
       <div className="flex flex-col sm:flex-row gap-4 w-full max-w-md mx-auto px-4 mt-8">
-        <button className="w-full bg-[#1e6f65] text-white py-3 px-6 rounded-xl font-medium ...">
-          Comenzar gratis →
+        
+        {/* Botón Principal: Comenzar gratis */}
+        <button className="w-full bg-[#1e6f65] text-white py-3 px-6 rounded-xl font-semibold 
+                          transition-all duration-300 ease-out
+                          hover:bg-[#238377] hover:scale-[1.02] active:scale-[0.98]
+                          hover:shadow-[0_0_25px_rgba(30,111,101,0.45)]
+                          cursor-pointer flex items-center justify-center gap-1 group">
+          Comenzar gratis 
+          <span className="inline-block transition-transform duration-300 group-hover:translate-x-1">→</span>
         </button>
-        <button className="w-full bg-transparent border border-white/10 text-white py-3 px-6 rounded-xl font-medium ...">
+        
+        {/* Botón Secundario: Ya tengo cuenta */}
+        <button className="w-full bg-slate-900/20 text-white py-3 px-6 rounded-xl font-medium
+                          border border-white/10 backdrop-blur-sm
+                          transition-all duration-300 ease-out
+                          hover:bg-white/5 hover:border-white/20 hover:text-white
+                          active:scale-[0.98] cursor-pointer">
           Ya tengo cuenta
         </button>
+
       </div>
 
       {/* Tags de Características (Pills) */}
