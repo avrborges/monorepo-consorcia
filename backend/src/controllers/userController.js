@@ -1,5 +1,6 @@
 // backend/src/controllers/userController.js
 const User = require('../models/User');
+const bcrypt = require('bcryptjs');
 
 const loginUser = async (req, res) => {
   const { email, password } = req.body;
@@ -16,15 +17,19 @@ const loginUser = async (req, res) => {
     // 2. Búsqueda del usuario en MongoDB Atlas
     const userFound = await User.findOne({ email });
 
-    // 3. Validación de existencia de usuario y coincidencia de contraseña
-    if (!userFound || userFound.password !== password) {
+    // 3. Si el usuario existe, validamos la contraseña encriptada con Bcrypt
+    // Si no existe, evitamos evaluar bcrypt para mitigar ataques de temporización (timing attacks)
+    const isMatch = userFound ? await bcrypt.compare(password, userFound.password) : false;
+
+    // 4. Validación unificada (Ciberseguridad: no revelamos si falló el email o la contraseña)
+    if (!isMatch) {
       return res.status(401).json({
         success: false,
         message: "El correo electrónico o la contraseña son incorrectos."
       });
     }
 
-    // 4. Respuesta exitosa
+    // 5. Respuesta exitosa
     return res.status(200).json({
       success: true,
       message: `¡Inicio de sesión exitoso! Bienvenido de nuevo, ${userFound.name}`,
