@@ -1,7 +1,7 @@
 // src/api.ts
 
 // Definimos la URL base de nuestro backend en Node.js
-const API_URL = "http://localhost:5000/api";
+const API_URL = "http://192.168.1.38:5000/api";
 
 /**
  * Función para enviar las credenciales de login al backend

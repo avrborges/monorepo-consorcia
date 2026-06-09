@@ -22,8 +22,9 @@ mongoose.connect(process.env.MONGO_URI)
     console.log('¡Conectado exitosamente a MONGODB ATLAS (Nube)!');
     console.log('=================================');
     
-    app.listen(PORT, () => {
-      console.log(`Servidor corriendo en http://localhost:${PORT}`);
+    // 💻 CORRECCIÓN CLAVE: Agregamos '0.0.0.0' para abrir el servidor a la red local
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`Servidor corriendo en red local: http://192.168.1.38:${PORT}`);
     });
   })
   .catch((error) => {

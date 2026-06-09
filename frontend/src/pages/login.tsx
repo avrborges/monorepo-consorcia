@@ -5,7 +5,7 @@ import { FiArrowLeft } from "react-icons/fi";
 import { MdErrorOutline } from "react-icons/md";
 import { CiCircleCheck } from "react-icons/ci";
 import logo from "../assets/img/consorcia.png";
-import { loginRequest } from "../api"; // Importamos la función del Paso 1
+import { loginRequest } from "../api"; 
 
 export default function Login() {
   const navigate = useNavigate();
@@ -19,26 +19,34 @@ export default function Login() {
   const [successMsg, setSuccessMsg] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
+  // 🛠️ VALIDACIÓN EN TIEMPO REAL: Comprobamos si el formulario es inválido
+  // Expresión regular básica para validar la estructura de un email (ej: usuario@dominio.com)
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const isEmailValid = emailRegex.test(email);
+  const isPasswordValid = password.trim().length >= 6; // Opcional: requiere mínimo 6 caracteres
+
+  // El formulario es inválido si el email no es correcto O si la contraseña está vacía/corta
+  const isFormInvalid = !isEmailValid || !isPasswordValid;
+
   // Función que se ejecuta al hacer clic en "Iniciar Sesión"
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault(); // Evita que la página se recargue por defecto
+    e.preventDefault(); 
+    if (isFormInvalid || isLoading) return; // Salvaguarda extra por seguridad
+
     setErrorMsg("");
     setSuccessMsg("");
     setIsLoading(true);
 
-    // Llamamos a la API enviando los estados actuales de email y password
     const result = await loginRequest(email, password);
     setIsLoading(false);
 
     if (result.success) {
       setSuccessMsg(result.message);
       
-      // Simulamos una pequeña pausa de 1.5 segundos para que el usuario vea el mensaje de éxito
       setTimeout(() => {
-        navigate("/"); // Por ahora redirigimos a la Landing. ¡Luego será al Dashboard!
+        navigate("/"); 
       }, 1500);
     } else {
-      // Si las credenciales fallan, mostramos el error que nos mandó el Backend
       setErrorMsg(result.message);
     }
   };
@@ -54,7 +62,7 @@ export default function Login() {
         <div className="relative z-10">
           <Link to="/" className="inline-flex items-center gap-2 group text-slate-400 hover:text-white transition-colors">
             <FiArrowLeft className="transition-transform group-hover:-translate-x-1" />
-            <span className="text-sm font-medium">Volver a la landing</span>
+            <span className="text-sm font-medium">Volver</span>
           </Link>
         </div>
 
@@ -107,21 +115,19 @@ export default function Login() {
           </div>
 
           {/* MENSAJES DE ALERTA DINÁMICOS */}
-            {errorMsg && (
+          {errorMsg && (
             <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-600 font-medium flex items-center gap-2">
                 <MdErrorOutline className="text-lg shrink-0" />
                 <span>{errorMsg}</span>
             </div>
-            )}
+          )}
 
-
-
-            {successMsg && (
+          {successMsg && (
             <div className="mb-4 flex items-center gap-2 rounded-xl border border-teal-200 bg-teal-50 p-3 text-sm font-medium text-teal-700 animate-pulse">
                 <CiCircleCheck className="text-lg shrink-0" />
                 <span>{successMsg} Redirigiendo...</span>
             </div>
-            )}
+          )}
 
 
           {/* FORMULARIO CONECTADO */}
@@ -136,7 +142,7 @@ export default function Login() {
                 type="email" 
                 required
                 value={email}
-                onChange={(e) => setEmail(e.target.value)} // Vincula lo escrito con el estado
+                onChange={(e) => setEmail(e.target.value)}
                 placeholder="nombre@tu-edificio.com"
                 className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm 
                            text-slate-800 placeholder-slate-400/80
@@ -159,7 +165,7 @@ export default function Login() {
                 type="password" 
                 required
                 value={password}
-                onChange={(e) => setPassword(e.target.value)} // Vincula lo escrito con el estado
+                onChange={(e) => setPassword(e.target.value)}
                 placeholder="Password"
                 className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm 
                            text-slate-800 placeholder-slate-400/80
@@ -181,14 +187,15 @@ export default function Login() {
               </label>
             </div>
 
-            {/* Botón Ingresar con Estado de Carga */}
+            {/* Botón Ingresar con Estado de Carga y Deshabilitado dinámico */}
             <button 
               type="submit" 
-              disabled={isLoading}
-              className={`w-full bg-[#1e6f65] hover:bg-[#16524b] text-white py-3 rounded-xl font-semibold 
-                         transition duration-300 shadow-lg shadow-teal-700/10 hover:scale-[1.01] active:scale-[0.99] 
-                         cursor-pointer mt-2 flex items-center justify-center gap-2
-                         ${isLoading ? "opacity-75 cursor-not-allowed" : ""}`}
+              disabled={isFormInvalid || isLoading} // 🌟 Deshabilitado si el formulario es inválido O si está cargando
+              className={`w-full py-3 rounded-xl font-semibold transition duration-300 flex items-center justify-center gap-2 mt-2
+                         ${isFormInvalid || isLoading 
+                           ? "bg-slate-300 text-slate-500 cursor-not-allowed shadow-none border border-slate-200" 
+                           : "bg-[#1e6f65] hover:bg-[#16524b] text-white shadow-lg shadow-teal-700/10 hover:scale-[1.01] active:scale-[0.99] cursor-pointer"
+                         }`}
             >
               {isLoading ? "Validando credenciales..." : "Iniciar sesión"}
             </button>
