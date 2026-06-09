@@ -1,41 +1,45 @@
 // backend/src/controllers/userController.js
+const User = require('../models/User');
 
-// Usuario simulado (Mock) para pruebas de desarrollo antes de conectar la Base de Datos
-const MOCK_USER = {
-  email: "admin@admin.com",
-  password: "Admin123", // Recuerda que en producción esto irá encriptado
-  name: "Carlos Administración",
-  role: "admin"
-};
-
-const loginUser = (req, res) => {
+const loginUser = async (req, res) => {
   const { email, password } = req.body;
 
-  // 1. Validar que vengan ambos campos
-  if (!email || !password) {
-    return res.status(400).json({ 
-      success: false, 
-      message: "Por favor, completa todos los campos obligatorios." 
-    });
-  }
+  try {
+    // 1. Validación de campos obligatorios
+    if (!email || !password) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Por favor, completa todos los campos obligatorios." 
+      });
+    }
 
-  // 2. Simular verificación de credenciales
-  if (email === MOCK_USER.email && password === MOCK_USER.password) {
-    // Éxito: Devolvemos los datos básicos necesarios para el frontend
+    // 2. Búsqueda del usuario en MongoDB Atlas
+    const userFound = await User.findOne({ email });
+
+    // 3. Validación de existencia de usuario y coincidencia de contraseña
+    if (!userFound || userFound.password !== password) {
+      return res.status(401).json({
+        success: false,
+        message: "El correo electrónico o la contraseña son incorrectos."
+      });
+    }
+
+    // 4. Respuesta exitosa
     return res.status(200).json({
       success: true,
-      message: "¡Inicio de sesión exitoso!",
+      message: `¡Inicio de sesión exitoso! Bienvenido de nuevo, ${userFound.name}`,
       user: {
-        name: MOCK_USER.name,
-        email: MOCK_USER.email,
-        role: MOCK_USER.role
+        name: userFound.name,
+        email: userFound.email,
+        role: userFound.role
       }
     });
-  } else {
-    // Error de autenticación
-    return res.status(401).json({
+
+  } catch (error) {
+    console.error("Error en loginUser:", error);
+    return res.status(500).json({
       success: false,
-      message: "El correo electrónico o la contraseña son incorrectos."
+      message: "Hubo un error interno en el servidor."
     });
   }
 };
