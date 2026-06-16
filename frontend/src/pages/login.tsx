@@ -19,13 +19,10 @@ export default function Login() {
   const [successMsg, setSuccessMsg] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
-  // 🛠️ VALIDACIÓN EN TIEMPO REAL: Comprobamos si el formulario es inválido
-  // Expresión regular básica para validar la estructura de un email (ej: usuario@dominio.com)
+  // 🛠️ VALIDACIÓN EN TIEMPO REAL
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const isEmailValid = emailRegex.test(email);
-  const isPasswordValid = password.trim().length >= 6; // Opcional: requiere mínimo 6 caracteres
-
-  // El formulario es inválido si el email no es correcto O si la contraseña está vacía/corta
+  const isPasswordValid = password.trim().length >= 6;
   const isFormInvalid = !isEmailValid || !isPasswordValid;
 
   // Función que se ejecuta al hacer clic en "Iniciar Sesión"
@@ -42,14 +39,10 @@ export default function Login() {
 
     if (result.success) {
       setSuccessMsg(result.message);
-      
-      // 🆕 GUARDAR EN LA MEMORIA DEL NAVEGADOR
-      // Guardamos el token y los datos básicos del usuario
       localStorage.setItem("token", result.token);
       localStorage.setItem("user", JSON.stringify(result.user));
       
       setTimeout(() => {
-        // 🚀 ¡Ya estamos listos para enviarlo al Dashboard en vez de a la Landing!
         navigate("/dashboard"); 
       }, 1500);
     } else {
@@ -58,7 +51,8 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen w-full grid grid-cols-1 lg:grid-cols-2">
+    // En mobile usamos el gradiente azul noche corporativo, en pantallas grandes se limpia (lg:bg-none)
+    <div className="min-h-screen w-full grid grid-cols-1 lg:grid-cols-2 bg-gradient-to-br from-[#1c2541] to-[#0b132b] lg:from-transparent lg:to-transparent">
       
       {/* ─── SECCIÓN IZQUIERDA: ESTILO LANDING OSCURO (Desktop) ─── */}
       <div className="hidden lg:flex relative flex-col justify-between p-12 bg-[#0b132b] bg-consorcia-grid overflow-hidden border-r border-white/5">
@@ -76,7 +70,7 @@ export default function Login() {
           <div className="flex items-center gap-3 animate-fade-in">
             <img src={logo} alt="Consorcia" className="h-14 w-auto drop-shadow-[0_0_20px_rgba(56,189,248,0.3)]" />
             <span className="text-3xl font-extrabold tracking-wider text-white">
-              CONSOR<span className="text-orange-400">CIA</span>
+              CONSOR<span className="text-[#fca311]">CIA</span>
             </span>
           </div>
           <h1 className="text-4xl font-extrabold text-white leading-tight tracking-tight">
@@ -96,23 +90,28 @@ export default function Login() {
       </div>
 
 
-      {/* ─── SECCIÓN DERECHA: FORMULARIO DE LOGIN (PANEL CLARO) ─── */}
-      <div className="flex items-center justify-center p-6 sm:p-12 bg-slate-50 relative selection:bg-teal-500/20">
+      {/* ─── SECCIÓN DERECHA: FORMULARIO DE LOGIN (ADAPTATIVO PREMIUM) ─── */}
+      {/* Añadimos flex-col para posicionar el logo arriba de la tarjeta en mobile */}
+      <div className="flex flex-col items-center justify-center p-4 sm:p-12 lg:bg-slate-50 relative selection:bg-teal-500/20">
         
-        <Link to="/" className="lg:hidden absolute top-6 left-6 inline-flex items-center gap-2 text-slate-500 hover:text-slate-800 transition-colors text-sm font-medium">
+        {/* Flecha volver flotante estilizada para mobile */}
+        <Link to="/" className="lg:hidden absolute top-6 left-6 inline-flex items-center gap-2 text-slate-400 hover:text-white transition-colors text-sm font-medium">
           <FiArrowLeft /> Volver
         </Link>
 
-        <div className="w-full max-w-md bg-white lg:bg-transparent border border-slate-200/80 lg:border-none p-8 sm:p-10 lg:p-0 rounded-2xl shadow-xl shadow-slate-200/50 lg:shadow-none z-10">
+        {/* 🆕 LOGO Y MARCA: Colocados FUERA de la tarjeta flotante (Solo visibles en mobile/tablet) */}
+        <div className="lg:hidden flex items-center gap-3 mb-6 animate-fade-in">
+          <img src={logo} alt="Consorcia" className="h-10 w-auto filter drop-shadow-[0_0_15px_rgba(56,189,248,0.2)]" />
+          <span className="text-2xl font-black tracking-wider text-white">
+            CONSOR<span className="text-[#fca311]">CIA</span>
+          </span>
+        </div>
+
+        {/* 🎨 LA TARJETA FLOTANTE (Ahora puramente enfocada en el formulario) */}
+        <div className="w-full max-w-md bg-white border border-slate-200/10 lg:border-none p-8 sm:p-10 lg:p-0 rounded-3xl shadow-2xl shadow-black/40 lg:shadow-none z-10">
           
-          <div className="flex flex-col items-center lg:items-start mb-8">
-            <div className="lg:hidden flex items-center gap-2 mb-4">
-              <img src={logo} alt="Consorcia" className="h-7 w-auto filter drop-shadow-sm" />
-              <span className="text-lg font-bold tracking-wider text-slate-900">
-                CONSOR<span className="text-orange-500">CIA</span>
-              </span>
-            </div>
-            <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight text-center lg:text-left">
+          <div className="flex flex-col items-center lg:items-start mb-6">
+            <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight text-center lg:text-left">
               Bienvenido de nuevo
             </h2>
             <p className="text-sm text-slate-500 mt-2 text-center lg:text-left">
@@ -136,7 +135,7 @@ export default function Login() {
           )}
 
 
-          {/* FORMULARIO CONECTADO */}
+          {/* FORMULARIO */}
           <form className="space-y-5" onSubmit={handleSubmit}>
             
             {/* Campo: Correo Electrónico */}
@@ -163,7 +162,7 @@ export default function Login() {
                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">
                   Contraseña
                 </label>
-                <a href="#" className="text-xs text-teal-600 hover:text-teal-700 font-semibold transition-colors">
+                <a href="#" className="text-xs text-teal-600 hover:text-teal-700 font-bold transition-colors">
                   ¿Olvidaste tu contraseña?
                 </a>
               </div>
@@ -193,21 +192,21 @@ export default function Login() {
               </label>
             </div>
 
-            {/* Botón Ingresar con Estado de Carga y Deshabilitado dinámico */}
+            {/* Botón Ingresar */}
             <button 
               type="submit" 
-              disabled={isFormInvalid || isLoading} // 🌟 Deshabilitado si el formulario es inválido O si está cargando
-              className={`w-full py-3 rounded-xl font-semibold transition duration-300 flex items-center justify-center gap-2 mt-2
+              disabled={isFormInvalid || isLoading} 
+              className={`w-full py-3 rounded-xl font-bold transition duration-300 flex items-center justify-center gap-2 mt-2
                          ${isFormInvalid || isLoading 
-                           ? "bg-slate-300 text-slate-500 cursor-not-allowed shadow-none border border-slate-200" 
-                           : "bg-[#1e6f65] hover:bg-[#16524b] text-white shadow-lg shadow-teal-700/10 hover:scale-[1.01] active:scale-[0.99] cursor-pointer"
+                           ? "bg-slate-200 text-slate-400 cursor-not-allowed shadow-none border border-slate-100" 
+                           : "bg-[#1e6f65] hover:bg-[#16524b] text-white shadow-lg shadow-teal-900/20 hover:scale-[1.01] active:scale-[0.99] cursor-pointer"
                          }`}
             >
               {isLoading ? "Validando credenciales..." : "Iniciar sesión"}
             </button>
           </form>
 
-          <p className="text-center lg:text-left text-sm text-slate-500 mt-8 font-medium">
+          <p className="text-center lg:text-left text-sm text-slate-500 mt-8 font-semibold">
             ¿Tu consorcio aún no cuenta con el servicio?{" "}
             <a href="#" className="text-teal-600 font-bold hover:text-teal-700 transition-colors">
               Hablemos
