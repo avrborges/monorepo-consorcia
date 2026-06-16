@@ -31,7 +31,7 @@ export default function Login() {
   // Función que se ejecuta al hacer clic en "Iniciar Sesión"
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); 
-    if (isFormInvalid || isLoading) return; // Salvaguarda extra por seguridad
+    if (isFormInvalid || isLoading) return;
 
     setErrorMsg("");
     setSuccessMsg("");
@@ -43,8 +43,14 @@ export default function Login() {
     if (result.success) {
       setSuccessMsg(result.message);
       
+      // 🆕 GUARDAR EN LA MEMORIA DEL NAVEGADOR
+      // Guardamos el token y los datos básicos del usuario
+      localStorage.setItem("token", result.token);
+      localStorage.setItem("user", JSON.stringify(result.user));
+      
       setTimeout(() => {
-        navigate("/"); 
+        // 🚀 ¡Ya estamos listos para enviarlo al Dashboard en vez de a la Landing!
+        navigate("/dashboard"); 
       }, 1500);
     } else {
       setErrorMsg(result.message);

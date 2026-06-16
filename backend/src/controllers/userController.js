@@ -1,6 +1,7 @@
 // backend/src/controllers/userController.js
 const User = require('../models/User');
 const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken'); // 🆕 Importamos JWT
 
 const loginUser = async (req, res) => {
   const { email, password } = req.body;
@@ -17,11 +18,9 @@ const loginUser = async (req, res) => {
     // 2. Búsqueda del usuario en MongoDB Atlas
     const userFound = await User.findOne({ email });
 
-    // 3. Si el usuario existe, validamos la contraseña encriptada con Bcrypt
-    // Si no existe, evitamos evaluar bcrypt para mitigar ataques de temporización (timing attacks)
+    // 3. Validar contraseña con Bcrypt
     const isMatch = userFound ? await bcrypt.compare(password, userFound.password) : false;
 
-    // 4. Validación unificada (Ciberseguridad: no revelamos si falló el email o la contraseña)
     if (!isMatch) {
       return res.status(401).json({
         success: false,
@@ -29,10 +28,19 @@ const loginUser = async (req, res) => {
       });
     }
 
-    // 5. Respuesta exitosa
+    // 4. 🆕 GENERAR EL TOKEN JWT
+    // Guardamos el ID y el rol dentro del token. Expira en 24 horas.
+    const token = jwt.sign(
+      { id: userFound._id, role: userFound.role },
+      process.env.JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    // 5. Respuesta exitosa (Ahora incluye el Token)
     return res.status(200).json({
       success: true,
       message: `¡Inicio de sesión exitoso! Bienvenido de nuevo, ${userFound.name}`,
+      token, // 🆕 Enviamos el token al Frontend
       user: {
         name: userFound.name,
         email: userFound.email,

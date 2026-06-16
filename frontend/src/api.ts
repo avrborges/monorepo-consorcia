@@ -1,7 +1,10 @@
 // src/api.ts
 
-// Definimos la URL base de nuestro backend en Node.js
-const API_URL = "http://192.168.1.38:5000/api";
+// 🆕 Detecta automáticamente la IP o dominio desde donde estás visualizando la app
+const currentHostname = window.location.hostname;
+
+// Definimos la URL base apuntando dinámicamente al puerto 5000 de tu Backend
+const API_URL = `http://${currentHostname}:5000/api`;
 
 /**
  * Función para enviar las credenciales de login al backend
@@ -10,7 +13,7 @@ const API_URL = "http://192.168.1.38:5000/api";
  */
 export const loginRequest = async (email: string, password: string) => {
   try {
-    // Hacemos la petición POST al endpoint que creamos en el backend
+    // Hacemos la petición POST al endpoint dinámico
     const response = await fetch(`${API_URL}/users/login`, {
       method: "POST",
       headers: {
