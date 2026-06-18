@@ -1,0 +1,10 @@
+{
+  "short_name": "Consorcia",
+  "name": "Consorcia Panel",
+  "icons": [],
+  "start_url": ".",
+  "background_color": "#f8fafc",
+  "theme_color": "#0b132b",
+  "display": "standalone",
+  "orientation": "portrait"
+}

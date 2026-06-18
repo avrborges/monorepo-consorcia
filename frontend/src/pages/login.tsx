@@ -54,11 +54,12 @@ export default function Login() {
     // En mobile usamos el gradiente azul noche corporativo, en pantallas grandes se limpia (lg:bg-none)
     <div className="min-h-screen w-full grid grid-cols-1 lg:grid-cols-2 bg-gradient-to-br from-[#1c2541] to-[#0b132b] lg:from-transparent lg:to-transparent">
       
-      {/* ─── SECCIÓN IZQUIERDA: ESTILO LANDING OSCURO (Desktop) ─── */}
+      {/* ─── SECCIÓN IZQUIERDA: ESTILO LANDING OSCURO (Solo Desktop) ─── */}
       <div className="hidden lg:flex relative flex-col justify-between p-12 bg-[#0b132b] bg-consorcia-grid overflow-hidden border-r border-white/5">
         <div className="absolute -top-20 -left-20 w-[400px] h-[400px] bg-glow-radial pointer-events-none mix-blend-screen opacity-70" />
         <div className="absolute bottom-10 right-10 w-[300px] h-[300px] bg-glow-purple animate-glow-slow pointer-events-none mix-blend-screen opacity-50" />
         
+        {/* Este botón volver se mantendrá disponible únicamente en pantallas grandes */}
         <div className="relative z-10">
           <Link to="/" className="inline-flex items-center gap-2 group text-slate-400 hover:text-white transition-colors">
             <FiArrowLeft className="transition-transform group-hover:-translate-x-1" />
@@ -91,15 +92,11 @@ export default function Login() {
 
 
       {/* ─── SECCIÓN DERECHA: FORMULARIO DE LOGIN (ADAPTATIVO PREMIUM) ─── */}
-      {/* Añadimos flex-col para posicionar el logo arriba de la tarjeta en mobile */}
       <div className="flex flex-col items-center justify-center p-4 sm:p-12 lg:bg-slate-50 relative selection:bg-teal-500/20">
         
-        {/* Flecha volver flotante estilizada para mobile */}
-        <Link to="/" className="lg:hidden absolute top-6 left-6 inline-flex items-center gap-2 text-slate-400 hover:text-white transition-colors text-sm font-medium">
-          <FiArrowLeft /> Volver
-        </Link>
+        {/* 💡 ELIMINADO EL BOTÓN "VOLVER" FLOTANTE DE MOBILE PARA DESPEJAR LA VISTA */}
 
-        {/* 🆕 LOGO Y MARCA: Colocados FUERA de la tarjeta flotante (Solo visibles en mobile/tablet) */}
+        {/* LOGO Y MARCA: Solo visibles en mobile/tablet */}
         <div className="lg:hidden flex items-center gap-3 mb-6 animate-fade-in">
           <img src={logo} alt="Consorcia" className="h-10 w-auto filter drop-shadow-[0_0_15px_rgba(56,189,248,0.2)]" />
           <span className="text-2xl font-black tracking-wider text-white">
@@ -107,7 +104,7 @@ export default function Login() {
           </span>
         </div>
 
-        {/* 🎨 LA TARJETA FLOTANTE (Ahora puramente enfocada en el formulario) */}
+        {/* LA TARJETA FLOTANTE */}
         <div className="w-full max-w-md bg-white border border-slate-200/10 lg:border-none p-8 sm:p-10 lg:p-0 rounded-3xl shadow-2xl shadow-black/40 lg:shadow-none z-10">
           
           <div className="flex flex-col items-center lg:items-start mb-6">

@@ -33,7 +33,7 @@ export default function DashboardLayout() {
         />
       )}
 
-      {/* 2. BARRA LATERAL (SIDEBAR ENFOCADO EN PERFIL) */}
+      {/* 2. BARRA LATERAL (ESTILO ASIMÉTRICO PREMIUM) */}
       <aside className={`
         fixed inset-y-0 left-0 z-50 bg-[#0b132b] text-slate-300 flex flex-col justify-between shadow-xl transition-transform duration-300
         w-64 border-r border-white/[0.03]
@@ -69,8 +69,8 @@ export default function DashboardLayout() {
             </span>
           </div>
 
-          {/* MENÚ DE NAVEGACIÓN */}
-          <div className="flex-1 overflow-y-auto p-3 custom-scrollbar mt-2">
+          {/* MENÚ DE NAVEGACIÓN ESTILO ASIMÉTRICO (INSPIRADO EN TU REFERENCIA) */}
+          <div className="flex-1 overflow-y-auto pl-3 py-3 pr-0 custom-scrollbar mt-2">
             <nav className="space-y-1">
               {menuItems.map((item) => {
                 const isActive = location.pathname === item.path;
@@ -79,15 +79,17 @@ export default function DashboardLayout() {
                     key={item.path}
                     to={item.path}
                     onClick={() => setIsSidebarOpen(false)}
-                    className={`flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-150 group ${
+                    className={`flex items-center space-x-3 px-4 py-3 transition-all duration-150 group relative ${
                       isActive 
-                        ? "bg-white/[0.07] text-white font-semibold" 
-                        : "text-slate-400/80 hover:bg-white/[0.02] hover:text-slate-200"
+                        ? "bg-[#f8fafc] text-slate-900 font-bold rounded-l-xl border-l-4 border-[#fca311]" 
+                        : "text-slate-400/80 hover:bg-white/[0.02] hover:text-slate-200 rounded-l-xl mr-3"
                     }`}
                   >
-                    <span className={`transition-colors ${isActive ? "text-white" : "text-slate-500 group-hover:text-slate-300"}`}>
+                    {/* Ícono dinámico */}
+                    <span className={`transition-colors ${isActive ? "text-[#0b132b]" : "text-slate-500 group-hover:text-slate-300"}`}>
                       {item.icon}
                     </span>
+                    {/* Texto del ítem */}
                     <span className="truncate text-[13.5px] tracking-wide">{item.name}</span>
                   </Link>
                 );
@@ -111,7 +113,7 @@ export default function DashboardLayout() {
       {/* CONTENEDOR DERECHO PRINCIPAL */}
       <div className="flex-1 flex flex-col min-w-0">
         
-        {/* 3. 🆕 BARRA SUPERIOR ULTRA LIMPIA (SIN SOMBRA, BORDE MINIMALISTA) */}
+        {/* 3. BARRA SUPERIOR ULTRA LIMPIA */}
         <header className="bg-white/80 backdrop-blur-md border-b border-slate-100 h-16 flex items-center justify-between px-4 sm:px-6 sticky top-0 z-30">
           <div className="flex items-center space-x-3">
             <button
@@ -125,7 +127,6 @@ export default function DashboardLayout() {
               <span className="text-xl font-black tracking-wider text-[#0b132b]">
                 CONSOR<span className="text-[#fca311]">CIA</span>
               </span>
-              {/* Separador vertical suavizado */}
               <div className="h-4 w-px bg-slate-200 hidden sm:block" />
               <h2 className="text-xs font-bold tracking-wider text-slate-400 uppercase hidden sm:block">
                 Panel de Control
