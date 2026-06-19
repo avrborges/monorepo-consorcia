@@ -6,6 +6,8 @@ import SplashScreen from "./components/SplashScreen"; // 🆕 Importamos el Spla
 import ProtectedRoute from "./components/ProtectedRoute";
 import DashboardLayout from "./components/DashboardLayout"; 
 import Overview from "./pages/dashboard/Overview"; 
+import AltaUsuarios from "./pages/dashboard/AltaUsuarios"; // 🆕 IMPORTADO: Vista del formulario de altas
+import ListaUsuarios from "./pages/dashboard/ListaUsuarios";
 
 // 🆕 Componente Guardián de Entrada Raíz
 function RootHandler() {
@@ -33,6 +35,9 @@ function App() {
           <Route path="/dashboard" element={<DashboardLayout />}>
             {/* Index significa que cargará por defecto al entrar a /dashboard */}
             <Route index element={<Overview />} />
+            <Route path="usuarios" element={<ListaUsuarios />} />
+            {/* 🆕 NUEVA RUTA: Disponible en /dashboard/altas bajo protección tokenizada */}
+            <Route path="altas" element={<AltaUsuarios />} />
           </Route>
         </Route>
 
