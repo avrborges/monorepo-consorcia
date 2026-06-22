@@ -6,4 +6,9 @@ const userController = require('../controllers/userController');
 // Ruta para iniciar sesión: POST /api/users/login
 router.post('/login', userController.loginUser);
 
+// 🆕 Ruta para obtener el listado de usuarios: GET /api/users
+// Nota: Más adelante, cuando implementemos el middleware de verificación de JWT,
+// protegeremos esta ruta para que solo admins puedan consultar la nómina.
+router.get('/', userController.getUsers);
+
 module.exports = router;
