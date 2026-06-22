@@ -1,7 +1,7 @@
 // src/components/DashboardLayout.tsx
 import { useState } from "react";
 import { Outlet, useNavigate, Link, useLocation } from "react-router-dom";
-import { HiChartPie, HiMenu, HiX } from "react-icons/hi"; 
+import { HiChartPie, HiMenu, HiX, HiOutlineUserGroup } from "react-icons/hi"; 
 import { FaSignOutAlt } from "react-icons/fa";
 
 export default function DashboardLayout() {
@@ -18,9 +18,19 @@ export default function DashboardLayout() {
     navigate("/login");
   };
 
+  // 1. Definimos los ítems base comunes para cualquier rol
   const menuItems = [
     { name: "Panel de Control", path: "/dashboard", icon: <HiChartPie className="w-5 h-5" /> },
   ];
+
+  // 2. Condicional para inyectar la nómina de usuarios si es admin o superadmin
+  if (user.role === "admin" || user.role === "superadmin") {
+    menuItems.push({
+      name: "Lista de Usuarios",
+      path: "/dashboard/usuarios", // Ajustá el path según tus rutas
+      icon: <HiOutlineUserGroup className="w-5 h-5" />
+    });
+  }
 
   return (
     <div className="min-h-screen bg-[#f8fafc] flex font-sans text-slate-800 antialiased relative">
@@ -69,7 +79,7 @@ export default function DashboardLayout() {
             </span>
           </div>
 
-          {/* MENÚ DE NAVEGACIÓN ESTILO ASIMÉTRICO (INSPIRADO EN TU REFERENCIA) */}
+          {/* MENÚ DE NAVEGACIÓN ESTILO ASIMÉTRICO */}
           <div className="flex-1 overflow-y-auto pl-3 py-3 pr-0 custom-scrollbar mt-2">
             <nav className="space-y-1">
               {menuItems.map((item) => {
