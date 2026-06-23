@@ -52,12 +52,12 @@ export default function Login() {
 
   return (
     // En mobile usamos el gradiente azul noche corporativo, en pantallas grandes se limpia (lg:bg-none)
-    <div className="min-h-screen w-full grid grid-cols-1 lg:grid-cols-2 bg-gradient-to-br from-[#1c2541] to-[#0b132b] lg:from-transparent lg:to-transparent">
+    <div className="min-h-screen w-full grid grid-cols-1 lg:grid-cols-2 bg-linear-to-br from-[#1c2541] to-[#0b132b] lg:from-transparent lg:to-transparent">
       
       {/* ─── SECCIÓN IZQUIERDA: ESTILO LANDING OSCURO (Solo Desktop) ─── */}
       <div className="hidden lg:flex relative flex-col justify-between p-12 bg-[#0b132b] bg-consorcia-grid overflow-hidden border-r border-white/5">
-        <div className="absolute -top-20 -left-20 w-[400px] h-[400px] bg-glow-radial pointer-events-none mix-blend-screen opacity-70" />
-        <div className="absolute bottom-10 right-10 w-[300px] h-[300px] bg-glow-purple animate-glow-slow pointer-events-none mix-blend-screen opacity-50" />
+        <div className="absolute -top-20 -left-20 w-100 h-100 bg-glow-radial pointer-events-none mix-blend-screen opacity-70" />
+        <div className="absolute bottom-10 right-10 w-75 h-75 bg-glow-purple animate-glow-slow pointer-events-none mix-blend-screen opacity-50" />
         
         {/* Este botón volver se mantendrá disponible únicamente en pantallas grandes */}
         <div className="relative z-10">
@@ -76,7 +76,7 @@ export default function Login() {
           </div>
           <h1 className="text-4xl font-extrabold text-white leading-tight tracking-tight">
             Gestiona tu comunidad <br />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-teal-400 to-blue-400">
+            <span className="text-transparent bg-clip-text bg-linear-to-r from-teal-400 to-blue-400">
               en un solo lugar.
             </span>
           </h1>
