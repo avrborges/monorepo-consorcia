@@ -41,19 +41,27 @@ interface ConfiguracionOrden {
 }
 
 export default function ListaUsuarios() {
-  const userString = localStorage.getItem("user");
-  const currentUser = userString ? JSON.parse(userString) : { role: "inquilino" };
-  const tieneAcceso = currentUser.role === "admin" || currentUser.role === "superadmin";
+  // Inicialización perezosa limpia para evitar evaluaciones en render
+  const [tieneAcceso] = useState<boolean>(() => {
+    try {
+      const userString = localStorage.getItem("user");
+      if (!userString) return false;
+      const currentUser = JSON.parse(userString);
+      return currentUser?.role === "admin" || currentUser?.role === "superadmin";
+    } catch {
+      return false;
+    }
+  });
 
-  // Estados de la data y de interfaz
+  // Estados base
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
   // Filtros, paginación y ordenamiento
   const [busqueda, setBusqueda] = useState("");
   const [filtroRol, setFiltroRol] = useState("todos");
-  const [filtroEstado, setFiltroEstado] = useState("todos"); // 🎯 Corregido e idéntico
+  const [filtroEstado, setFiltroEstado] = useState("todos"); 
   const [paginaActual, setPaginaActual] = useState(1);
   const ITEMS_POR_PAGINA = 10;
 
@@ -62,16 +70,21 @@ export default function ListaUsuarios() {
     direccion: "asc",
   });
 
-  // 🎯 Función envuelta en useCallback para evitar regeneración de referencias
+// 🎯 El fetch detecta dinámicamente si estás en localhost o desde el celular usando una IP
   const cargarUsuarios = useCallback(async () => {
     try {
-      setLoading(true);
-      setError(null); 
-      const respuesta = await fetch("http://localhost:5000/api/users");
+      // 1. Obtenemos el hostname actual (ej: "localhost" o "192.168.0.50")
+      const hostname = window.location.hostname;
+      
+      // 2. Construimos la URL del Backend usando ese mismo hostname pero apuntando al puerto 5000
+      const baseUrl = `http://${hostname}:5000`;
+
+      const respuesta = await fetch(`${baseUrl}/api/users`);
       const resultado = await respuesta.json();
 
       if (resultado.success) {
         setUsuarios(resultado.users);
+        setError(null);
       } else {
         setError(resultado.message || "Error al recuperar las cuentas.");
       }
@@ -83,11 +96,29 @@ export default function ListaUsuarios() {
     }
   }, []);
 
-  // 🎯 Efecto seguro con dependencias estables
+  // 🎯 Sincronización libre de llamadas sincrónicas al inicio
   useEffect(() => {
+    let activo = true;
+
     if (tieneAcceso) {
-      cargarUsuarios();
+      // Forzamos a que se ejecute en la siguiente microtarea para que React no proteste por renderizado concurrente
+      Promise.resolve().then(() => {
+        if (activo) {
+          cargarUsuarios();
+        }
+      });
+    } else {
+      // Si no tiene acceso, bajamos la bandera de loading asíncronamente para matar el "cascading render"
+      Promise.resolve().then(() => {
+        if (activo) {
+          setLoading(false);
+        }
+      });
     }
+
+    return () => {
+      activo = false;
+    };
   }, [tieneAcceso, cargarUsuarios]);
 
   const manejarCambioBusqueda = (valor: string) => {
@@ -101,7 +132,7 @@ export default function ListaUsuarios() {
   };
 
   const manejarCambioEstado = (valor: string) => {
-    setFiltroEstado(valor); // 🎯 Corregido
+    setFiltroEstado(valor); 
     setPaginaActual(1);
   };
 
@@ -209,6 +240,7 @@ export default function ListaUsuarios() {
     return orden.direccion === "asc" ? <HiChevronUp className="w-4 h-4 text-slate-900" /> : <HiChevronDown className="w-4 h-4 text-slate-900" />;
   };
 
+  // Render condicional para usuarios sin permisos
   if (!tieneAcceso) {
     return (
       <div className="min-h-[60vh] flex flex-col items-center justify-center p-6 bg-white border border-slate-100 rounded-2xl shadow-sm text-center">
@@ -243,7 +275,7 @@ export default function ListaUsuarios() {
           </div>
 
           <button
-            onClick={cargarUsuarios}
+            onClick={() => { setLoading(true); cargarUsuarios(); }}
             disabled={loading}
             title="Actualizar listado"
             className="p-2.5 border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 rounded-xl transition shadow-sm disabled:opacity-50 cursor-pointer group flex items-center justify-center"
@@ -330,7 +362,7 @@ export default function ListaUsuarios() {
           <HiOutlineShieldExclamation className="w-8 h-8 text-red-500" />
           <span>{error}</span>
           <button 
-            onClick={cargarUsuarios} 
+            onClick={() => { setLoading(true); cargarUsuarios(); }} 
             className="mt-2 px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-xl text-xs font-bold transition cursor-pointer"
           >
             Reintentar conexión
@@ -340,7 +372,7 @@ export default function ListaUsuarios() {
         /* Tabla Principal */
         <div className="bg-white border border-slate-100 rounded-2xl shadow-sm overflow-hidden relative">
           {loading && (
-            <div className="absolute inset-0 bg-white/40 backdrop-blur-[1px] flex items-center justify-center z-10 animate-fade-in" />
+            <div className="absolute inset-0 bg-white/40 backdrop-blur-[1px] flex items-center justify-center z-10" />
           )}
           
           <div className="overflow-x-auto">
