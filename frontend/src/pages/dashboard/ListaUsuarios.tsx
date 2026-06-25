@@ -1,34 +1,33 @@
-// src/pages/dashboard/ListaUsuarios.tsx
-import { useState, useEffect, useCallback, useMemo, memo } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   HiOutlineUserGroup,
-  HiOutlineMail,
-  HiOutlineShieldCheck,
   HiOutlineShieldExclamation,
   HiOutlineSearch,
-  HiOutlinePencil,
-  HiOutlineLockClosed,
-  HiOutlineLockOpen,
-  HiOutlinePhone,
-  HiOutlineOfficeBuilding,
-  HiChevronUp,
-  HiChevronDown,
   HiOutlineFilter,
   HiOutlineEye,
-  HiOutlineClock,
-  HiChevronLeft,
-  HiChevronRight,
+  HiChevronDown,
   HiPlus,
   HiRefresh,
 } from "react-icons/hi";
 
-/* ============================================================
- *  TIPOS
- * ============================================================ */
-type Rol = "superadmin" | "admin" | "consejo" | "propietario" | "inquilino";
-type EstadoUsuario = "activo" | "pendiente" | "inactivo";
+// 🌟 Componentes separados
+import FormAltaUsuario from "./FormAltaUsuario";
+import UsuariosTable from "./UsuariosTable";
+import Paginador from "./Paginador";
 
-interface Usuario {
+/* ============================================================
+ * TIPOS (exportados para reutilizar en subcomponentes)
+ * ============================================================ */
+export type Rol =
+  | "superadmin"
+  | "admin"
+  | "consejo"
+  | "propietario"
+  | "inquilino";
+
+export type EstadoUsuario = "activo" | "pendiente" | "inactivo";
+
+export interface Usuario {
   _id: string;
   name: string;
   email: string;
@@ -38,10 +37,10 @@ interface Usuario {
   telefono?: string;
 }
 
-type ColumnaOrdenable = "name" | "unidadFuncional";
-type DireccionOrden = "asc" | "desc";
+export type ColumnaOrdenable = "name" | "unidadFuncional";
+export type DireccionOrden = "asc" | "desc";
 
-interface ConfiguracionOrden {
+export interface ConfiguracionOrden {
   columna: ColumnaOrdenable | null;
   direccion: DireccionOrden;
 }
@@ -53,18 +52,10 @@ interface UsuariosResponse {
 }
 
 /* ============================================================
- *  CONSTANTES
+ * CONSTANTES
  * ============================================================ */
 const ITEMS_POR_PAGINA = 10;
 const DEBOUNCE_MS = 250;
-
-const ESTILOS_ROL: Record<Rol, string> = {
-  superadmin: "bg-purple-50 text-purple-700 border-purple-200/60",
-  admin: "bg-emerald-50 text-emerald-700 border-emerald-200/60",
-  consejo: "bg-blue-50 text-blue-700 border-blue-200/60",
-  propietario: "bg-amber-50 text-amber-700 border-amber-200/60",
-  inquilino: "bg-slate-100 text-slate-700 border-slate-300/60",
-};
 
 const OPCIONES_ROL: { value: Rol | "todos"; label: string }[] = [
   { value: "todos", label: "Todos los roles" },
@@ -83,7 +74,7 @@ const OPCIONES_ESTADO: { value: EstadoUsuario | "todos"; label: string }[] = [
 ];
 
 /* ============================================================
- *  HELPERS
+ * HELPERS
  * ============================================================ */
 const getBaseUrl = (): string => {
   const fromEnv = import.meta.env?.VITE_API_URL as string | undefined;
@@ -103,45 +94,18 @@ const verificarAcceso = (): boolean => {
 };
 
 /* ============================================================
- *  SUBCOMPONENTES MEMOIZADOS
+ * HELPER DE RED PURO (sin setState, sin efectos secundarios)
+ * Vive fuera del componente para no recrearse en cada render.
  * ============================================================ */
-const BadgeRol = memo(({ role }: { role: Rol }) => (
-  <span
-    className={`px-2.5 py-1 rounded-md text-xs font-bold uppercase tracking-wider border ${
-      ESTILOS_ROL[role] ?? ESTILOS_ROL.inquilino
-    }`}
-  >
-    {role}
-  </span>
-));
-
-const CeldaEstado = memo(({ estado }: { estado: EstadoUsuario }) => {
-  if (estado === "activo") {
-    return (
-      <div className="flex items-center gap-1.5 text-emerald-600 font-bold text-xs">
-        <HiOutlineShieldCheck className="w-4 h-4 shrink-0" />
-        <span>Activa</span>
-      </div>
-    );
-  }
-  if (estado === "pendiente") {
-    return (
-      <div className="flex items-center gap-1.5 text-amber-600 font-bold text-xs animate-pulse">
-        <HiOutlineClock className="w-4 h-4 shrink-0" />
-        <span>Pendiente</span>
-      </div>
-    );
-  }
-  return (
-    <div className="flex items-center gap-1.5 text-slate-400 font-bold text-xs">
-      <HiOutlineLockClosed className="w-4 h-4 shrink-0" />
-      <span>Inactiva</span>
-    </div>
-  );
-});
+async function fetchUsuariosRequest(
+  signal?: AbortSignal
+): Promise<UsuariosResponse> {
+  const respuesta = await fetch(`${getBaseUrl()}/api/users`, { signal });
+  return (await respuesta.json()) as UsuariosResponse;
+}
 
 /* ============================================================
- *  HOOK: debounce
+ * HOOK: debounce
  * ============================================================ */
 function useDebounce<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState(value);
@@ -153,26 +117,18 @@ function useDebounce<T>(value: T, delay: number): T {
 }
 
 /* ============================================================
- *  HELPER: rango de páginas con elipsis
- * ============================================================ */
-function rangoPaginacion(actual: number, total: number): (number | "...")[] {
-  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
-  if (actual <= 4) return [1, 2, 3, 4, 5, "...", total];
-  if (actual >= total - 3)
-    return [1, "...", total - 4, total - 3, total - 2, total - 1, total];
-  return [1, "...", actual - 1, actual, actual + 1, "...", total];
-}
-
-/* ============================================================
- *  COMPONENTE PRINCIPAL
+ * COMPONENTE PRINCIPAL
  * ============================================================ */
 export default function ListaUsuarios() {
-  // 🎯 Inicialización perezosa para arrancar con el valor correcto desde el primer render
+  // ✅ Inicializadores lazy: la función se ejecuta UNA SOLA VEZ al montar.
+  // Esto reemplaza el uso problemático de useRef durante render.
   const [tieneAcceso] = useState<boolean>(verificarAcceso);
-  const [loading, setLoading] = useState<boolean>(() => verificarAcceso());
+  const [loading, setLoading] = useState<boolean>(verificarAcceso);
 
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [error, setError] = useState<string | null>(null);
+
+  const [modalAbierto, setModalAbierto] = useState<boolean>(false);
 
   const [busqueda, setBusqueda] = useState("");
   const busquedaDebounced = useDebounce(busqueda, DEBOUNCE_MS);
@@ -181,29 +137,29 @@ export default function ListaUsuarios() {
   const [filtroEstado, setFiltroEstado] = useState<EstadoUsuario | "todos">(
     "todos"
   );
-  const [paginaActual, setPaginaActual] = useState(1);
 
   const [orden, setOrden] = useState<ConfiguracionOrden>({
     columna: "name",
     direccion: "asc",
   });
 
-  /* ----------------- FETCH inicial: TODO inline dentro del effect -----------------
-   * ✅ El linter "react-hooks/set-state-in-effect" solo ve la función async inline
-   * y entiende que todos los setState ocurren después del primer await
-   * (en microtask), por lo que NO los marca como cascading renders.
-   * ----------------------------------------------------------------------------- */
+  const [paginaActual, setPaginaActual] = useState(1);
+
+  /* ------------------------------------------------------------
+   * Carga inicial
+   * Patrón seguro: función async declarada DENTRO del effect.
+   * El linter reconoce que los setState ocurren después de await.
+   * ------------------------------------------------------------ */
   useEffect(() => {
-    if (!tieneAcceso) return;
+    if (!tieneAcceso) {
+      return;
+    }
 
     const controller = new AbortController();
 
-    (async () => {
+    const cargar = async () => {
       try {
-        const respuesta = await fetch(`${getBaseUrl()}/api/users`, {
-          signal: controller.signal,
-        });
-        const resultado: UsuariosResponse = await respuesta.json();
+        const resultado = await fetchUsuariosRequest(controller.signal);
 
         if (resultado.success && resultado.users) {
           setUsuarios(resultado.users);
@@ -218,22 +174,21 @@ export default function ListaUsuarios() {
       } finally {
         setLoading(false);
       }
-    })();
+    };
+
+    void cargar();
 
     return () => controller.abort();
   }, [tieneAcceso]);
 
-  /* ----------------- Recarga manual (handler, no effect) -----------------
-   * Esta función SOLO se invoca desde onClick (Refrescar / Reintentar).
-   * Como no se llama desde un useEffect, puede setear loading=true al inicio
-   * sin generar el warning del linter.
-   * ---------------------------------------------------------------------- */
+  /* ------------------------------------------------------------
+   * Recarga manual (handler de evento → puede setear loading=true)
+   * ------------------------------------------------------------ */
   const recargarUsuarios = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const respuesta = await fetch(`${getBaseUrl()}/api/users`);
-      const resultado: UsuariosResponse = await respuesta.json();
+      const resultado = await fetchUsuariosRequest();
 
       if (resultado.success && resultado.users) {
         setUsuarios(resultado.users);
@@ -248,7 +203,9 @@ export default function ListaUsuarios() {
     }
   }, []);
 
-  /* ----------------- FILTRADO + ORDEN (memoizados) ----------------- */
+  /* ------------------------------------------------------------
+   * Filtrado + ordenamiento
+   * ------------------------------------------------------------ */
   const usuariosFiltrados = useMemo(() => {
     const q = busquedaDebounced.trim().toLowerCase();
 
@@ -277,35 +234,33 @@ export default function ListaUsuarios() {
     );
   }, [usuarios, busquedaDebounced, filtroRol, filtroEstado, orden]);
 
-  /* ----------------- PAGINACIÓN ----------------- */
+  /* ------------------------------------------------------------
+   * Reset de página al cambiar filtros
+   *
+   * ✅ Patrón oficial de React: "Adjusting state while rendering"
+   *    https://react.dev/learn/you-might-not-need-an-effect
+   *
+   * Usamos useState (NO useRef) para guardar la clave previa.
+   * Llamar a setState durante render ES válido para derivar estado;
+   * React descarta el render en curso y vuelve a renderizar.
+   * ------------------------------------------------------------ */
+  const claveFiltros = `${busquedaDebounced}|${filtroRol}|${filtroEstado}`;
+  const [claveFiltrosPrevia, setClaveFiltrosPrevia] = useState(claveFiltros);
+
+  if (claveFiltrosPrevia !== claveFiltros) {
+    setClaveFiltrosPrevia(claveFiltros);
+    setPaginaActual(1);
+  }
+
+  /* ------------------------------------------------------------
+   * Cálculos derivados de paginación
+   * ------------------------------------------------------------ */
   const totalPaginas = Math.max(
     1,
     Math.ceil(usuariosFiltrados.length / ITEMS_POR_PAGINA)
   );
 
-  // 🎯 Patrón oficial: "ajustar estado durante el render" (reemplaza useEffect)
-  const [filtrosAnteriores, setFiltrosAnteriores] = useState({
-    q: busquedaDebounced,
-    rol: filtroRol as Rol | "todos",
-    estado: filtroEstado as EstadoUsuario | "todos",
-  });
-
-  if (
-    filtrosAnteriores.q !== busquedaDebounced ||
-    filtrosAnteriores.rol !== filtroRol ||
-    filtrosAnteriores.estado !== filtroEstado
-  ) {
-    setFiltrosAnteriores({
-      q: busquedaDebounced,
-      rol: filtroRol,
-      estado: filtroEstado,
-    });
-    setPaginaActual(1);
-  }
-
-  // 🎯 Clamp de página: derivado en render, sin efecto
   const paginaEfectiva = Math.min(Math.max(paginaActual, 1), totalPaginas);
-
   const indicePrimerItem = (paginaEfectiva - 1) * ITEMS_POR_PAGINA;
   const indiceUltimoItem = indicePrimerItem + ITEMS_POR_PAGINA;
 
@@ -314,14 +269,10 @@ export default function ListaUsuarios() {
     [usuariosFiltrados, indicePrimerItem, indiceUltimoItem]
   );
 
-  const paginas = useMemo(
-    () => rangoPaginacion(paginaEfectiva, totalPaginas),
-    [paginaEfectiva, totalPaginas]
-  );
-
-  /* ----------------- HANDLERS ----------------- */
+  /* ------------------------------------------------------------
+   * Handlers
+   * ------------------------------------------------------------ */
   const toggleEstadoUsuario = useCallback((id: string) => {
-    // ⚠️ TODO: persistir cambio en backend (PATCH /api/users/:id)
     setUsuarios((prev) =>
       prev.map((u) =>
         u._id === id
@@ -333,10 +284,15 @@ export default function ListaUsuarios() {
 
   const manejarEditar = useCallback((usuario: Usuario) => {
     console.log("Abriendo edición para el usuario:", usuario);
+    // TODO: abrir modal en modo edición
   }, []);
 
   const manejarAltaUsuario = useCallback(() => {
-    console.log("Abrir formulario o modal de alta de usuario");
+    setModalAbierto(true);
+  }, []);
+
+  const manejarCerrarModal = useCallback(() => {
+    setModalAbierto(false);
   }, []);
 
   const manejarClickOrden = useCallback((columna: ColumnaOrdenable) => {
@@ -347,20 +303,9 @@ export default function ListaUsuarios() {
     }));
   }, []);
 
-  const renderIconoOrden = (columna: ColumnaOrdenable) => {
-    if (orden.columna !== columna) {
-      return (
-        <HiChevronDown className="w-4 h-4 text-slate-300 opacity-50 group-hover:opacity-100" />
-      );
-    }
-    return orden.direccion === "asc" ? (
-      <HiChevronUp className="w-4 h-4 text-slate-900" />
-    ) : (
-      <HiChevronDown className="w-4 h-4 text-slate-900" />
-    );
-  };
-
-  /* ----------------- ACCESO RESTRINGIDO ----------------- */
+  /* ------------------------------------------------------------
+   * Guard: sin acceso
+   * ------------------------------------------------------------ */
   if (!tieneAcceso) {
     return (
       <div className="min-h-[60vh] flex flex-col items-center justify-center p-6 bg-white border border-slate-100 rounded-2xl shadow-sm text-center">
@@ -378,7 +323,9 @@ export default function ListaUsuarios() {
     );
   }
 
-  /* ----------------- RENDER ----------------- */
+  /* ------------------------------------------------------------
+   * Render
+   * ------------------------------------------------------------ */
   return (
     <div className="space-y-6">
       {/* Encabezado */}
@@ -511,224 +458,31 @@ export default function ListaUsuarios() {
             <div className="absolute inset-0 bg-white/40 backdrop-blur-[1px] flex items-center justify-center z-10" />
           )}
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-slate-50/70 border-b border-slate-100">
-                  <th
-                    className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider cursor-pointer group hover:text-slate-900"
-                    onClick={() => manejarClickOrden("name")}
-                  >
-                    <div className="flex items-center gap-1">
-                      <span>Usuario / Nombre</span>
-                      {renderIconoOrden("name")}
-                    </div>
-                  </th>
-                  <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">
-                    Correo Electrónico
-                  </th>
-                  <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">
-                    Rol Asignado
-                  </th>
-                  <th
-                    className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider cursor-pointer group hover:text-slate-900"
-                    onClick={() => manejarClickOrden("unidadFuncional")}
-                  >
-                    <div className="flex items-center gap-1">
-                      <span>U. Funcional</span>
-                      {renderIconoOrden("unidadFuncional")}
-                    </div>
-                  </th>
-                  <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">
-                    Teléfono
-                  </th>
-                  <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">
-                    Estado
-                  </th>
-                  <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">
-                    Acciones
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50 font-medium text-sm text-slate-700">
-                {usuariosPaginados.length > 0 ? (
-                  usuariosPaginados.map((u) => {
-                    const esInactivo = u.estado === "inactivo";
-                    return (
-                      <tr
-                        key={u._id}
-                        className={`hover:bg-slate-50/40 transition-colors ${
-                          esInactivo ? "bg-slate-50/40 opacity-75" : ""
-                        }`}
-                      >
-                        <td
-                          className={`px-6 py-4 font-bold ${
-                            esInactivo
-                              ? "text-slate-500 line-through font-medium"
-                              : "text-slate-900"
-                          }`}
-                        >
-                          {u.name}
-                        </td>
-                        <td className="px-6 py-4 text-slate-500">
-                          <div className="flex items-center gap-2">
-                            <HiOutlineMail className="w-4 h-4 text-slate-400 shrink-0" />
-                            <span className={esInactivo ? "line-through" : ""}>
-                              {u.email}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <BadgeRol role={u.role} />
-                        </td>
-                        <td className="px-6 py-4 text-slate-600 font-bold">
-                          {u.unidadFuncional ? (
-                            <div className="flex items-center gap-1.5">
-                              <HiOutlineOfficeBuilding className="w-4 h-4 text-slate-400 shrink-0" />
-                              <span
-                                className={
-                                  esInactivo
-                                    ? "line-through font-medium text-slate-400"
-                                    : ""
-                                }
-                              >
-                                {u.unidadFuncional}
-                              </span>
-                            </div>
-                          ) : (
-                            <span className="text-slate-300 font-normal">
-                              -
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-6 py-4 text-slate-500">
-                          {u.telefono ? (
-                            <div className="flex items-center gap-1.5">
-                              <HiOutlinePhone className="w-4 h-4 text-slate-400 shrink-0" />
-                              <span
-                                className={esInactivo ? "line-through" : ""}
-                              >
-                                {u.telefono}
-                              </span>
-                            </div>
-                          ) : (
-                            <span className="text-slate-300 font-normal">
-                              -
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-6 py-4">
-                          <CeldaEstado estado={u.estado} />
-                        </td>
-                        <td className="px-6 py-4 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <button
-                              onClick={() => manejarEditar(u)}
-                              title="Editar usuario"
-                              className="p-1.5 hover:bg-slate-100 text-slate-600 hover:text-slate-900 rounded-lg transition cursor-pointer"
-                            >
-                              <HiOutlinePencil className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => toggleEstadoUsuario(u._id)}
-                              title={
-                                esInactivo
-                                  ? "Activar cuenta"
-                                  : "Desactivar cuenta"
-                              }
-                              className={`p-1.5 rounded-lg transition cursor-pointer ${
-                                esInactivo
-                                  ? "hover:bg-emerald-50 text-emerald-600 hover:text-emerald-700"
-                                  : "hover:bg-red-50 text-slate-400 hover:text-red-600"
-                              }`}
-                            >
-                              {esInactivo ? (
-                                <HiOutlineLockClosed className="w-4 h-4" />
-                              ) : (
-                                <HiOutlineLockOpen className="w-4 h-4" />
-                              )}
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                ) : (
-                  <tr>
-                    <td
-                      colSpan={7}
-                      className="px-6 py-10 text-center text-sm text-slate-400 font-medium"
-                    >
-                      No se encontraron usuarios con los criterios
-                      seleccionados.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+          <UsuariosTable
+            usuarios={usuariosPaginados}
+            orden={orden}
+            onClickOrden={manejarClickOrden}
+            onEditar={manejarEditar}
+            onToggleEstado={toggleEstadoUsuario}
+          />
 
-          {/* Paginador con elipsis */}
-          <div className="px-6 py-4 bg-slate-50/50 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 select-none">
-            <div className="text-xs font-bold text-slate-500 tracking-wide uppercase">
-              Mostrando{" "}
-              <span className="text-slate-800">
-                {usuariosFiltrados.length > 0 ? indicePrimerItem + 1 : 0}
-              </span>{" "}
-              al{" "}
-              <span className="text-slate-800">
-                {Math.min(indiceUltimoItem, usuariosFiltrados.length)}
-              </span>{" "}
-              de{" "}
-              <span className="text-slate-800">{usuariosFiltrados.length}</span>{" "}
-              resultados filtrados
-            </div>
-
-            <div className="flex items-center justify-center gap-1.5">
-              <button
-                onClick={() => setPaginaActual((p) => Math.max(p - 1, 1))}
-                disabled={paginaEfectiva === 1}
-                className="p-2 border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 rounded-xl transition disabled:opacity-40 disabled:hover:bg-white disabled:cursor-not-allowed shadow-sm cursor-pointer"
-              >
-                <HiChevronLeft className="w-4 h-4" />
-              </button>
-
-              {paginas.map((p, i) =>
-                p === "..." ? (
-                  <span
-                    key={`dots-${i}`}
-                    className="px-2 text-slate-400 text-xs font-bold"
-                  >
-                    …
-                  </span>
-                ) : (
-                  <button
-                    key={p}
-                    onClick={() => setPaginaActual(p)}
-                    className={`min-w-9 h-9 text-xs font-bold rounded-xl transition cursor-pointer ${
-                      paginaEfectiva === p
-                        ? "bg-slate-900 text-white shadow-sm shadow-slate-900/10"
-                        : "bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 shadow-sm"
-                    }`}
-                  >
-                    {p}
-                  </button>
-                )
-              )}
-
-              <button
-                onClick={() =>
-                  setPaginaActual((p) => Math.min(p + 1, totalPaginas))
-                }
-                disabled={paginaEfectiva === totalPaginas}
-                className="p-2 border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 rounded-xl transition disabled:opacity-40 disabled:hover:bg-white disabled:cursor-not-allowed shadow-sm cursor-pointer"
-              >
-                <HiChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
+          <Paginador
+            paginaActual={paginaEfectiva}
+            totalPaginas={totalPaginas}
+            indicePrimerItem={indicePrimerItem}
+            indiceUltimoItem={indiceUltimoItem}
+            totalFiltrados={usuariosFiltrados.length}
+            onCambioPagina={setPaginaActual}
+          />
         </div>
       )}
+
+      {/* Modal de alta */}
+      <FormAltaUsuario
+        modalAbierto={modalAbierto}
+        onCerrar={manejarCerrarModal}
+        onUsuarioCreado={recargarUsuarios}
+      />
     </div>
   );
 }
