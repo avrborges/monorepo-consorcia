@@ -83,7 +83,7 @@ interface UsuariosTableProps {
 }
 
 /* ============================================================
- * COMPONENTE PRINCIPAL
+ * COMPONENTE PRINCIPAL MODIFICADO
  * ============================================================ */
 export default function UsuariosTable({
   usuarios,
@@ -106,12 +106,15 @@ export default function UsuariosTable({
   };
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-left border-collapse">
+    // 1. Quitamos el overflow-x-auto de acá (ya lo maneja el padre de forma limpia)
+    // 2. Agregamos un min-w-[950px] para asegurar legibilidad cuando se achica la pantalla
+    <div>
+      <table className="w-full min-w-[950px] text-left border-collapse layout-fixed">
         <thead>
           <tr className="bg-slate-50/70 border-b border-slate-100">
+            {/* Optimizamos los paddings horizontales de px-6 a px-4 para dar más aire */}
             <th
-              className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider cursor-pointer group hover:text-slate-900"
+              className="px-4 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider cursor-pointer group hover:text-slate-900"
               onClick={() => onClickOrden("name")}
             >
               <div className="flex items-center gap-1">
@@ -119,28 +122,33 @@ export default function UsuariosTable({
                 {renderIconoOrden("name")}
               </div>
             </th>
-            <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">
+            <th className="px-4 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">
               Correo Electrónico
             </th>
-            <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">
+            <th className="px-4 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">
               Rol Asignado
             </th>
-            <th
-              className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider cursor-pointer group hover:text-slate-900"
+            
+            {/* 🌟 COLUMNA RESPONSIVA: Se oculta en notebooks estándar si se reduce el espacio */}
+            <th 
+              className="hidden xl:table-cell px-4 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider cursor-pointer group hover:text-slate-900"
               onClick={() => onClickOrden("unidadFuncional")}
             >
               <div className="flex items-center gap-1">
-                <span>U. Funcional</span>
+                <span>U.F.</span>
                 {renderIconoOrden("unidadFuncional")}
               </div>
             </th>
-            <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">
+            
+            {/* 🌟 COLUMNA RESPONSIVA: Se oculta desde pantallas grandes (lg) hacia abajo */}
+            <th className="hidden lg:table-cell px-4 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">
               Teléfono
             </th>
-            <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">
+            
+            <th className="px-4 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">
               Estado
             </th>
-            <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">
+            <th className="px-4 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">
               Acciones
             </th>
           </tr>
@@ -157,7 +165,7 @@ export default function UsuariosTable({
                   }`}
                 >
                   <td
-                    className={`px-6 py-4 font-bold ${
+                    className={`px-4 py-4 font-bold ${
                       esInactivo
                         ? "text-slate-500 line-through font-medium"
                         : "text-slate-900"
@@ -165,18 +173,20 @@ export default function UsuariosTable({
                   >
                     {u.name}
                   </td>
-                  <td className="px-6 py-4 text-slate-500">
-                    <div className="flex items-center gap-2">
+                  <td className="px-4 py-4 text-slate-500">
+                    <div className="flex items-center gap-2 max-w-[200px] truncate" title={u.email}>
                       <HiOutlineMail className="w-4 h-4 text-slate-400 shrink-0" />
-                      <span className={esInactivo ? "line-through" : ""}>
+                      <span className={`${esInactivo ? "line-through" : ""} truncate`}>
                         {u.email}
                       </span>
                     </div>
                   </td>
-                  <td className="px-6 py-4">
+                  <td className="px-4 py-4">
                     <BadgeRol role={u.role} />
                   </td>
-                  <td className="px-6 py-4 text-slate-600 font-bold">
+                  
+                  {/* Replicamos exactamente las clases 'hidden xl:table-cell' para mantener consistencia */}
+                  <td className="hidden xl:table-cell px-4 py-4 text-slate-600 font-bold">
                     {u.unidadFuncional ? (
                       <div className="flex items-center gap-1.5">
                         <HiOutlineOfficeBuilding className="w-4 h-4 text-slate-400 shrink-0" />
@@ -194,7 +204,9 @@ export default function UsuariosTable({
                       <span className="text-slate-300 font-normal">-</span>
                     )}
                   </td>
-                  <td className="px-6 py-4 text-slate-500">
+                  
+                  {/* Replicamos las clases 'hidden lg:table-cell' */}
+                  <td className="hidden lg:table-cell px-4 py-4 text-slate-500">
                     {u.telefono ? (
                       <div className="flex items-center gap-1.5">
                         <HiOutlinePhone className="w-4 h-4 text-slate-400 shrink-0" />
@@ -206,10 +218,11 @@ export default function UsuariosTable({
                       <span className="text-slate-300 font-normal">-</span>
                     )}
                   </td>
-                  <td className="px-6 py-4">
+                  
+                  <td className="px-4 py-4">
                     <CeldaEstado estado={u.estado} />
                   </td>
-                  <td className="px-6 py-4 text-right">
+                  <td className="px-4 py-4 text-right">
                     <div className="flex items-center justify-end gap-2">
                       <button
                         onClick={() => onEditar(u)}
@@ -244,7 +257,7 @@ export default function UsuariosTable({
             <tr>
               <td
                 colSpan={7}
-                className="px-6 py-10 text-center text-sm text-slate-400 font-medium"
+                className="px-4 py-10 text-center text-sm text-slate-400 font-medium"
               >
                 No se encontraron usuarios con los criterios seleccionados.
               </td>

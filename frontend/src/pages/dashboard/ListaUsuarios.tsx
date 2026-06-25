@@ -329,19 +329,21 @@ export default function ListaUsuarios() {
   return (
     <div className="space-y-6">
       {/* Encabezado */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 pb-4 gap-4">
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between border-b border-slate-100 pb-4 gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight flex items-center gap-2">
             Listado de Usuarios
           </h1>
-          <p className="text-sm text-slate-500 font-medium mt-1">
+          <p className="text-sm text-slate-500 font-medium mt-1 max-w-2xl">
             Visualizá, filtrá y controlá las cuentas activas que tienen acceso
             al ecosistema del consorcio.
           </p>
         </div>
 
-        <div className="flex items-center gap-3 self-start sm:self-center w-full sm:w-auto">
-          <div className="hidden md:flex px-4 py-2 bg-slate-50 border border-slate-200/60 rounded-xl items-center gap-2">
+        {/* 🌟 OPTIMIZACIÓN: Se añade 'shrink-0' para que el bloque de acciones no se deforme 
+            y se cambia a 'lg:self-center' para coordinar el quiebre de pantalla de forma prolija */}
+        <div className="flex items-center gap-3 shrink-0 self-stretch sm:self-start lg:self-center w-full lg:w-auto justify-end">
+          <div className="hidden md:flex px-4 py-2 bg-slate-50 border border-slate-200/60 rounded-xl items-center gap-2 shrink-0">
             <HiOutlineUserGroup className="w-5 h-5 text-slate-400" />
             <span className="text-sm font-bold text-slate-700">
               Total: {usuarios.length}
@@ -352,7 +354,7 @@ export default function ListaUsuarios() {
             onClick={recargarUsuarios}
             disabled={loading}
             title="Actualizar listado"
-            className="p-2.5 border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 rounded-xl transition shadow-sm disabled:opacity-50 cursor-pointer group flex items-center justify-center"
+            className="p-2.5 border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 rounded-xl transition shadow-sm disabled:opacity-50 cursor-pointer group flex items-center justify-center shrink-0"
           >
             <HiRefresh
               className={`w-5 h-5 ${
@@ -363,9 +365,11 @@ export default function ListaUsuarios() {
             />
           </button>
 
+          {/* 🌟 DETALLE CLAVE: Se incorpora 'whitespace-nowrap' para prohibir terminantemente 
+              que el texto "Nuevo Usuario" se divida en dos renglones */}
           <button
             onClick={manejarAltaUsuario}
-            className="w-full sm:w-auto px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-sm font-bold rounded-xl flex items-center justify-center gap-2 shadow-sm shadow-slate-900/10 hover:shadow transition-all active:scale-[0.98] cursor-pointer"
+            className="w-full lg:w-auto px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-sm font-bold rounded-xl flex items-center justify-center gap-2 shadow-sm shadow-slate-900/10 hover:shadow transition-all active:scale-[0.98] cursor-pointer whitespace-nowrap shrink-0"
           >
             <HiPlus className="w-5 h-5" />
             <span>Nuevo Usuario</span>
