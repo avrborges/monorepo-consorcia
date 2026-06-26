@@ -11,13 +11,77 @@ const getUsers = async (req, res) => {
     
     return res.status(200).json({
       success: true,
-      users
+      users // 💡 Nota: Asegurate de que tu frontend (`ListaUsuarios.tsx`) lea `datos.users` en vez de `datos.data`
     });
   } catch (error) {
     console.error("Error en getUsers:", error);
     return res.status(500).json({
       success: false,
       message: "Hubo un error al obtener el listado de usuarios."
+    });
+  }
+};
+
+// 🆕 MÉTODO: Registrar un nuevo usuario desde el Panel de Administración
+const crearUsuario = async (req, res) => {
+  try {
+    const { name, email, role, unidadFuncional, telefono } = req.body;
+
+    // 1. Validaciones de campos obligatorios requeridos por el Schema
+    if (!name || !name.trim()) {
+      return res.status(400).json({ success: false, message: "El nombre completo es obligatorio." });
+    }
+    if (!email || !email.trim()) {
+      return res.status(400).json({ success: false, message: "El correo electrónico es obligatorio." });
+    }
+
+    // 2. Controlar duplicados en la base de datos
+    const usuarioExistente = await User.findOne({ email: email.toLowerCase() });
+    if (usuarioExistente) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Ya existe un usuario registrado con este correo electrónico." 
+      });
+    }
+
+    // 3. Generar Contraseña Provisoria Obligatoria (Evita errores del Schema)
+    // Toma la primera parte del mail antes del '@' y le concatena un patrón común
+    const prefijoEmail = email.split('@')[0];
+    const passwordProvisoria = `${prefijoEmail}2026!`;
+
+    // 4. Crear instancia alineada estrictamente al Schema Real
+    const nuevoUsuario = new User({
+      name: name.trim(),
+      email: email.trim(),
+      password: passwordProvisoria, // El hook pre('save') del Schema la encriptará automáticamente
+      role: role || 'propietario',
+      unidadFuncional: unidadFuncional || "",
+      telefono: telefono || "",
+      estado: 'pendiente', // Inicializado obligatoriamente en pendiente
+      debeCambiarPassword: true // Bandera de control para obligar el cambio en el primer login
+    });
+
+    // 5. Guardar físicamente en MongoDB Atlas
+    await nuevoUsuario.save();
+
+    // 6. Respuesta de éxito devolviendo la clave provisional generada
+    return res.status(201).json({ 
+      success: true, 
+      message: "Usuario registrado con éxito en estado pendiente.",
+      user: {
+        id: nuevoUsuario._id,
+        name: nuevoUsuario.name,
+        email: nuevoUsuario.email,
+        role: nuevoUsuario.role,
+        passwordProvisoria // Se le expone al admin para que pueda notificársela al usuario
+      }
+    });
+
+  } catch (error) {
+    console.error("Error en crearUsuario:", error);
+    return res.status(500).json({ 
+      success: false, 
+      message: "Hubo un error interno en el servidor al procesar el alta." 
     });
   }
 };
@@ -38,7 +102,7 @@ const loginUser = async (req, res) => {
     // 2. Búsqueda del usuario en MongoDB Atlas
     const userFound = await User.findOne({ email });
 
-    // 3. 🆕 VALIDACIÓN DE ESTADO: Si está 'inactivo' no puede pasar bajo ninguna circunstancia
+    // 3. VALIDACIÓN DE ESTADO: Si está 'inactivo' no puede pasar bajo ninguna circunstancia
     if (userFound && (userFound.estado === 'inactive' || userFound.estado === 'inactivo')) {
       return res.status(403).json({
         success: false,
@@ -86,7 +150,7 @@ const loginUser = async (req, res) => {
         role: userFound.role,
         unidadFuncional: userFound.unidadFuncional,
         telefono: userFound.telefono,
-        estado: userFound.estado, // 👈 Ahora va a viajar como 'activo' al Frontend en el primer login
+        estado: userFound.estado, // Ahora viaja como 'activo' al Frontend en el primer login
         debeCambiarPassword: userFound.debeCambiarPassword 
       }
     });
@@ -102,5 +166,6 @@ const loginUser = async (req, res) => {
 
 module.exports = {
   loginUser,
-  getUsers // 🆕 Exportamos el nuevo método
+  getUsers,
+  crearUsuario // 🆕 Exportamos el nuevo método de alta
 };

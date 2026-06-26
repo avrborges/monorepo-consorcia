@@ -378,8 +378,9 @@ export default function ListaUsuarios() {
       </div>
 
       {/* Barra de herramientas */}
-      <div className="flex flex-col lg:flex-row gap-3 w-full">
-        <div className="relative flex-1">
+      <div className="flex flex-col lg:flex-row gap-3 w-full items-center">
+        {/* Buscador: Ocupa de forma elástica todo el espacio restante */}
+        <div className="relative w-full lg:flex-1">
           <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400 pointer-events-none">
             <HiOutlineSearch className="w-5 h-5" />
           </span>
@@ -392,9 +393,10 @@ export default function ListaUsuarios() {
           />
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-3">
+        {/* 🌟 CONTENEDOR DE SELECTORES OPTIMIZADO: Con shrink-0 evitamos que el buscador lo aplaste */}
+        <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto shrink-0">
           {/* Filtro Rol */}
-          <div className="relative w-full sm:w-56">
+          <div className="relative w-full sm:w-56 shrink-0">
             <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400 pointer-events-none">
               <HiOutlineFilter className="w-5 h-5" />
             </span>
@@ -415,7 +417,7 @@ export default function ListaUsuarios() {
           </div>
 
           {/* Filtro Estado */}
-          <div className="relative w-full sm:w-52">
+          <div className="relative w-full sm:w-52 shrink-0">
             <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400 pointer-events-none">
               <HiOutlineEye className="w-5 h-5" />
             </span>

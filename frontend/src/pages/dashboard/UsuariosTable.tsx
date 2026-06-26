@@ -48,7 +48,7 @@ BadgeRol.displayName = "BadgeRol";
 const CeldaEstado = memo(({ estado }: { estado: EstadoUsuario }) => {
   if (estado === "activo") {
     return (
-      <div className="flex items-center gap-1.5 text-emerald-600 font-bold text-xs">
+      <div className="flex items-center gap-1.5 text-emerald-600 font-bold text-xs shrink-0">
         <HiOutlineShieldCheck className="w-4 h-4 shrink-0" />
         <span>Activa</span>
       </div>
@@ -56,14 +56,14 @@ const CeldaEstado = memo(({ estado }: { estado: EstadoUsuario }) => {
   }
   if (estado === "pendiente") {
     return (
-      <div className="flex items-center gap-1.5 text-amber-600 font-bold text-xs animate-pulse">
+      <div className="flex items-center gap-1.5 text-amber-600 font-bold text-xs animate-pulse shrink-0">
         <HiOutlineClock className="w-4 h-4 shrink-0" />
         <span>Pendiente</span>
       </div>
     );
   }
   return (
-    <div className="flex items-center gap-1.5 text-slate-400 font-bold text-xs">
+    <div className="flex items-center gap-1.5 text-slate-400 font-bold text-xs shrink-0">
       <HiOutlineLockClosed className="w-4 h-4 shrink-0" />
       <span>Inactiva</span>
     </div>
@@ -83,7 +83,7 @@ interface UsuariosTableProps {
 }
 
 /* ============================================================
- * COMPONENTE PRINCIPAL MODIFICADO
+ * COMPONENTE PRINCIPAL OPTIMIZADO
  * ============================================================ */
 export default function UsuariosTable({
   usuarios,
@@ -106,13 +106,11 @@ export default function UsuariosTable({
   };
 
   return (
-    // 1. Quitamos el overflow-x-auto de acá (ya lo maneja el padre de forma limpia)
-    // 2. Agregamos un min-w-[950px] para asegurar legibilidad cuando se achica la pantalla
     <div>
-      <table className="w-full min-w-[950px] text-left border-collapse layout-fixed">
+      {/* 🌟 OPTIMIZACIÓN: Se cambia layout-fixed por layout-auto y se normaliza el min-w a 950px */}
+      <table className="w-full min-w-237.5 text-left border-collapse layout-auto">
         <thead>
           <tr className="bg-slate-50/70 border-b border-slate-100">
-            {/* Optimizamos los paddings horizontales de px-6 a px-4 para dar más aire */}
             <th
               className="px-4 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider cursor-pointer group hover:text-slate-900"
               onClick={() => onClickOrden("name")}
@@ -129,7 +127,7 @@ export default function UsuariosTable({
               Rol Asignado
             </th>
             
-            {/* 🌟 COLUMNA RESPONSIVA: Se oculta en notebooks estándar si se reduce el espacio */}
+            {/* Columna U.F. Responsiva */}
             <th 
               className="hidden xl:table-cell px-4 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider cursor-pointer group hover:text-slate-900"
               onClick={() => onClickOrden("unidadFuncional")}
@@ -140,7 +138,7 @@ export default function UsuariosTable({
               </div>
             </th>
             
-            {/* 🌟 COLUMNA RESPONSIVA: Se oculta desde pantallas grandes (lg) hacia abajo */}
+            {/* Columna Teléfono Responsiva */}
             <th className="hidden lg:table-cell px-4 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">
               Teléfono
             </th>
@@ -148,7 +146,9 @@ export default function UsuariosTable({
             <th className="px-4 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">
               Estado
             </th>
-            <th className="px-4 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">
+            
+            {/* 🌟 OPTIMIZACIÓN: Se le asigna un ancho exacto a las acciones para que herede la simetría perfecta */}
+            <th className="px-4 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right w-24 min-w-24">
               Acciones
             </th>
           </tr>
@@ -174,7 +174,7 @@ export default function UsuariosTable({
                     {u.name}
                   </td>
                   <td className="px-4 py-4 text-slate-500">
-                    <div className="flex items-center gap-2 max-w-[200px] truncate" title={u.email}>
+                    <div className="flex items-center gap-2 max-w-60 truncate" title={u.email}>
                       <HiOutlineMail className="w-4 h-4 text-slate-400 shrink-0" />
                       <span className={`${esInactivo ? "line-through" : ""} truncate`}>
                         {u.email}
@@ -185,7 +185,7 @@ export default function UsuariosTable({
                     <BadgeRol role={u.role} />
                   </td>
                   
-                  {/* Replicamos exactamente las clases 'hidden xl:table-cell' para mantener consistencia */}
+                  {/* U.F. Celda */}
                   <td className="hidden xl:table-cell px-4 py-4 text-slate-600 font-bold">
                     {u.unidadFuncional ? (
                       <div className="flex items-center gap-1.5">
@@ -205,7 +205,7 @@ export default function UsuariosTable({
                     )}
                   </td>
                   
-                  {/* Replicamos las clases 'hidden lg:table-cell' */}
+                  {/* Teléfono Celda */}
                   <td className="hidden lg:table-cell px-4 py-4 text-slate-500">
                     {u.telefono ? (
                       <div className="flex items-center gap-1.5">
@@ -222,12 +222,14 @@ export default function UsuariosTable({
                   <td className="px-4 py-4">
                     <CeldaEstado estado={u.estado} />
                   </td>
+                  
+                  {/* Acciones Celda */}
                   <td className="px-4 py-4 text-right">
-                    <div className="flex items-center justify-end gap-2">
+                    <div className="flex items-center justify-end gap-2 shrink-0">
                       <button
                         onClick={() => onEditar(u)}
                         title="Editar usuario"
-                        className="p-1.5 hover:bg-slate-100 text-slate-600 hover:text-slate-900 rounded-lg transition cursor-pointer"
+                        className="p-1.5 hover:bg-slate-100 text-slate-600 hover:text-slate-900 rounded-lg transition cursor-pointer shrink-0"
                       >
                         <HiOutlinePencil className="w-4 h-4" />
                       </button>
@@ -236,7 +238,7 @@ export default function UsuariosTable({
                         title={
                           esInactivo ? "Activar cuenta" : "Desactivar cuenta"
                         }
-                        className={`p-1.5 rounded-lg transition cursor-pointer ${
+                        className={`p-1.5 rounded-lg transition cursor-pointer shrink-0 ${
                           esInactivo
                             ? "hover:bg-emerald-50 text-emerald-600 hover:text-emerald-700"
                             : "hover:bg-red-50 text-slate-400 hover:text-red-600"
