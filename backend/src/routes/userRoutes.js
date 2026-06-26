@@ -7,16 +7,16 @@ const userController = require('../controllers/userController');
 router.post('/login', userController.loginUser);
 
 // Ruta para obtener el listado de usuarios: GET /api/users
-// Nota: Más adelante, cuando implementemos el middleware de verificación de JWT,
-// protegeremos esta ruta para que solo admins puedan consultar la nómina.
 router.get('/', userController.getUsers);
 
 // Ruta para dar de alta un usuario: POST /api/users
-// Al igual que el listado, en el futuro se protegerá con el middleware de rol de administrador.
 router.post('/', userController.crearUsuario);
 
-// 🆕 Ruta para activar/inactivar un usuario: PATCH /api/users/:id/status
-// Mapea el ID dinámico enviado por el cliente directamente a la función toggleStatus
+// Ruta para activar/inactivar un usuario: PATCH /api/users/:id/status
 router.patch('/:id/status', userController.toggleStatus);
+
+// 🆕 Ruta para eliminar definitivamente un usuario: DELETE /api/users/:id
+// Proteger con middleware de admin en el futuro al igual que las anteriores
+router.delete('/:id', userController.eliminarUsuario);
 
 module.exports = router;

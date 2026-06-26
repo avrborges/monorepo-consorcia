@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, useState, useEffect, useRef } from "react";
 import {
   HiOutlineMail,
   HiOutlineShieldCheck,
@@ -10,6 +10,8 @@ import {
   HiChevronUp,
   HiChevronDown,
   HiOutlineClock,
+  HiOutlineTrash,
+  HiDotsVertical, // 🆕 Nuevo ícono para los tres puntos
 } from "react-icons/hi";
 
 import type {
@@ -80,6 +82,7 @@ interface UsuariosTableProps {
   onClickOrden: (columna: ColumnaOrdenable) => void;
   onEditar: (usuario: Usuario) => void;
   onToggleEstado: (id: string) => void;
+  onEliminar: (usuario: Usuario) => void;
 }
 
 /* ============================================================
@@ -91,7 +94,27 @@ export default function UsuariosTable({
   onClickOrden,
   onEditar,
   onToggleEstado,
+  onEliminar,
 }: UsuariosTableProps) {
+  // 🆕 Rastrea qué ID de usuario tiene el menú desplegable abierto
+  const [menuAbiertoId, setMenuAbiertoId] = useState<string | null>(null);
+  const contenedorRef = useRef<HTMLDivElement>(null);
+
+  // 🆕 Cerrar el menú si se hace clic en cualquier otra parte de la pantalla
+  useEffect(() => {
+    function manejarClickAfuera(evento: MouseEvent) {
+      if (contenedorRef.current && !contenedorRef.current.contains(evento.target as Node)) {
+        setMenuAbiertoId(null);
+      }
+    }
+    document.addEventListener("mousedown", manejarClickAfuera);
+    return () => document.removeEventListener("mousedown", manejarClickAfuera);
+  }, []);
+
+  const toggleMenu = (id: string) => {
+    setMenuAbiertoId((prev) => (prev === id ? null : id));
+  };
+
   const renderIconoOrden = (columna: ColumnaOrdenable) => {
     if (orden.columna !== columna) {
       return (
@@ -106,7 +129,8 @@ export default function UsuariosTable({
   };
 
   return (
-    <div>
+    // 🆕 Agregamos la ref y overflow-visible para que el menú flotante no se corte
+    <div ref={contenedorRef} className="overflow-visible">
       <table className="w-full min-w-237.5 text-left border-collapse layout-auto">
         <thead>
           <tr className="bg-slate-50/70 border-b border-slate-100">
@@ -144,7 +168,7 @@ export default function UsuariosTable({
               Estado
             </th>
             
-            <th className="px-4 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right w-24 min-w-24">
+            <th className="px-4 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right w-20 min-w-20">
               Acciones
             </th>
           </tr>
@@ -153,6 +177,8 @@ export default function UsuariosTable({
           {usuarios.length > 0 ? (
             usuarios.map((u) => {
               const esInactivo = u.estado === "inactivo";
+              const elMenuEstaAbierto = menuAbiertoId === u._id;
+
               return (
                 <tr
                   key={u._id}
@@ -211,33 +237,80 @@ export default function UsuariosTable({
                     <CeldaEstado estado={u.estado} />
                   </td>
                   
-                  {/* Acciones Celda */}
-                  <td className="px-4 py-4 text-right">
-                    <div className="flex items-center justify-end gap-2 shrink-0">
-                      <button
-                        onClick={() => onEditar(u)}
-                        title="Editar usuario"
-                        className="p-1.5 hover:bg-slate-100 text-slate-600 hover:text-slate-900 rounded-lg transition cursor-pointer shrink-0"
-                      >
-                        <HiOutlinePencil className="w-4 h-4" />
-                      </button>
+                  {/* 🆕 Celda de Acciones Reestructurada con Menú Desplegable */}
+                  <td className="px-4 py-4 text-right overflow-visible relative">
+                    <div className="flex items-center justify-end relative">
                       
-                      {/* Botón de Alternar Estado con consistencia integrada */}
+                      {/* Botón de Tres Puntos */}
                       <button
-                        onClick={() => onToggleEstado(u._id)}
-                        title={esInactivo ? "Activar cuenta" : "Inactivar cuenta"}
-                        className={`p-1.5 rounded-lg transition cursor-pointer shrink-0 ${
-                          esInactivo
-                            ? "hover:bg-emerald-50 text-emerald-600 hover:text-emerald-700"
-                            : "hover:bg-red-50 text-slate-400 hover:text-red-600"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleMenu(u._id);
+                        }}
+                        title="Ver acciones"
+                        className={`p-2 rounded-xl transition cursor-pointer ${
+                          elMenuEstaAbierto 
+                            ? "bg-slate-900 text-white shadow-sm" 
+                            : "text-slate-400 hover:text-slate-900 hover:bg-slate-100"
                         }`}
                       >
-                        {esInactivo ? (
-                          <HiOutlineLockClosed className="w-4 h-4" />
-                        ) : (
-                          <HiOutlineLockOpen className="w-4 h-4" />
-                        )}
+                        <HiDotsVertical className="w-4 h-4" />
                       </button>
+
+                      {/* Menú Desplegable Flotante */}
+                      {elMenuEstaAbierto && (
+                        <div className="absolute right-0 top-full mt-1 w-48 bg-white border border-slate-200/80 rounded-xl shadow-lg py-1.5 z-30 animate-in fade-in slide-in-from-top-2 duration-150 origin-top-right">
+                          
+                          {/* Opción Editar */}
+                          <button
+                            onClick={() => {
+                              setMenuAbiertoId(null);
+                              onEditar(u);
+                            }}
+                            className="w-full px-3.5 py-2 text-left text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2.5 transition cursor-pointer"
+                          >
+                            <HiOutlinePencil className="w-4 h-4 text-slate-400" />
+                            <span>Editar Datos</span>
+                          </button>
+
+                          {/* Opción Cambiar Estado */}
+                          <button
+                            onClick={() => {
+                              setMenuAbiertoId(null);
+                              onToggleEstado(u._id);
+                            }}
+                            className="w-full px-3.5 py-2 text-left text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2.5 transition cursor-pointer"
+                          >
+                            {esInactivo ? (
+                              <>
+                                <HiOutlineLockOpen className="w-4 h-4 text-emerald-500" />
+                                <span className="text-slate-700">Activar Cuenta</span>
+                              </>
+                            ) : (
+                              <>
+                                <HiOutlineLockClosed className="w-4 h-4 text-slate-400" />
+                                <span className="text-slate-700">Inactivar Cuenta</span>
+                              </>
+                            )}
+                          </button>
+
+                          <div className="h-px bg-slate-100 my-1" />
+
+                          {/* Opción Eliminar Definitivo */}
+                          <button
+                            onClick={() => {
+                              setMenuAbiertoId(null);
+                              onEliminar(u); // Dispara al modal de confirmación del padre
+                            }}
+                            className="w-full px-3.5 py-2 text-left text-xs font-bold text-red-600 hover:bg-red-50 flex items-center gap-2.5 transition cursor-pointer"
+                          >
+                            <HiOutlineTrash className="w-4 h-4 text-red-500" />
+                            <span>Eliminar Usuario</span>
+                          </button>
+
+                        </div>
+                      )}
+
                     </div>
                   </td>
                 </tr>

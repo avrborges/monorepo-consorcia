@@ -78,12 +78,11 @@ const crearUsuario = async (req, res) => {
   }
 };
 
-// 🆕 MÉTODO: Alternar el estado del usuario (Activar / Inactivar)
+// MÉTODO: Alternar el estado del usuario (Activar / Inactivar)
 const toggleStatus = async (req, res) => {
   try {
     const { id } = req.params;
 
-    // 1. Buscar al usuario por su ID en MongoDB Atlas
     const usuario = await User.findById(id);
     if (!usuario) {
       return res.status(404).json({ 
@@ -92,18 +91,15 @@ const toggleStatus = async (req, res) => {
       });
     }
 
-    // 2. Lógica de alternancia: si está 'inactivo' pasa a 'activo'. 
-    // Si está en cualquier otro estado ('activo' o 'pendiente'), pasa a 'inactivo'.
     const nuevoEstado = usuario.estado === 'inactivo' ? 'activo' : 'inactivo';
     usuario.estado = nuevoEstado;
 
-    // 3. Guardar el cambio físicamente en la base de datos
     await usuario.save();
 
     return res.status(200).json({
       success: true,
       message: `El usuario ha sido marcado como ${nuevoEstado} con éxito.`,
-      estado: nuevoEstado // Lo devolvemos para que el frontend actualice su interfaz en caliente
+      estado: nuevoEstado
     });
 
   } catch (error) {
@@ -111,6 +107,35 @@ const toggleStatus = async (req, res) => {
     return res.status(500).json({ 
       success: false, 
       message: "Hubo un error en el servidor al cambiar el estado del usuario." 
+    });
+  }
+};
+
+// 🆕 MÉTODO: Eliminar definitivamente un usuario de la base de datos
+const eliminarUsuario = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Buscamos y removemos el documento en un solo paso asincrónico
+    const usuarioEliminado = await User.findByIdAndDelete(id);
+
+    if (!usuarioEliminado) {
+      return res.status(404).json({
+        success: false,
+        message: "El usuario que intenta eliminar ya no existe en el sistema."
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: `La cuenta de ${usuarioEliminado.name} ha sido eliminada definitivamente.`
+    });
+
+  } catch (error) {
+    console.error("Error en eliminarUsuario:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Hubo un error interno en el servidor al intentar eliminar el usuario."
     });
   }
 };
@@ -129,7 +154,6 @@ const loginUser = async (req, res) => {
 
     const userFound = await User.findOne({ email });
 
-    // VALIDACIÓN DE ESTADO: Bloqueo inmediato para usuarios inactivos
     if (userFound && (userFound.estado === 'inactive' || userFound.estado === 'inactivo')) {
       return res.status(403).json({
         success: false,
@@ -190,5 +214,6 @@ module.exports = {
   loginUser,
   getUsers,
   crearUsuario,
-  toggleStatus // 🆕 Exportamos el nuevo método para que lo usen las rutas
+  toggleStatus,
+  eliminarUsuario // 🆕 Exportación añadida de forma prolija
 };

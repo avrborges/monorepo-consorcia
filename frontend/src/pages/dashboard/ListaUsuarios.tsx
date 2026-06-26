@@ -14,6 +14,7 @@ import {
 import FormAltaUsuario from "./FormAltaUsuario";
 import UsuariosTable from "./UsuariosTable";
 import Paginador from "./Paginador";
+import ModalConfirmacion from "./ModalConfirmacion"; // 🆕 Importado el nuevo modal personalizado
 
 /* ============================================================
  * TIPOS
@@ -120,6 +121,9 @@ export default function ListaUsuarios() {
   const [error, setError] = useState<string | null>(null);
 
   const [modalAbierto, setModalAbierto] = useState<boolean>(false);
+  
+  // 🆕 Estado para controlar qué usuario se desea remover del sistema
+  const [usuarioParaEliminar, setUsuarioParaEliminar] = useState<Usuario | null>(null);
 
   const [busqueda, setBusqueda] = useState("");
   const busquedaDebounced = useDebounce(busqueda, DEBOUNCE_MS);
@@ -250,9 +254,8 @@ export default function ListaUsuarios() {
    * Handlers
    * ------------------------------------------------------------ */
   
-  // 🆕 MODIFICADO: Ahora persiste el cambio asincrónicamente en MongoDB Atlas
   const toggleEstadoUsuario = useCallback(async (id: string) => {
-    setLoading(true); // Encendemos el spin o el blur de carga sobre la tabla
+    setLoading(true);
     setError(null);
     try {
       const respuesta = await fetch(`${getBaseUrl()}/api/users/${id}/status`, {
@@ -265,7 +268,6 @@ export default function ListaUsuarios() {
       const resultado = await respuesta.json();
 
       if (resultado.success) {
-        // Actualizamos localmente el estado del usuario mutado con lo que devolvió el controlador
         setUsuarios((prev) =>
           prev.map((u) =>
             u._id === id ? { ...u, estado: resultado.estado } : u
@@ -278,9 +280,48 @@ export default function ListaUsuarios() {
       console.error("Error al mutar el estado del usuario:", err);
       setError("Error de comunicación. No se pudo impactar el cambio en el servidor.");
     } finally {
-      setLoading(false); // Apagamos el estado de carga
+      setLoading(false);
     }
   }, []);
+
+  // 🆕 Abre el modal de confirmación inyectando el objeto usuario completo
+  const manejarAperturaBorrado = useCallback((usuario: Usuario) => {
+    setUsuarioParaEliminar(usuario);
+  }, []);
+
+  // 🆕 Cierra el modal reseteando la selección del usuario
+  const manejarCerrarBorrado = useCallback(() => {
+    setUsuarioParaEliminar(null);
+  }, []);
+
+  // 🆕 Procesa la remoción física definitiva en MongoDB Atlas tras ser confirmado por el Admin
+  const ejecutarEliminacionDefinitiva = useCallback(async () => {
+    if (!usuarioParaEliminar) return;
+
+    setLoading(true);
+    setError(null);
+    const idAEliminar = usuarioParaEliminar._id;
+
+    try {
+      const respuesta = await fetch(`${getBaseUrl()}/api/users/${idAEliminar}`, {
+        method: "DELETE",
+      });
+
+      const resultado = await respuesta.json();
+
+      if (resultado.success) {
+        setUsuarios((prev) => prev.filter((u) => u._id !== idAEliminar));
+        setUsuarioParaEliminar(null); // Resetea el estado cerrando el modal
+      } else {
+        setError(resultado.message || "No se pudo eliminar al usuario.");
+      }
+    } catch (err) {
+      console.error("Error al eliminar el usuario de Atlas:", err);
+      setError("Error de comunicación. No se pudo eliminar el registro en el servidor.");
+    } finally {
+      setLoading(false);
+    }
+  }, [usuarioParaEliminar]);
 
   const manejarEditar = useCallback((usuario: Usuario) => {
     console.log("Abriendo edición para el usuario:", usuario);
@@ -457,6 +498,7 @@ export default function ListaUsuarios() {
             onClickOrden={manejarClickOrden}
             onEditar={manejarEditar}
             onToggleEstado={toggleEstadoUsuario}
+            onEliminar={manejarAperturaBorrado} // 🆕 Ahora dispara el flujo hacia el modal personalizado
           />
 
           <Paginador
@@ -475,6 +517,17 @@ export default function ListaUsuarios() {
         modalAbierto={modalAbierto}
         onCerrar={manejarCerrarModal}
         onUsuarioCreado={recargarUsuarios}
+      />
+
+      {/* 🆕 Modal personalizado de confirmación destructiva */}
+      <ModalConfirmacion
+        abierto={usuarioParaEliminar !== null}
+        titulo="¿Eliminar usuario definitivamente?"
+        mensaje="¿Estás completamente seguro de que querés eliminar permanentemente a"
+        nombreUsuario={usuarioParaEliminar?.name || ""}
+        onCerrar={manejarCerrarBorrado}
+        onConfirmar={ejecutarEliminacionDefinitiva}
+        loading={loading && usuarios.length > 0} // Asegura el estado spinner dentro del modal
       />
     </div>
   );
