@@ -247,7 +247,7 @@ export default function FormAltaUsuario({ modalAbierto, onCerrar, onUsuarioCread
                 value={formData.depto}
                 onChange={handleChange}
                 placeholder="Ej: B"
-                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition shadow-sm text-center font-bold"
+                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition shadow-sm text-center"
               />
             </div>
           </div>

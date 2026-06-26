@@ -11,8 +11,12 @@ router.post('/login', userController.loginUser);
 // protegeremos esta ruta para que solo admins puedan consultar la nómina.
 router.get('/', userController.getUsers);
 
-// 🆕 Ruta para dar de alta un usuario: POST /api/users
+// Ruta para dar de alta un usuario: POST /api/users
 // Al igual que el listado, en el futuro se protegerá con el middleware de rol de administrador.
 router.post('/', userController.crearUsuario);
+
+// 🆕 Ruta para activar/inactivar un usuario: PATCH /api/users/:id/status
+// Mapea el ID dinámico enviado por el cliente directamente a la función toggleStatus
+router.patch('/:id/status', userController.toggleStatus);
 
 module.exports = router;

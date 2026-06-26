@@ -10,13 +10,13 @@ import {
   HiRefresh,
 } from "react-icons/hi";
 
-// 🌟 Componentes separados
+// Componentes separados
 import FormAltaUsuario from "./FormAltaUsuario";
 import UsuariosTable from "./UsuariosTable";
 import Paginador from "./Paginador";
 
 /* ============================================================
- * TIPOS (exportados para reutilizar en subcomponentes)
+ * TIPOS
  * ============================================================ */
 export type Rol =
   | "superadmin"
@@ -93,10 +93,6 @@ const verificarAcceso = (): boolean => {
   }
 };
 
-/* ============================================================
- * HELPER DE RED PURO (sin setState, sin efectos secundarios)
- * Vive fuera del componente para no recrearse en cada render.
- * ============================================================ */
 async function fetchUsuariosRequest(
   signal?: AbortSignal
 ): Promise<UsuariosResponse> {
@@ -104,9 +100,6 @@ async function fetchUsuariosRequest(
   return (await respuesta.json()) as UsuariosResponse;
 }
 
-/* ============================================================
- * HOOK: debounce
- * ============================================================ */
 function useDebounce<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState(value);
   useEffect(() => {
@@ -120,8 +113,6 @@ function useDebounce<T>(value: T, delay: number): T {
  * COMPONENTE PRINCIPAL
  * ============================================================ */
 export default function ListaUsuarios() {
-  // ✅ Inicializadores lazy: la función se ejecuta UNA SOLA VEZ al montar.
-  // Esto reemplaza el uso problemático de useRef durante render.
   const [tieneAcceso] = useState<boolean>(verificarAcceso);
   const [loading, setLoading] = useState<boolean>(verificarAcceso);
 
@@ -147,13 +138,9 @@ export default function ListaUsuarios() {
 
   /* ------------------------------------------------------------
    * Carga inicial
-   * Patrón seguro: función async declarada DENTRO del effect.
-   * El linter reconoce que los setState ocurren después de await.
    * ------------------------------------------------------------ */
   useEffect(() => {
-    if (!tieneAcceso) {
-      return;
-    }
+    if (!tieneAcceso) return;
 
     const controller = new AbortController();
 
@@ -182,7 +169,7 @@ export default function ListaUsuarios() {
   }, [tieneAcceso]);
 
   /* ------------------------------------------------------------
-   * Recarga manual (handler de evento → puede setear loading=true)
+   * Recarga manual
    * ------------------------------------------------------------ */
   const recargarUsuarios = useCallback(async () => {
     setLoading(true);
@@ -234,16 +221,6 @@ export default function ListaUsuarios() {
     );
   }, [usuarios, busquedaDebounced, filtroRol, filtroEstado, orden]);
 
-  /* ------------------------------------------------------------
-   * Reset de página al cambiar filtros
-   *
-   * ✅ Patrón oficial de React: "Adjusting state while rendering"
-   *    https://react.dev/learn/you-might-not-need-an-effect
-   *
-   * Usamos useState (NO useRef) para guardar la clave previa.
-   * Llamar a setState durante render ES válido para derivar estado;
-   * React descarta el render en curso y vuelve a renderizar.
-   * ------------------------------------------------------------ */
   const claveFiltros = `${busquedaDebounced}|${filtroRol}|${filtroEstado}`;
   const [claveFiltrosPrevia, setClaveFiltrosPrevia] = useState(claveFiltros);
 
@@ -272,19 +249,41 @@ export default function ListaUsuarios() {
   /* ------------------------------------------------------------
    * Handlers
    * ------------------------------------------------------------ */
-  const toggleEstadoUsuario = useCallback((id: string) => {
-    setUsuarios((prev) =>
-      prev.map((u) =>
-        u._id === id
-          ? { ...u, estado: u.estado === "inactivo" ? "activo" : "inactivo" }
-          : u
-      )
-    );
+  
+  // 🆕 MODIFICADO: Ahora persiste el cambio asincrónicamente en MongoDB Atlas
+  const toggleEstadoUsuario = useCallback(async (id: string) => {
+    setLoading(true); // Encendemos el spin o el blur de carga sobre la tabla
+    setError(null);
+    try {
+      const respuesta = await fetch(`${getBaseUrl()}/api/users/${id}/status`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      const resultado = await respuesta.json();
+
+      if (resultado.success) {
+        // Actualizamos localmente el estado del usuario mutado con lo que devolvió el controlador
+        setUsuarios((prev) =>
+          prev.map((u) =>
+            u._id === id ? { ...u, estado: resultado.estado } : u
+          )
+        );
+      } else {
+        setError(resultado.message || "No se pudo cambiar el estado de la cuenta.");
+      }
+    } catch (err) {
+      console.error("Error al mutar el estado del usuario:", err);
+      setError("Error de comunicación. No se pudo impactar el cambio en el servidor.");
+    } finally {
+      setLoading(false); // Apagamos el estado de carga
+    }
   }, []);
 
   const manejarEditar = useCallback((usuario: Usuario) => {
     console.log("Abriendo edición para el usuario:", usuario);
-    // TODO: abrir modal en modo edición
   }, []);
 
   const manejarAltaUsuario = useCallback(() => {
@@ -303,9 +302,6 @@ export default function ListaUsuarios() {
     }));
   }, []);
 
-  /* ------------------------------------------------------------
-   * Guard: sin acceso
-   * ------------------------------------------------------------ */
   if (!tieneAcceso) {
     return (
       <div className="min-h-[60vh] flex flex-col items-center justify-center p-6 bg-white border border-slate-100 rounded-2xl shadow-sm text-center">
@@ -323,9 +319,6 @@ export default function ListaUsuarios() {
     );
   }
 
-  /* ------------------------------------------------------------
-   * Render
-   * ------------------------------------------------------------ */
   return (
     <div className="space-y-6">
       {/* Encabezado */}
@@ -340,8 +333,6 @@ export default function ListaUsuarios() {
           </p>
         </div>
 
-        {/* 🌟 OPTIMIZACIÓN: Se añade 'shrink-0' para que el bloque de acciones no se deforme 
-            y se cambia a 'lg:self-center' para coordinar el quiebre de pantalla de forma prolija */}
         <div className="flex items-center gap-3 shrink-0 self-stretch sm:self-start lg:self-center w-full lg:w-auto justify-end">
           <div className="hidden md:flex px-4 py-2 bg-slate-50 border border-slate-200/60 rounded-xl items-center gap-2 shrink-0">
             <HiOutlineUserGroup className="w-5 h-5 text-slate-400" />
@@ -365,8 +356,6 @@ export default function ListaUsuarios() {
             />
           </button>
 
-          {/* 🌟 DETALLE CLAVE: Se incorpora 'whitespace-nowrap' para prohibir terminantemente 
-              que el texto "Nuevo Usuario" se divida en dos renglones */}
           <button
             onClick={manejarAltaUsuario}
             className="w-full lg:w-auto px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-sm font-bold rounded-xl flex items-center justify-center gap-2 shadow-sm shadow-slate-900/10 hover:shadow transition-all active:scale-[0.98] cursor-pointer whitespace-nowrap shrink-0"
@@ -379,7 +368,6 @@ export default function ListaUsuarios() {
 
       {/* Barra de herramientas */}
       <div className="flex flex-col lg:flex-row gap-3 w-full items-center">
-        {/* Buscador: Ocupa de forma elástica todo el espacio restante */}
         <div className="relative w-full lg:flex-1">
           <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400 pointer-events-none">
             <HiOutlineSearch className="w-5 h-5" />
@@ -393,7 +381,6 @@ export default function ListaUsuarios() {
           />
         </div>
 
-        {/* 🌟 CONTENEDOR DE SELECTORES OPTIMIZADO: Con shrink-0 evitamos que el buscador lo aplaste */}
         <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto shrink-0">
           {/* Filtro Rol */}
           <div className="relative w-full sm:w-56 shrink-0">

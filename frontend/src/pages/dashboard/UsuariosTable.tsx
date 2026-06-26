@@ -107,7 +107,6 @@ export default function UsuariosTable({
 
   return (
     <div>
-      {/* 🌟 OPTIMIZACIÓN: Se cambia layout-fixed por layout-auto y se normaliza el min-w a 950px */}
       <table className="w-full min-w-237.5 text-left border-collapse layout-auto">
         <thead>
           <tr className="bg-slate-50/70 border-b border-slate-100">
@@ -127,7 +126,6 @@ export default function UsuariosTable({
               Rol Asignado
             </th>
             
-            {/* Columna U.F. Responsiva */}
             <th 
               className="hidden xl:table-cell px-4 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider cursor-pointer group hover:text-slate-900"
               onClick={() => onClickOrden("unidadFuncional")}
@@ -138,7 +136,6 @@ export default function UsuariosTable({
               </div>
             </th>
             
-            {/* Columna Teléfono Responsiva */}
             <th className="hidden lg:table-cell px-4 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">
               Teléfono
             </th>
@@ -147,7 +144,6 @@ export default function UsuariosTable({
               Estado
             </th>
             
-            {/* 🌟 OPTIMIZACIÓN: Se le asigna un ancho exacto a las acciones para que herede la simetría perfecta */}
             <th className="px-4 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right w-24 min-w-24">
               Acciones
             </th>
@@ -185,18 +181,11 @@ export default function UsuariosTable({
                     <BadgeRol role={u.role} />
                   </td>
                   
-                  {/* U.F. Celda */}
                   <td className="hidden xl:table-cell px-4 py-4 text-slate-600 font-bold">
                     {u.unidadFuncional ? (
                       <div className="flex items-center gap-1.5">
                         <HiOutlineOfficeBuilding className="w-4 h-4 text-slate-400 shrink-0" />
-                        <span
-                          className={
-                            esInactivo
-                              ? "line-through font-medium text-slate-400"
-                              : ""
-                          }
-                        >
+                        <span className={esInactivo ? "line-through font-medium text-slate-400" : ""}>
                           {u.unidadFuncional}
                         </span>
                       </div>
@@ -205,7 +194,6 @@ export default function UsuariosTable({
                     )}
                   </td>
                   
-                  {/* Teléfono Celda */}
                   <td className="hidden lg:table-cell px-4 py-4 text-slate-500">
                     {u.telefono ? (
                       <div className="flex items-center gap-1.5">
@@ -233,11 +221,11 @@ export default function UsuariosTable({
                       >
                         <HiOutlinePencil className="w-4 h-4" />
                       </button>
+                      
+                      {/* Botón de Alternar Estado con consistencia integrada */}
                       <button
                         onClick={() => onToggleEstado(u._id)}
-                        title={
-                          esInactivo ? "Activar cuenta" : "Desactivar cuenta"
-                        }
+                        title={esInactivo ? "Activar cuenta" : "Inactivar cuenta"}
                         className={`p-1.5 rounded-lg transition cursor-pointer shrink-0 ${
                           esInactivo
                             ? "hover:bg-emerald-50 text-emerald-600 hover:text-emerald-700"
