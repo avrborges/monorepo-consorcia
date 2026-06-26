@@ -1,32 +1,34 @@
 // src/api.ts
+import axios, { AxiosError } from 'axios';
 
-// 🆕 Detecta automáticamente la IP o dominio desde donde estás visualizando la app
 const currentHostname = window.location.hostname;
 
-// Definimos la URL base apuntando dinámicamente al puerto 5000 de tu Backend
-const API_URL = `http://${currentHostname}:5000/api`;
+// Creamos la instancia
+const api = axios.create({
+  baseURL: `http://${currentHostname}:5000/api`,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
 
-/**
- * Función para enviar las credenciales de login al backend
- * @param email Correo ingresado por el usuario
- * @param password Contraseña ingresada por el usuario
- */
+export default api;
+
+// Definimos una interfaz para el error esperado de nuestra API
+interface ApiError {
+  success: boolean;
+  message: string;
+}
+
 export const loginRequest = async (email: string, password: string) => {
   try {
-    // Hacemos la petición POST al endpoint dinámico
-    const response = await fetch(`${API_URL}/users/login`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ email, password }),
-    });
-
-    // Transformamos la respuesta del servidor a un objeto JSON manejable
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    console.error("Error en la conexión con la API:", error);
-    return { success: false, message: "No se pudo conectar con el servidor." };
+    const response = await api.post('/users/login', { email, password });
+    return response.data;
+  } catch (error: unknown) {
+    // Si es un error de Axios, intentamos devolver el mensaje del servidor
+    if (error instanceof AxiosError && error.response) {
+      return error.response.data as ApiError;
+    }
+    // Si no es un error de Axios o no tiene respuesta, devolvemos un mensaje genérico
+    return { success: false, message: "Error al conectar con el servidor" };
   }
 };

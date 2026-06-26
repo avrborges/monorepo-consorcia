@@ -7,6 +7,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import DashboardLayout from "./components/DashboardLayout"; 
 import Overview from "./pages/dashboard/Overview"; 
 import ListaUsuarios from "./pages/dashboard/ListaUsuarios";
+import ActivarCuenta from "./pages/ActivarCuenta";
 
 // 🆕 Componente Guardián de Entrada Raíz
 function RootHandler() {
@@ -27,6 +28,7 @@ function App() {
         <Route path="/" element={<RootHandler />} />
         
         <Route path="/login" element={<Login />} />
+        <Route path="/activar-cuenta" element={<ActivarCuenta />} />
 
         {/* 🔒 RUTAS PROTEGIDAS Y ANIDADAS */}
         <Route element={<ProtectedRoute />}>

@@ -2,6 +2,8 @@
 const User = require('../models/User');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto'); // 🆕 Nativo de Node.js, no requiere instalación
+const { enviarMailInvitacion } = require('../services/emailService'); // 🆕 Nuestro cartero
 
 // MÉTODO: Obtener la nómina completa de usuarios para el Administrador
 const getUsers = async (req, res) => {
@@ -33,7 +35,8 @@ const crearUsuario = async (req, res) => {
       return res.status(400).json({ success: false, message: "El correo electrónico es obligatorio." });
     }
 
-    const usuarioExistente = await User.findOne({ email: email.toLowerCase() });
+    const emailLimpio = email.trim().toLowerCase();
+    const usuarioExistente = await User.findOne({ email: emailLimpio });
     if (usuarioExistente) {
       return res.status(400).json({ 
         success: false, 
@@ -41,31 +44,42 @@ const crearUsuario = async (req, res) => {
       });
     }
 
-    const prefijoEmail = email.split('@')[0];
-    const passwordProvisoria = `${prefijoEmail}2026!`;
+    // 🆕 1. Generar token de 64 caracteres y su vencimiento (24hs)
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiracion = new Date();
+    expiracion.setHours(expiracion.getHours() + 24);
 
+    // 🆕 2. Creamos el usuario SIN contraseña
     const nuevoUsuario = new User({
       name: name.trim(),
-      email: email.trim(),
-      password: passwordProvisoria,
+      email: emailLimpio,
       role: role || 'propietario',
       unidadFuncional: unidadFuncional || "",
       telefono: telefono || "",
       estado: 'pendiente',
-      debeCambiarPassword: true
+      debeCambiarPassword: true,
+      tokenActivacion: token,
+      tokenExpiracion: expiracion
     });
 
     await nuevoUsuario.save();
 
+    // 🆕 3. Armar la URL y disparar el correo en segundo plano
+    const baseUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const urlActivacion = `${baseUrl}/activar-cuenta?token=${token}`;
+
+    enviarMailInvitacion(nuevoUsuario.email, nuevoUsuario.name, urlActivacion)
+      .catch(err => console.error("Error al enviar mail de invitación:", err));
+
     return res.status(201).json({ 
       success: true, 
-      message: "Usuario registrado con éxito en estado pendiente.",
+      message: "Usuario registrado con éxito. Se ha enviado el correo de invitación.",
       user: {
         id: nuevoUsuario._id,
         name: nuevoUsuario.name,
         email: nuevoUsuario.email,
         role: nuevoUsuario.role,
-        passwordProvisoria
+        estado: nuevoUsuario.estado
       }
     });
 
@@ -78,6 +92,51 @@ const crearUsuario = async (req, res) => {
   }
 };
 
+// 🆕 MÉTODO NUEVO: Activar cuenta desde el link del correo
+const activarCuenta = async (req, res) => {
+  try {
+    const { token, password } = req.body;
+
+    if (!token || !password) {
+      return res.status(400).json({ success: false, message: "El token y la contraseña son obligatorios." });
+    }
+
+    // Buscamos al usuario que tenga este token y que no esté vencido
+    const usuario = await User.findOne({
+      tokenActivacion: token,
+      tokenExpiracion: { $gt: new Date() } // El vencimiento debe ser mayor a "ahora"
+    });
+
+    if (!usuario) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "El enlace de activación es inválido o ha expirado. Solicitá uno nuevo al administrador." 
+      });
+    }
+
+    // Actualizamos los datos. El middleware pre('save') de User.js encriptará la clave.
+    usuario.password = password;
+    usuario.estado = 'activo';
+    usuario.debeCambiarPassword = false;
+    usuario.tokenActivacion = null; // Destruimos el token para que no se use 2 veces
+    usuario.tokenExpiracion = null;
+
+    await usuario.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Tu cuenta ha sido activada exitosamente. Ya podés iniciar sesión."
+    });
+
+  } catch (error) {
+    console.error("Error en activarCuenta:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Hubo un error al intentar activar la cuenta."
+    });
+  }
+};
+
 // MÉTODO: Alternar el estado del usuario (Activar / Inactivar)
 const toggleStatus = async (req, res) => {
   try {
@@ -85,10 +144,7 @@ const toggleStatus = async (req, res) => {
 
     const usuario = await User.findById(id);
     if (!usuario) {
-      return res.status(404).json({ 
-        success: false, 
-        message: "Usuario no encontrado." 
-      });
+      return res.status(404).json({ success: false, message: "Usuario no encontrado." });
     }
 
     const nuevoEstado = usuario.estado === 'inactivo' ? 'activo' : 'inactivo';
@@ -104,26 +160,18 @@ const toggleStatus = async (req, res) => {
 
   } catch (error) {
     console.error("Error en toggleStatus:", error);
-    return res.status(500).json({ 
-      success: false, 
-      message: "Hubo un error en el servidor al cambiar el estado del usuario." 
-    });
+    return res.status(500).json({ success: false, message: "Hubo un error en el servidor al cambiar el estado." });
   }
 };
 
-// 🆕 MÉTODO: Eliminar definitivamente un usuario de la base de datos
+// MÉTODO: Eliminar definitivamente un usuario de la base de datos
 const eliminarUsuario = async (req, res) => {
   try {
     const { id } = req.params;
-
-    // Buscamos y removemos el documento en un solo paso asincrónico
     const usuarioEliminado = await User.findByIdAndDelete(id);
 
     if (!usuarioEliminado) {
-      return res.status(404).json({
-        success: false,
-        message: "El usuario que intenta eliminar ya no existe en el sistema."
-      });
+      return res.status(404).json({ success: false, message: "El usuario que intenta eliminar ya no existe." });
     }
 
     return res.status(200).json({
@@ -133,26 +181,28 @@ const eliminarUsuario = async (req, res) => {
 
   } catch (error) {
     console.error("Error en eliminarUsuario:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Hubo un error interno en el servidor al intentar eliminar el usuario."
-    });
+    return res.status(500).json({ success: false, message: "Error interno al intentar eliminar el usuario." });
   }
 };
 
-// MÉTODO: Inicio de sesión con control de estado y activación en primer acceso
+// MÉTODO: Inicio de sesión
 const loginUser = async (req, res) => {
   const { email, password } = req.body;
 
   try {
     if (!email || !password) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "Por favor, completa todos los campos obligatorios." 
-      });
+      return res.status(400).json({ success: false, message: "Por favor, completa todos los campos obligatorios." });
     }
 
-    const userFound = await User.findOne({ email });
+    const userFound = await User.findOne({ email: email.toLowerCase() });
+
+    // 🆕 Frenamos al usuario si su cuenta sigue pendiente (no activó desde el mail)
+    if (userFound && userFound.estado === 'pendiente') {
+      return res.status(403).json({
+        success: false,
+        message: "Tu cuenta aún no está activada. Revisá tu correo electrónico para activarla."
+      });
+    }
 
     if (userFound && (userFound.estado === 'inactive' || userFound.estado === 'inactivo')) {
       return res.status(403).json({
@@ -170,14 +220,6 @@ const loginUser = async (req, res) => {
       });
     }
 
-    let primerAcceso = false;
-    if (userFound.estado === 'pendiente') {
-      userFound.estado = 'activo';
-      await userFound.save();
-      primerAcceso = true;
-      console.log(`[Consorcia] Cuenta activada con éxito en primer acceso: ${userFound.email}`);
-    }
-
     const token = jwt.sign(
       { id: userFound._id, role: userFound.role },
       process.env.JWT_SECRET,
@@ -186,9 +228,7 @@ const loginUser = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: primerAcceso 
-        ? "¡Primer inicio de sesión detectado! Tu cuenta ha sido activada con éxito."
-        : `¡Inicio de sesión exitoso! Bienvenido, ${userFound.name}`,
+      message: `¡Inicio de sesión exitoso! Bienvenido, ${userFound.name}`,
       token, 
       user: {
         name: userFound.name,
@@ -203,10 +243,7 @@ const loginUser = async (req, res) => {
 
   } catch (error) {
     console.error("Error en loginUser:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Hubo un error interno en el servidor."
-    });
+    return res.status(500).json({ success: false, message: "Hubo un error interno en el servidor." });
   }
 };
 
@@ -214,6 +251,7 @@ module.exports = {
   loginUser,
   getUsers,
   crearUsuario,
+  activarCuenta, // 🆕 Exportamos la nueva función
   toggleStatus,
-  eliminarUsuario // 🆕 Exportación añadida de forma prolija
+  eliminarUsuario
 };
