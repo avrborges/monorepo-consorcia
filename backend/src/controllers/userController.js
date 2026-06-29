@@ -247,11 +247,62 @@ const loginUser = async (req, res) => {
   }
 };
 
+// 🆕 MÉTODO NUEVO: Reenviar link de invitación a un usuario con cuenta pendiente
+const reenviarInvitacion = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const usuario = await User.findById(id);
+    if (!usuario) {
+      return res.status(404).json({ success: false, message: "Usuario no encontrado." });
+    }
+
+    // Validación crucial: solo reenviar si sigue pendiente
+    if (usuario.estado !== 'pendiente') {
+      return res.status(400).json({ 
+        success: false, 
+        message: `No se puede reenviar la invitación porque el usuario ya está ${usuario.estado}.` 
+      });
+    }
+
+    // 1. Generar nuevo token y extender expiración (24 horas más)
+    const nuevoToken = crypto.randomBytes(32).toString('hex');
+    const nuevaExpiracion = new Date();
+    nuevaExpiracion.setHours(nuevaExpiracion.getHours() + 24);
+
+    // 2. Actualizar los campos del usuario en la base de datos
+    usuario.tokenActivacion = nuevoToken;
+    usuario.tokenExpiracion = nuevaExpiracion;
+    await usuario.save();
+
+    // 3. Armar la nueva URL y disparar el correo de invitación
+    const baseUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const urlActivacion = `${baseUrl}/activar-cuenta?token=${nuevoToken}`;
+
+    // Despachamos el mail en segundo plano
+    enviarMailInvitacion(usuario.email, usuario.name, urlActivacion)
+      .catch(err => console.error("Error al reenviar mail de invitación:", err));
+
+    return res.status(200).json({
+      success: true,
+      message: `Se ha reenviado el correo de invitación a ${usuario.email} de forma exitosa.`
+    });
+
+  } catch (error) {
+    console.error("Error en reenviarInvitacion:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Hubo un error interno en el servidor al intentar reenviar la invitación."
+    });
+  }
+};
+
 module.exports = {
   loginUser,
   getUsers,
   crearUsuario,
   activarCuenta, // 🆕 Exportamos la nueva función
   toggleStatus,
-  eliminarUsuario
+  eliminarUsuario,
+  reenviarInvitacion
 };

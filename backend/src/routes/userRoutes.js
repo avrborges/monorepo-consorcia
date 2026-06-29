@@ -16,6 +16,9 @@ router.get('/', userController.getUsers);
 // Ruta para dar de alta un usuario
 router.post('/', userController.crearUsuario);
 
+// Ruta para reenviar la invitación de un usuario pendiente/expirado
+router.post('/:id/reenviar-invitacion', userController.reenviarInvitacion);
+
 // Ruta para activar/inactivar un usuario
 router.patch('/:id/status', userController.toggleStatus);
 

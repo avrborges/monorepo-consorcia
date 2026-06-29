@@ -11,7 +11,7 @@ import {
   HiChevronDown,
   HiOutlineClock,
   HiOutlineTrash,
-  HiDotsVertical, // 🆕 Nuevo ícono para los tres puntos
+  HiDotsVertical,
 } from "react-icons/hi";
 
 import type {
@@ -96,11 +96,10 @@ export default function UsuariosTable({
   onToggleEstado,
   onEliminar,
 }: UsuariosTableProps) {
-  // 🆕 Rastrea qué ID de usuario tiene el menú desplegable abierto
   const [menuAbiertoId, setMenuAbiertoId] = useState<string | null>(null);
   const contenedorRef = useRef<HTMLDivElement>(null);
 
-  // 🆕 Cerrar el menú si se hace clic en cualquier otra parte de la pantalla
+  // Cerrar el menú si se hace clic en cualquier otra parte de la pantalla
   useEffect(() => {
     function manejarClickAfuera(evento: MouseEvent) {
       if (contenedorRef.current && !contenedorRef.current.contains(evento.target as Node)) {
@@ -129,7 +128,6 @@ export default function UsuariosTable({
   };
 
   return (
-    // 🆕 Agregamos la ref y overflow-visible para que el menú flotante no se corte
     <div ref={contenedorRef} className="overflow-visible">
       <table className="w-full min-w-237.5 text-left border-collapse layout-auto">
         <thead>
@@ -175,9 +173,12 @@ export default function UsuariosTable({
         </thead>
         <tbody className="divide-y divide-slate-50 font-medium text-sm text-slate-700">
           {usuarios.length > 0 ? (
-            usuarios.map((u) => {
+            usuarios.map((u, indice) => {
               const esInactivo = u.estado === "inactivo";
               const elMenuEstaAbierto = menuAbiertoId === u._id;
+              
+              // Detecta de forma dinámica si el ítem actual se encuentra entre las últimas filas de la tabla
+              const esUltimaFila = usuarios.length > 2 && indice >= usuarios.length - 2;
 
               return (
                 <tr
@@ -237,9 +238,9 @@ export default function UsuariosTable({
                     <CeldaEstado estado={u.estado} />
                   </td>
                   
-                  {/* 🆕 Celda de Acciones Reestructurada con Menú Desplegable */}
-                  <td className="px-4 py-4 text-right overflow-visible relative">
-                    <div className="flex items-center justify-end relative">
+                  {/* Celda de Acciones Optimizada contra desbordamiento */}
+                  <td className="px-4 py-4 text-right relative overflow-visible">
+                    <div className="flex items-center justify-end relative overflow-visible">
                       
                       {/* Botón de Tres Puntos */}
                       <button
@@ -257,10 +258,15 @@ export default function UsuariosTable({
                         <HiDotsVertical className="w-4 h-4" />
                       </button>
 
-                      {/* Menú Desplegable Flotante */}
+                      {/* Menú Desplegable Inteligente (Cambia dirección según índice) */}
                       {elMenuEstaAbierto && (
-                        <div className="absolute right-0 top-full mt-1 w-48 bg-white border border-slate-200/80 rounded-xl shadow-lg py-1.5 z-30 animate-in fade-in slide-in-from-top-2 duration-150 origin-top-right">
-                          
+                        <div 
+                          className={`absolute right-0 w-48 bg-white border border-slate-200/80 rounded-xl shadow-lg py-1.5 z-50 animate-in fade-in duration-150 ${
+                            esUltimaFila 
+                              ? "bottom-full mb-1 origin-bottom-right slide-in-from-bottom-2" 
+                              : "top-full mt-1 origin-top-right slide-in-from-top-2"
+                          }`}
+                        >
                           {/* Opción Editar */}
                           <button
                             onClick={() => {
@@ -300,7 +306,7 @@ export default function UsuariosTable({
                           <button
                             onClick={() => {
                               setMenuAbiertoId(null);
-                              onEliminar(u); // Dispara al modal de confirmación del padre
+                              onEliminar(u);
                             }}
                             className="w-full px-3.5 py-2 text-left text-xs font-bold text-red-600 hover:bg-red-50 flex items-center gap-2.5 transition cursor-pointer"
                           >
