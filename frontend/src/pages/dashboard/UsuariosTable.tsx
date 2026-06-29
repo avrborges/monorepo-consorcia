@@ -1,3 +1,4 @@
+// src/components/dashboard/UsuariosTable.tsx
 import { memo, useState, useEffect, useRef } from "react";
 import {
   HiOutlineMail,
@@ -12,6 +13,7 @@ import {
   HiOutlineClock,
   HiOutlineTrash,
   HiDotsVertical,
+  HiOutlinePaperAirplane,
 } from "react-icons/hi";
 
 import type {
@@ -83,6 +85,7 @@ interface UsuariosTableProps {
   onEditar: (usuario: Usuario) => void;
   onToggleEstado: (id: string) => void;
   onEliminar: (usuario: Usuario) => void;
+  onReenviarInvitacion: (id: string) => Promise<void>;
 }
 
 /* ============================================================
@@ -95,9 +98,14 @@ export default function UsuariosTable({
   onEditar,
   onToggleEstado,
   onEliminar,
+  onReenviarInvitacion,
 }: UsuariosTableProps) {
   const [menuAbiertoId, setMenuAbiertoId] = useState<string | null>(null);
   const contenedorRef = useRef<HTMLDivElement>(null);
+
+  // 🛠️ SOLUCIÓN: Capturamos el tiempo actual una sola vez al inicio del renderizado del componente.
+  // Esto hace que la lectura sea estable y predecible durante el ciclo de vida de este render en particular.
+  const ahoraMs = new Date().getTime();
 
   // Cerrar el menú si se hace clic en cualquier otra parte de la pantalla
   useEffect(() => {
@@ -129,7 +137,7 @@ export default function UsuariosTable({
 
   return (
     <div ref={contenedorRef} className="overflow-visible">
-      <table className="w-full min-w-237.5 text-left border-collapse layout-auto">
+      <table className="w-full min-w-[950px] text-left border-collapse layout-auto">
         <thead>
           <tr className="bg-slate-50/70 border-b border-slate-100">
             <th
@@ -175,10 +183,15 @@ export default function UsuariosTable({
           {usuarios.length > 0 ? (
             usuarios.map((u, indice) => {
               const esInactivo = u.estado === "inactivo";
+              const esPendiente = u.estado === "pendiente";
               const elMenuEstaAbierto = menuAbiertoId === u._id;
               
-              // Detecta de forma dinámica si el ítem actual se encuentra entre las últimas filas de la tabla
+              // Detecta si el ítem actual se encuentra entre las últimas filas de la tabla
               const esUltimaFila = usuarios.length > 2 && indice >= usuarios.length - 2;
+
+              // 🛠️ CORREGIDO: Compara usando la variable pura de este ciclo de renderizado 'ahoraMs'
+              const fechaExpiracion = u.tokenExpiracion ? new Date(u.tokenExpiracion).getTime() : 0;
+              const estaExpirado = esPendiente && (ahoraMs > fechaExpiracion);
 
               return (
                 <tr
@@ -234,15 +247,25 @@ export default function UsuariosTable({
                     )}
                   </td>
                   
+                  {/* Celda de Estado */}
                   <td className="px-4 py-4">
-                    <CeldaEstado estado={u.estado} />
+                    {estaExpirado ? (
+                      <div 
+                        className="flex items-center gap-1.5 text-rose-600 font-bold text-xs shrink-0 cursor-help" 
+                        title="El enlace de invitación enviado por correo caducó (límite de 24 hs)."
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
+                        <span>Expirada</span>
+                      </div>
+                    ) : (
+                      <CeldaEstado estado={u.estado} />
+                    )}
                   </td>
                   
-                  {/* Celda de Acciones Optimizada contra desbordamiento */}
+                  {/* Celda de Acciones */}
                   <td className="px-4 py-4 text-right relative overflow-visible">
                     <div className="flex items-center justify-end relative overflow-visible">
                       
-                      {/* Botón de Tres Puntos */}
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -258,15 +281,29 @@ export default function UsuariosTable({
                         <HiDotsVertical className="w-4 h-4" />
                       </button>
 
-                      {/* Menú Desplegable Inteligente (Cambia dirección según índice) */}
                       {elMenuEstaAbierto && (
                         <div 
-                          className={`absolute right-0 w-48 bg-white border border-slate-200/80 rounded-xl shadow-lg py-1.5 z-50 animate-in fade-in duration-150 ${
+                          className={`absolute right-0 w-52 bg-white border border-slate-200/80 rounded-xl shadow-lg py-1.5 z-50 animate-in fade-in duration-150 ${
                             esUltimaFila 
                               ? "bottom-full mb-1 origin-bottom-right slide-in-from-bottom-2" 
                               : "top-full mt-1 origin-top-right slide-in-from-top-2"
                           }`}
                         >
+                          
+                          {/* Reenviar Invitación */}
+                          {esPendiente && (
+                            <button
+                              onClick={async () => {
+                                setMenuAbiertoId(null);
+                                await onReenviarInvitacion(u._id);
+                              }}
+                              className="w-full px-3.5 py-2 text-left text-xs font-bold text-teal-700 hover:bg-teal-50 flex items-center gap-2.5 transition cursor-pointer"
+                            >
+                              <HiOutlinePaperAirplane className="w-4 h-4 text-teal-500 rotate-45" />
+                              <span>{estaExpirado ? "Renovar Enlace" : "Reenviar Invitación"}</span>
+                            </button>
+                          )}
+
                           {/* Opción Editar */}
                           <button
                             onClick={() => {
@@ -280,25 +317,27 @@ export default function UsuariosTable({
                           </button>
 
                           {/* Opción Cambiar Estado */}
-                          <button
-                            onClick={() => {
-                              setMenuAbiertoId(null);
-                              onToggleEstado(u._id);
-                            }}
-                            className="w-full px-3.5 py-2 text-left text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2.5 transition cursor-pointer"
-                          >
-                            {esInactivo ? (
-                              <>
-                                <HiOutlineLockOpen className="w-4 h-4 text-emerald-500" />
-                                <span className="text-slate-700">Activar Cuenta</span>
-                              </>
-                            ) : (
-                              <>
-                                <HiOutlineLockClosed className="w-4 h-4 text-slate-400" />
-                                <span className="text-slate-700">Inactivar Cuenta</span>
-                              </>
-                            )}
-                          </button>
+                          {!estaExpirado && (
+                            <button
+                              onClick={() => {
+                                setMenuAbiertoId(null);
+                                onToggleEstado(u._id);
+                              }}
+                              className="w-full px-3.5 py-2 text-left text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2.5 transition cursor-pointer"
+                            >
+                              {esInactivo ? (
+                                <>
+                                  <HiOutlineLockOpen className="w-4 h-4 text-emerald-500" />
+                                  <span className="text-slate-700">Activar Cuenta</span>
+                                </>
+                              ) : (
+                                <>
+                                  <HiOutlineLockClosed className="w-4 h-4 text-slate-400" />
+                                  <span className="text-slate-700">Inactivar Cuenta</span>
+                                </>
+                              )}
+                            </button>
+                          )}
 
                           <div className="h-px bg-slate-100 my-1" />
 

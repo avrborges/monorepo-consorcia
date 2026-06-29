@@ -1,3 +1,4 @@
+// src/components/dashboard/ListaUsuarios.tsx
 import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   HiOutlineUserGroup,
@@ -14,7 +15,7 @@ import {
 import FormAltaUsuario from "./FormAltaUsuario";
 import UsuariosTable from "./UsuariosTable";
 import Paginador from "./Paginador";
-import ModalConfirmacion from "./ModalConfirmacion"; // 🆕 Importado el nuevo modal personalizado
+import ModalConfirmacion from "./ModalConfirmacion";
 
 /* ============================================================
  * TIPOS
@@ -36,6 +37,7 @@ export interface Usuario {
   estado: EstadoUsuario;
   unidadFuncional?: string;
   telefono?: string;
+  tokenExpiracion?: string; 
 }
 
 export type ColumnaOrdenable = "name" | "unidadFuncional";
@@ -121,17 +123,13 @@ export default function ListaUsuarios() {
   const [error, setError] = useState<string | null>(null);
 
   const [modalAbierto, setModalAbierto] = useState<boolean>(false);
-  
-  // 🆕 Estado para controlar qué usuario se desea remover del sistema
   const [usuarioParaEliminar, setUsuarioParaEliminar] = useState<Usuario | null>(null);
 
   const [busqueda, setBusqueda] = useState("");
   const busquedaDebounced = useDebounce(busqueda, DEBOUNCE_MS);
 
   const [filtroRol, setFiltroRol] = useState<Rol | "todos">("todos");
-  const [filtroEstado, setFiltroEstado] = useState<EstadoUsuario | "todos">(
-    "todos"
-  );
+  const [filtroEstado, setFiltroEstado] = useState<EstadoUsuario | "todos">("todos");
 
   const [orden, setOrden] = useState<ConfiguracionOrden>({
     columna: "name",
@@ -253,7 +251,6 @@ export default function ListaUsuarios() {
   /* ------------------------------------------------------------
    * Handlers
    * ------------------------------------------------------------ */
-  
   const toggleEstadoUsuario = useCallback(async (id: string) => {
     setLoading(true);
     setError(null);
@@ -284,17 +281,43 @@ export default function ListaUsuarios() {
     }
   }, []);
 
-  // 🆕 Abre el modal de confirmación inyectando el objeto usuario completo
+  const manejarReenviarInvitacion = useCallback(async (id: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const respuesta = await fetch(`${getBaseUrl()}/api/users/${id}/reenviar-invitacion`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      const resultado = await respuesta.json();
+
+      if (resultado.success) {
+        const refresco = await fetchUsuariosRequest();
+        if (refresco.success && refresco.users) {
+          setUsuarios(refresco.users);
+        }
+      } else {
+        setError(resultado.message || "No se pudo reenviar el correo de invitación.");
+      }
+    } catch (err) {
+      console.error("Error al reenviar la invitación:", err);
+      setError("Error de comunicación. No se pudo procesar el reenvío.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   const manejarAperturaBorrado = useCallback((usuario: Usuario) => {
     setUsuarioParaEliminar(usuario);
   }, []);
 
-  // 🆕 Cierra el modal reseteando la selección del usuario
   const manejarCerrarBorrado = useCallback(() => {
     setUsuarioParaEliminar(null);
   }, []);
 
-  // 🆕 Procesa la remoción física definitiva en MongoDB Atlas tras ser confirmado por el Admin
   const ejecutarEliminacionDefinitiva = useCallback(async () => {
     if (!usuarioParaEliminar) return;
 
@@ -311,7 +334,7 @@ export default function ListaUsuarios() {
 
       if (resultado.success) {
         setUsuarios((prev) => prev.filter((u) => u._id !== idAEliminar));
-        setUsuarioParaEliminar(null); // Resetea el estado cerrando el modal
+        setUsuarioParaEliminar(null);
       } else {
         setError(resultado.message || "No se pudo eliminar al usuario.");
       }
@@ -343,6 +366,7 @@ export default function ListaUsuarios() {
     }));
   }, []);
 
+  // 🛠️ CORREGIDO: Cambiado "tieneAccAccess" por la variable correcta "tieneAcceso"
   if (!tieneAcceso) {
     return (
       <div className="min-h-[60vh] flex flex-col items-center justify-center p-6 bg-white border border-slate-100 rounded-2xl shadow-sm text-center">
@@ -498,7 +522,8 @@ export default function ListaUsuarios() {
             onClickOrden={manejarClickOrden}
             onEditar={manejarEditar}
             onToggleEstado={toggleEstadoUsuario}
-            onEliminar={manejarAperturaBorrado} // 🆕 Ahora dispara el flujo hacia el modal personalizado
+            onEliminar={manejarAperturaBorrado}
+            onReenviarInvitacion={manejarReenviarInvitacion}
           />
 
           <Paginador
@@ -512,23 +537,9 @@ export default function ListaUsuarios() {
         </div>
       )}
 
-      {/* Modal de alta */}
-      <FormAltaUsuario
-        modalAbierto={modalAbierto}
-        onCerrar={manejarCerrarModal}
-        onUsuarioCreado={recargarUsuarios}
-      />
-
-      {/* 🆕 Modal personalizado de confirmación destructiva */}
-      <ModalConfirmacion
-        abierto={usuarioParaEliminar !== null}
-        titulo="¿Eliminar usuario definitivamente?"
-        mensaje="¿Estás completamente seguro de que querés eliminar permanentemente a"
-        nombreUsuario={usuarioParaEliminar?.name || ""}
-        onCerrar={manejarCerrarBorrado}
-        onConfirmar={ejecutarEliminacionDefinitiva}
-        loading={loading && usuarios.length > 0} // Asegura el estado spinner dentro del modal
-      />
+      {/* Modales correspondientes */}
+      <FormAltaUsuario modalAbierto={modalAbierto} onCerrar={manejarCerrarModal} onUsuarioCreado={recargarUsuarios} />
+      <ModalConfirmacion abierto={usuarioParaEliminar !== null} titulo="¿Eliminar usuario definitivamente?" mensaje="¿Estás completamente seguro de que querés eliminar permanentemente a" nombreUsuario={usuarioParaEliminar?.name || ""} onCerrar={manejarCerrarBorrado} onConfirmar={ejecutarEliminacionDefinitiva} loading={loading && usuarios.length > 0} />
     </div>
   );
 }
