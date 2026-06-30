@@ -2,8 +2,11 @@
 const User = require('../models/User');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const crypto = require('crypto'); // 🆕 Nativo de Node.js, no requiere instalación
-const { enviarMailInvitacion } = require('../services/emailService'); // 🆕 Nuestro cartero
+const crypto = require('crypto'); // Nativo de Node.js, no requiere instalación
+const { enviarMailInvitacion } = require('../services/emailService'); // Nuestro cartero
+
+// 📝 NUEVO: Importamos el logger para la auditoría de acciones del administrador
+const { registrarLog } = require('../services/loggerService');
 
 // MÉTODO: Obtener la nómina completa de usuarios para el Administrador
 const getUsers = async (req, res) => {
@@ -44,12 +47,12 @@ const crearUsuario = async (req, res) => {
       });
     }
 
-    // 🆕 1. Generar token de 64 caracteres y su vencimiento (24hs)
+    // 1. Generar token de 64 caracteres y su vencimiento (24hs)
     const token = crypto.randomBytes(32).toString('hex');
     const expiracion = new Date();
     expiracion.setHours(expiracion.getHours() + 24);
 
-    // 🆕 2. Creamos el usuario SIN contraseña
+    // 2. Creamos el usuario SIN contraseña
     const nuevoUsuario = new User({
       name: name.trim(),
       email: emailLimpio,
@@ -64,12 +67,18 @@ const crearUsuario = async (req, res) => {
 
     await nuevoUsuario.save();
 
-    // 🆕 3. Armar la URL y disparar el correo en segundo plano
+    // 3. Armar la URL y disparar el correo en segundo plano
     const baseUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
     const urlActivacion = `${baseUrl}/activar-cuenta?token=${token}`;
 
     enviarMailInvitacion(nuevoUsuario.email, nuevoUsuario.name, urlActivacion)
       .catch(err => console.error("Error al enviar mail de invitación:", err));
+
+    // 📝 NUEVO: Registrar acción en el Log de Auditoría
+    await registrarLog(req, "USUARIO_CREADO", nuevoUsuario._id, {
+      nombreUsuario: nuevoUsuario.name,
+      cambios: { email: nuevoUsuario.email, role: nuevoUsuario.role, unidadFuncional: nuevoUsuario.unidadFuncional }
+    });
 
     return res.status(201).json({ 
       success: true, 
@@ -92,7 +101,7 @@ const crearUsuario = async (req, res) => {
   }
 };
 
-// 🆕 MÉTODO NUEVO: Activar cuenta desde el link del correo
+// MÉTODO NUEVO: Activar cuenta desde el link del correo
 const activarCuenta = async (req, res) => {
   try {
     const { token, password } = req.body;
@@ -152,6 +161,12 @@ const toggleStatus = async (req, res) => {
 
     await usuario.save();
 
+    // 📝 NUEVO: Registrar acción en el Log de Auditoría
+    await registrarLog(req, "USUARIO_EDITADO", usuario._id, {
+      nombreUsuario: usuario.name,
+      cambios: { estado: nuevoEstado }
+    });
+
     return res.status(200).json({
       success: true,
       message: `El usuario ha sido marcado como ${nuevoEstado} con éxito.`,
@@ -173,6 +188,12 @@ const eliminarUsuario = async (req, res) => {
     if (!usuarioEliminado) {
       return res.status(404).json({ success: false, message: "El usuario que intenta eliminar ya no existe." });
     }
+
+    // 📝 NUEVO: Registrar acción en el Log de Auditoría
+    await registrarLog(req, "USUARIO_ELIMINADO", id, {
+      nombreUsuario: usuarioEliminado.name,
+      cambios: { email: usuarioEliminado.email, role: usuarioEliminado.role }
+    });
 
     return res.status(200).json({
       success: true,
@@ -196,7 +217,7 @@ const loginUser = async (req, res) => {
 
     const userFound = await User.findOne({ email: email.toLowerCase() });
 
-    // 🆕 Frenamos al usuario si su cuenta sigue pendiente (no activó desde el mail)
+    // Frenamos al usuario si su cuenta sigue pendiente (no activó desde el mail)
     if (userFound && userFound.estado === 'pendiente') {
       return res.status(403).json({
         success: false,
@@ -279,7 +300,7 @@ const reenviarInvitacion = async (req, res) => {
     const baseUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
     const urlActivacion = `${baseUrl}/activar-cuenta?token=${nuevoToken}`;
 
-    // Despachamos el mail en segundo plano
+    // Despachamos el mail in segundo plano
     enviarMailInvitacion(usuario.email, usuario.name, urlActivacion)
       .catch(err => console.error("Error al reenviar mail de invitación:", err));
 
@@ -296,6 +317,7 @@ const reenviarInvitacion = async (req, res) => {
     });
   }
 };
+
 // METODO: Editar datos de usuario
 const updateUser = async (req, res) => {
   try {
@@ -332,16 +354,49 @@ const updateUser = async (req, res) => {
     // 4. Guardar en Atlas de forma definitiva
     const usuarioActualizado = await usuario.save();
 
-    res.status(200).json({
+    // 📝 NUEVO: Registrar acción en el Log de Auditoría
+    await registrarLog(req, "USUARIO_EDITADO", usuarioActualizado._id, {
+      nombreUsuario: usuarioActualizado.name,
+      cambios: { 
+        name: usuarioActualizado.name, 
+        email: usuarioActualizado.email, 
+        role: usuarioActualizado.role, 
+        unidadFuncional: usuarioActualizado.unidadFuncional,
+        telefono: usuarioActualizado.telefono
+      }
+    });
+
+    return res.status(200).json({
       success: true,
       message: "Usuario actualizado correctamente.",
       user: usuarioActualizado,
     });
   } catch (error) {
     console.error("Error al actualizar usuario:", error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Error interno del servidor al procesar la actualización.",
+    });
+  }
+};
+
+// MÉTODO: Obtener el historial de auditoría (logs) para el Administrador
+const getAuditLogs = async (req, res) => {
+  try {
+    const AuditLog = require('../models/AuditLog'); // Lo requerimos de forma interna para evitar referencias circulares
+    
+    // Buscamos todos los logs, ordenados del más reciente al más viejo
+    const logs = await AuditLog.find({}).sort({ timestamp: -1 }).limit(100); // Limitamos a los últimos 100 por rendimiento
+    
+    return res.status(200).json({
+      success: true,
+      logs
+    });
+  } catch (error) {
+    console.error("Error en getAuditLogs:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Hubo un error al obtener el historial de auditoría."
     });
   }
 };
@@ -354,5 +409,6 @@ module.exports = {
   toggleStatus,
   eliminarUsuario,
   reenviarInvitacion,
-  updateUser
+  updateUser,
+  getAuditLogs
 };

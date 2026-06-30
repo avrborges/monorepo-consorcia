@@ -1,4 +1,4 @@
-// src/components/dashboard/ListaUsuarios.tsx
+// src/pages/dashboard/ListaUsuarios.tsx
 import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   HiOutlineUserGroup,
@@ -16,6 +16,8 @@ import FormAltaUsuario from "./FormAltaUsuario";
 import UsuariosTable from "./UsuariosTable";
 import Paginador from "./Paginador";
 import ModalConfirmacion from "./ModalConfirmacion";
+// 📝 Importamos el componente de auditoría corregido y tipado de forma segura
+import HistorialAuditoria from "./HistorialAuditoria";
 
 /* ============================================================
  * TIPOS
@@ -96,10 +98,19 @@ const verificarAcceso = (): boolean => {
   }
 };
 
+// 🛡️ MODIFICADO: Inyectamos correctamente el token JWT para evitar errores 401
 async function fetchUsuariosRequest(
   signal?: AbortSignal
 ): Promise<UsuariosResponse> {
-  const respuesta = await fetch(`${getBaseUrl()}/api/users`, { signal });
+  const token = localStorage.getItem("token");
+  
+  const respuesta = await fetch(`${getBaseUrl()}/api/users`, { 
+    signal,
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${token}`
+    }
+  });
   return (await respuesta.json()) as UsuariosResponse;
 }
 
@@ -122,10 +133,11 @@ export default function ListaUsuarios() {
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [error, setError] = useState<string | null>(null);
 
+  // 📝 Gestión de pestañas activas para el Admin
+  const [pestanaActiva, setPestanaActiva] = useState<"lista" | "auditoria">("lista");
+
   const [modalAbierto, setModalAbierto] = useState<boolean>(false);
   const [usuarioParaEliminar, setUsuarioParaEliminar] = useState<Usuario | null>(null);
-  
-  // Estado añadido para rastrear la cuenta en edición activa
   const [usuarioEditando, setUsuarioEditando] = useState<Usuario | null>(null);
 
   const [busqueda, setBusqueda] = useState("");
@@ -252,16 +264,19 @@ export default function ListaUsuarios() {
   );
 
   /* ------------------------------------------------------------
-   * Handlers
+   * Handlers protegidos con JWT
    * ------------------------------------------------------------ */
   const toggleEstadoUsuario = useCallback(async (id: string) => {
     setLoading(true);
     setError(null);
     try {
+      const token = localStorage.getItem("token"); // 🔑 Token inyectado
+
       const respuesta = await fetch(`${getBaseUrl()}/api/users/${id}/status`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}` // 🛡️ Cabecera añadida
         },
       });
 
@@ -288,10 +303,13 @@ export default function ListaUsuarios() {
     setLoading(true);
     setError(null);
     try {
+      const token = localStorage.getItem("token"); // 🔑 Token inyectado
+
       const respuesta = await fetch(`${getBaseUrl()}/api/users/${id}/reenviar-invitacion`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}` // 🛡️ Cabecera añadida
         },
       });
 
@@ -329,8 +347,13 @@ export default function ListaUsuarios() {
     const idAEliminar = usuarioParaEliminar._id;
 
     try {
+      const token = localStorage.getItem("token"); // 🔑 Token inyectado
+
       const respuesta = await fetch(`${getBaseUrl()}/api/users/${idAEliminar}`, {
         method: "DELETE",
+        headers: {
+          "Authorization": `Bearer ${token}` // 🛡️ Cabecera añadida
+        }
       });
 
       const resultado = await respuesta.json();
@@ -355,13 +378,13 @@ export default function ListaUsuarios() {
   }, []);
 
   const manejarAltaUsuario = useCallback(() => {
-    setUsuarioEditando(null); // Asegura que el formulario se abra en limpio
+    setUsuarioEditando(null); 
     setModalAbierto(true);
   }, []);
 
   const manejarCerrarModal = useCallback(() => {
     setModalAbierto(false);
-    setUsuarioEditando(null); // Limpieza preventiva al desmontar vista modal
+    setUsuarioEditando(null); 
   }, []);
 
   const manejarClickOrden = useCallback((columna: ColumnaOrdenable) => {
@@ -372,6 +395,7 @@ export default function ListaUsuarios() {
     }));
   }, []);
 
+  // 🛠️ Control de seguridad corregido sin duplicaciones
   if (!tieneAcceso) {
     return (
       <div className="min-h-[60vh] flex flex-col items-center justify-center p-6 bg-white border border-slate-100 rounded-2xl shadow-sm text-center">
@@ -436,110 +460,145 @@ export default function ListaUsuarios() {
         </div>
       </div>
 
-      {/* Barra de herramientas */}
-      <div className="flex flex-col lg:flex-row gap-3 w-full items-center">
-        <div className="relative w-full lg:flex-1">
-          <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400 pointer-events-none">
-            <HiOutlineSearch className="w-5 h-5" />
-          </span>
-          <input
-            type="text"
-            value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
-            placeholder="Buscar por nombre, email o UF..."
-            className="w-full pl-11 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition shadow-sm"
-          />
-        </div>
-
-        <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto shrink-0">
-          {/* Filtro Rol */}
-          <div className="relative w-full sm:w-56 shrink-0">
-            <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400 pointer-events-none">
-              <HiOutlineFilter className="w-5 h-5" />
-            </span>
-            <select
-              value={filtroRol}
-              onChange={(e) => setFiltroRol(e.target.value as Rol | "todos")}
-              className="w-full pl-11 pr-10 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition appearance-none cursor-pointer shadow-sm"
-            >
-              {OPCIONES_ROL.map((op) => (
-                <option key={op.value} value={op.value}>
-                  {op.label}
-                </option>
-              ))}
-            </select>
-            <span className="absolute inset-y-0 right-0 flex items-center pr-3.5 pointer-events-none text-slate-400">
-              <HiChevronDown className="w-4 h-4" />
-            </span>
-          </div>
-
-          {/* Filtro Estado */}
-          <div className="relative w-full sm:w-52 shrink-0">
-            <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400 pointer-events-none">
-              <HiOutlineEye className="w-5 h-5" />
-            </span>
-            <select
-              value={filtroEstado}
-              onChange={(e) =>
-                setFiltroEstado(e.target.value as EstadoUsuario | "todos")
-              }
-              className="w-full pl-11 pr-10 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition appearance-none cursor-pointer shadow-sm"
-            >
-              {OPCIONES_ESTADO.map((op) => (
-                <option key={op.value} value={op.value}>
-                  {op.label}
-                </option>
-              ))}
-            </select>
-            <span className="absolute inset-y-0 right-0 flex items-center pr-3.5 pointer-events-none text-slate-400">
-              <HiChevronDown className="w-4 h-4" />
-            </span>
-          </div>
-        </div>
+      {/* 🎛️ CONTROL DE PESTAÑAS (TABS) */}
+      <div className="flex border-b border-slate-200 gap-6 text-sm font-bold">
+        <button
+          type="button"
+          onClick={() => setPestanaActiva("lista")}
+          className={`pb-3 transition-all relative cursor-pointer ${
+            pestanaActiva === "lista"
+              ? "text-slate-900 border-b-2 border-slate-900"
+              : "text-slate-400 hover:text-slate-600"
+          }`}
+        >
+          Nómina de Usuarios
+        </button>
+        <button
+          type="button"
+          onClick={() => setPestanaActiva("auditoria")}
+          className={`pb-3 transition-all relative cursor-pointer ${
+            pestanaActiva === "auditoria"
+              ? "text-slate-900 border-b-2 border-slate-900"
+              : "text-slate-400 hover:text-slate-600"
+          }`}
+        >
+          Historial de Auditoría
+        </button>
       </div>
 
-      {/* Estado: loading inicial / error / tabla */}
-      {loading && usuarios.length === 0 ? (
-        <div className="py-20 text-center text-sm font-medium text-slate-500 bg-white border border-slate-100 rounded-2xl shadow-sm">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-900 mx-auto mb-3" />
-          Cargando listado de usuarios desde MongoDB Atlas...
-        </div>
-      ) : error ? (
-        <div className="p-6 text-center text-sm font-medium text-red-600 bg-red-50 border border-red-100 rounded-2xl flex flex-col items-center gap-2">
-          <HiOutlineShieldExclamation className="w-8 h-8 text-red-500" />
-          <span>{error}</span>
-          <button
-            onClick={recargarUsuarios}
-            className="mt-2 px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-xl text-xs font-bold transition cursor-pointer"
-          >
-            Reintentar conexión
-          </button>
+      {/* 🔄 RENDERIZADO CONDICIONAL */}
+      {pestanaActiva === "lista" ? (
+        <div className="space-y-6 animate-in fade-in duration-150">
+          {/* Barra de herramientas */}
+          <div className="flex flex-col lg:flex-row gap-3 w-full items-center">
+            <div className="relative w-full lg:flex-1">
+              <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400 pointer-events-none">
+                <HiOutlineSearch className="w-5 h-5" />
+              </span>
+              <input
+                type="text"
+                value={busqueda}
+                onChange={(e) => setBusqueda(e.target.value)}
+                placeholder="Buscar por nombre, email o UF..."
+                className="w-full pl-11 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition shadow-sm"
+              />
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto shrink-0">
+              {/* Filtro Rol */}
+              <div className="relative w-full sm:w-56 shrink-0">
+                <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400 pointer-events-none">
+                  <HiOutlineFilter className="w-5 h-5" />
+                </span>
+                <select
+                  value={filtroRol}
+                  onChange={(e) => setFiltroRol(e.target.value as Rol | "todos")}
+                  className="w-full pl-11 pr-10 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition appearance-none cursor-pointer shadow-sm"
+                >
+                  {OPCIONES_ROL.map((op) => (
+                    <option key={op.value} value={op.value}>
+                      {op.label}
+                    </option>
+                  ))}
+                </select>
+                <span className="absolute inset-y-0 right-0 flex items-center pr-3.5 pointer-events-none text-slate-400">
+                  <HiChevronDown className="w-4 h-4" />
+                </span>
+              </div>
+
+              {/* Filtro Estado */}
+              <div className="relative w-full sm:w-52 shrink-0">
+                <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400 pointer-events-none">
+                  <HiOutlineEye className="w-5 h-5" />
+                </span>
+                <select
+                  value={filtroEstado}
+                  onChange={(e) =>
+                    setFiltroEstado(e.target.value as EstadoUsuario | "todos")
+                  }
+                  className="w-full pl-11 pr-10 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition appearance-none cursor-pointer shadow-sm"
+                >
+                  {OPCIONES_ESTADO.map((op) => (
+                    <option key={op.value} value={op.value}>
+                      {op.label}
+                    </option>
+                  ))}
+                </select>
+                <span className="absolute inset-y-0 right-0 flex items-center pr-3.5 pointer-events-none text-slate-400">
+                  <HiChevronDown className="w-4 h-4" />
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Estado de carga u obtención de datos */}
+          {loading && usuarios.length === 0 ? (
+            <div className="py-20 text-center text-sm font-medium text-slate-500 bg-white border border-slate-100 rounded-2xl shadow-sm">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-900 mx-auto mb-3" />
+              Cargando listado de usuarios desde MongoDB Atlas...
+            </div>
+          ) : error ? (
+            <div className="p-6 text-center text-sm font-medium text-red-600 bg-red-50 border border-red-100 rounded-2xl flex flex-col items-center gap-2">
+              <HiOutlineShieldExclamation className="w-8 h-8 text-red-500" />
+              <span>{error}</span>
+              <button
+                type="button"
+                onClick={recargarUsuarios}
+                className="mt-2 px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-xl text-xs font-bold transition cursor-pointer"
+              >
+                Reintentar conexión
+              </button>
+            </div>
+          ) : (
+            <div className="bg-white border border-slate-100 rounded-2xl shadow-sm overflow-hidden relative">
+              {loading && (
+                <div className="absolute inset-0 bg-white/40 backdrop-blur-[1px] flex items-center justify-center z-10" />
+              )}
+
+              <UsuariosTable
+                usuarios={usuariosPaginados}
+                orden={orden}
+                onClickOrden={manejarClickOrden}
+                onEditar={manejarEditar}
+                onToggleEstado={toggleEstadoUsuario}
+                onEliminar={manejarAperturaBorrado}
+                onReenviarInvitacion={manejarReenviarInvitacion}
+              />
+
+              <Paginador
+                paginaActual={paginaEfectiva}
+                totalPaginas={totalPaginas}
+                indicePrimerItem={indicePrimerItem}
+                indiceUltimoItem={indiceUltimoItem}
+                totalFiltrados={usuariosFiltrados.length}
+                onCambioPagina={setPaginaActual}
+              />
+            </div>
+          )}
         </div>
       ) : (
-        <div className="bg-white border border-slate-100 rounded-2xl shadow-sm overflow-hidden relative">
-          {loading && (
-            <div className="absolute inset-0 bg-white/40 backdrop-blur-[1px] flex items-center justify-center z-10" />
-          )}
-
-          <UsuariosTable
-            usuarios={usuariosPaginados}
-            orden={orden}
-            onClickOrden={manejarClickOrden}
-            onEditar={manejarEditar}
-            onToggleEstado={toggleEstadoUsuario}
-            onEliminar={manejarAperturaBorrado}
-            onReenviarInvitacion={manejarReenviarInvitacion}
-          />
-
-          <Paginador
-            paginaActual={paginaEfectiva}
-            totalPaginas={totalPaginas}
-            indicePrimerItem={indicePrimerItem}
-            indiceUltimoItem={indiceUltimoItem}
-            totalFiltrados={usuariosFiltrados.length}
-            onCambioPagina={setPaginaActual}
-          />
-        </div>
+        /* 📝 Línea de tiempo inyectada limpiamente */
+        <HistorialAuditoria />
       )}
 
       {/* Modales correspondientes */}

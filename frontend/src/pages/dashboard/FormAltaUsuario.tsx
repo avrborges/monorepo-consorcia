@@ -82,24 +82,19 @@ export default function FormAltaUsuario({
     const codPaisLimpio = codigoPais.trim();
     const telLocalLimpio = telefonoLocal.trim();
 
-    // 2. 🛡️ AGREGADO: Validaciones de lógica de negocio (Client-side validation)
-    
-    // Validación de longitud del nombre
+    // 2. Validaciones de lógica de negocio (Client-side validation)
     if (nombreLimpio.length < 3) {
       setErrorForm("El nombre completo debe tener al menos 3 caracteres.");
       return;
     }
 
-    // Validación del teléfono (si se completó)
     if (telLocalLimpio) {
-      // Validar código de país: Permitir opcionalmente el '+' inicial seguido de 1 a 4 números
       const regexCodPais = /^\+?[0-9]{1,4}$/;
       if (!regexCodPais.test(codPaisLimpio)) {
         setErrorForm("El código de país no es válido. Ej: +54");
         return;
       }
 
-      // Validar número local: Permitir solo números, espacios, guiones o paréntesis
       const regexTelLocal = /^[0-9\s\-()]+$/;
       if (!regexTelLocal.test(telLocalLimpio)) {
         setErrorForm("El número de teléfono local solo puede contener números, espacios o guiones.");
@@ -139,13 +134,20 @@ export default function FormAltaUsuario({
     };
 
     try {
+      // 🔑 Recuperamos el token JWT guardado en el inicio de sesión
+      const token = localStorage.getItem("token");
+
       const url = esEdicion 
         ? `${getBaseUrl()}/api/users/${usuarioEditando?._id}` 
         : `${getBaseUrl()}/api/users`;
         
       const respuesta = await fetch(url, {
         method: esEdicion ? "PUT" : "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          // 🛡️ Inyectamos la cabecera para autorizar la mutación (Soluciona el error 401)
+          "Authorization": `Bearer ${token}`
+        },
         body: JSON.stringify(payload),
       });
 
@@ -215,7 +217,7 @@ export default function FormAltaUsuario({
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Correo Electrónico</label>
               <div className="relative">
                 <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400"><HiOutlineMail className="w-4 h-4" /></span>
-                <input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="juan@correo.com" className="w-full pl-9 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:border-slate-900 transition" />
+                <input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="juan@correo.com" className="w-full pl-9 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:border-slate-990 transition" />
               </div>
             </div>
 
