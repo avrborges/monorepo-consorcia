@@ -124,6 +124,9 @@ export default function ListaUsuarios() {
 
   const [modalAbierto, setModalAbierto] = useState<boolean>(false);
   const [usuarioParaEliminar, setUsuarioParaEliminar] = useState<Usuario | null>(null);
+  
+  // Estado añadido para rastrear la cuenta en edición activa
+  const [usuarioEditando, setUsuarioEditando] = useState<Usuario | null>(null);
 
   const [busqueda, setBusqueda] = useState("");
   const busquedaDebounced = useDebounce(busqueda, DEBOUNCE_MS);
@@ -347,15 +350,18 @@ export default function ListaUsuarios() {
   }, [usuarioParaEliminar]);
 
   const manejarEditar = useCallback((usuario: Usuario) => {
-    console.log("Abriendo edición para el usuario:", usuario);
+    setUsuarioEditando(usuario);
+    setModalAbierto(true);
   }, []);
 
   const manejarAltaUsuario = useCallback(() => {
+    setUsuarioEditando(null); // Asegura que el formulario se abra en limpio
     setModalAbierto(true);
   }, []);
 
   const manejarCerrarModal = useCallback(() => {
     setModalAbierto(false);
+    setUsuarioEditando(null); // Limpieza preventiva al desmontar vista modal
   }, []);
 
   const manejarClickOrden = useCallback((columna: ColumnaOrdenable) => {
@@ -366,7 +372,6 @@ export default function ListaUsuarios() {
     }));
   }, []);
 
-  // 🛠️ CORREGIDO: Cambiado "tieneAccAccess" por la variable correcta "tieneAcceso"
   if (!tieneAcceso) {
     return (
       <div className="min-h-[60vh] flex flex-col items-center justify-center p-6 bg-white border border-slate-100 rounded-2xl shadow-sm text-center">
@@ -538,8 +543,23 @@ export default function ListaUsuarios() {
       )}
 
       {/* Modales correspondientes */}
-      <FormAltaUsuario modalAbierto={modalAbierto} onCerrar={manejarCerrarModal} onUsuarioCreado={recargarUsuarios} />
-      <ModalConfirmacion abierto={usuarioParaEliminar !== null} titulo="¿Eliminar usuario definitivamente?" mensaje="¿Estás completamente seguro de que querés eliminar permanentemente a" nombreUsuario={usuarioParaEliminar?.name || ""} onCerrar={manejarCerrarBorrado} onConfirmar={ejecutarEliminacionDefinitiva} loading={loading && usuarios.length > 0} />
+      <FormAltaUsuario 
+        key={usuarioEditando?._id || "alta-usuario"} 
+        modalAbierto={modalAbierto} 
+        onCerrar={manejarCerrarModal} 
+        onUsuarioCreado={recargarUsuarios} 
+        usuarioEditando={usuarioEditando}  
+      />
+      
+      <ModalConfirmacion 
+        abierto={usuarioParaEliminar !== null} 
+        titulo="¿Eliminar usuario definitivamente?" 
+        mensaje="¿Estás completamente seguro de que querés eliminar permanentemente a" 
+        nombreUsuario={usuarioParaEliminar?.name || ""} 
+        onCerrar={manejarCerrarBorrado} 
+        onConfirmar={ejecutarEliminacionDefinitiva} 
+        loading={loading && usuarios.length > 0} 
+      />
     </div>
   );
 }

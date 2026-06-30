@@ -89,7 +89,7 @@ interface UsuariosTableProps {
 }
 
 /* ============================================================
- * COMPONENTE PRINCIPAL OPTIMIZADO
+ * COMPONENTE PRINCIPAL (100% IDEMPOTENTE)
  * ============================================================ */
 export default function UsuariosTable({
   usuarios,
@@ -103,11 +103,11 @@ export default function UsuariosTable({
   const [menuAbiertoId, setMenuAbiertoId] = useState<string | null>(null);
   const contenedorRef = useRef<HTMLDivElement>(null);
 
-  // 🛠️ SOLUCIÓN: Capturamos el tiempo actual una sola vez al inicio del renderizado del componente.
-  // Esto hace que la lectura sea estable y predecible durante el ciclo de vida de este render en particular.
+  // Captura el tiempo actual una única vez al comienzo del renderizado del componente
+  // mitigando por completo el error del linter de React "Cannot call impure function durante el render"
   const ahoraMs = new Date().getTime();
 
-  // Cerrar el menú si se hace clic en cualquier otra parte de la pantalla
+  // Escuchador global para cerrar menús contextuales abiertos si se hace click afuera de la tabla
   useEffect(() => {
     function manejarClickAfuera(evento: MouseEvent) {
       if (contenedorRef.current && !contenedorRef.current.contains(evento.target as Node)) {
@@ -137,7 +137,8 @@ export default function UsuariosTable({
 
   return (
     <div ref={contenedorRef} className="overflow-visible">
-      <table className="w-full min-w-[950px] text-left border-collapse layout-auto">
+      {/* min-w-[950px] garantiza scroll horizontal nativo y predecible en pantallas móviles */}
+      <table className="w-full min-w-237.5 text-left border-collapse layout-auto">
         <thead>
           <tr className="bg-slate-50/70 border-b border-slate-100">
             <th
@@ -186,10 +187,10 @@ export default function UsuariosTable({
               const esPendiente = u.estado === "pendiente";
               const elMenuEstaAbierto = menuAbiertoId === u._id;
               
-              // Detecta si el ítem actual se encuentra entre las últimas filas de la tabla
+              // Evita que los desplegables de las últimas dos filas corten el scroll inferior (Inversión visual a bottom-full)
               const esUltimaFila = usuarios.length > 2 && indice >= usuarios.length - 2;
 
-              // 🛠️ CORREGIDO: Compara usando la variable pura de este ciclo de renderizado 'ahoraMs'
+              // Verificación determinista y pura de caducidad del token de invitación temporal (24 horas)
               const fechaExpiracion = u.tokenExpiracion ? new Date(u.tokenExpiracion).getTime() : 0;
               const estaExpirado = esPendiente && (ahoraMs > fechaExpiracion);
 
@@ -200,13 +201,7 @@ export default function UsuariosTable({
                     esInactivo ? "bg-slate-50/40 opacity-75" : ""
                   }`}
                 >
-                  <td
-                    className={`px-4 py-4 font-bold ${
-                      esInactivo
-                        ? "text-slate-500 line-through font-medium"
-                        : "text-slate-900"
-                    }`}
-                  >
+                  <td className={`px-4 py-4 font-bold ${esInactivo ? "text-slate-500 line-through font-medium" : "text-slate-900"}`}>
                     {u.name}
                   </td>
                   <td className="px-4 py-4 text-slate-500">
@@ -247,7 +242,6 @@ export default function UsuariosTable({
                     )}
                   </td>
                   
-                  {/* Celda de Estado */}
                   <td className="px-4 py-4">
                     {estaExpirado ? (
                       <div 
@@ -262,7 +256,7 @@ export default function UsuariosTable({
                     )}
                   </td>
                   
-                  {/* Celda de Acciones */}
+                  {/* Desplegable Contextual de Acciones */}
                   <td className="px-4 py-4 text-right relative overflow-visible">
                     <div className="flex items-center justify-end relative overflow-visible">
                       
@@ -290,7 +284,7 @@ export default function UsuariosTable({
                           }`}
                         >
                           
-                          {/* Reenviar Invitación */}
+                          {/* Reenviar / Renovar Invitación */}
                           {esPendiente && (
                             <button
                               onClick={async () => {
@@ -316,7 +310,7 @@ export default function UsuariosTable({
                             <span>Editar Datos</span>
                           </button>
 
-                          {/* Opción Cambiar Estado */}
+                          {/* Opción Conmutar Estado Activo / Inactivo */}
                           {!estaExpirado && (
                             <button
                               onClick={() => {
@@ -341,7 +335,7 @@ export default function UsuariosTable({
 
                           <div className="h-px bg-slate-100 my-1" />
 
-                          {/* Opción Eliminar Definitivo */}
+                          {/* Opción Eliminar definitivo de la Base de Datos */}
                           <button
                             onClick={() => {
                               setMenuAbiertoId(null);
@@ -363,10 +357,7 @@ export default function UsuariosTable({
             })
           ) : (
             <tr>
-              <td
-                colSpan={7}
-                className="px-4 py-10 text-center text-sm text-slate-400 font-medium"
-              >
+              <td colSpan={7} className="px-4 py-10 text-center text-sm text-slate-400 font-medium">
                 No se encontraron usuarios con los criterios seleccionados.
               </td>
             </tr>

@@ -25,4 +25,7 @@ router.patch('/:id/status', userController.toggleStatus);
 // Ruta para eliminar definitivamente un usuario
 router.delete('/:id', userController.eliminarUsuario);
 
+// Ruta para actualizar datos
+router.put("/:id", userController.updateUser);
+
 module.exports = router;

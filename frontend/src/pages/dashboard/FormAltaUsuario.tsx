@@ -1,326 +1,296 @@
 // src/components/dashboard/FormAltaUsuario.tsx
-import React, { useState } from "react";
-import { 
-  HiOutlineUser, 
-  HiOutlineMail, 
-  HiOutlineBriefcase, 
-  HiOutlineShieldExclamation, 
-  HiX, 
-  HiChevronDown 
-} from "react-icons/hi";
-import api from "../../api";
+import { useState, startTransition } from "react";
+import { HiOutlineUser, HiOutlineMail, HiOutlinePhone, HiOutlineOfficeBuilding } from "react-icons/hi";
+import type { Usuario, Rol } from "./ListaUsuarios";
 
 interface FormAltaUsuarioProps {
   modalAbierto: boolean;
   onCerrar: () => void;
-  onUsuarioCreado: () => void;
+  onUsuarioCreado: () => void; 
+  usuarioEditando?: Usuario | null; 
 }
 
-const ESTADO_INICIAL = {
-  name: "",
-  email: "",
-  role: "propietario",
-  ufNumero: "",
-  piso: "",
-  depto: "",
-  codigoPais: "+54",
-  numeroTelefono: ""
+const getBaseUrl = (): string => {
+  return (import.meta.env?.VITE_API_URL as string) || `http://${window.location.hostname}:5000`;
 };
 
-export default function FormAltaUsuario({ modalAbierto, onCerrar, onUsuarioCreado }: FormAltaUsuarioProps) {
-  const [formData, setFormData] = useState(ESTADO_INICIAL);
-  const [guardando, setGuardando] = useState(false);
-  const [generalError, setGeneralError] = useState<string | null>(null);
-  const [errors, setErrors] = useState<{ [key: string]: string }>({});
+export default function FormAltaUsuario({
+  modalAbierto,
+  onCerrar,
+  onUsuarioCreado,
+  usuarioEditando,
+}: FormAltaUsuarioProps) {
+  
+  // Todos los Hooks declarados al inicio para cumplir con las reglas de React
+  const [name, setName] = useState(() => usuarioEditando?.name || "");
+  const [email, setEmail] = useState(() => usuarioEditando?.email || "");
+  const [role, setRole] = useState<Rol>(() => usuarioEditando?.role || "propietario");
 
+  // Lazy state para procesar la Unidad Funcional de forma segura
+  const [uf, setUf] = useState(() => {
+    const raw = usuarioEditando?.unidadFuncional || "";
+    let ufPura = raw.replace(/Piso\s+[^\s]+/i, "").replace(/Dto\s+[^\s]+/i, "").trim();
+    if (ufPura.toLowerCase().startsWith("uf")) ufPura = ufPura.replace(/^uf\s*/i, "").trim();
+    return ufPura;
+  });
+
+  const [piso, setPiso] = useState(() => {
+    const raw = usuarioEditando?.unidadFuncional || "";
+    const match = raw.match(/Piso\s+([^\s]+)/i);
+    return match ? match[1] : "";
+  });
+
+  const [dto, setDto] = useState(() => {
+    const raw = usuarioEditando?.unidadFuncional || "";
+    const match = raw.match(/Dto\s+([^\s]+)/i);
+    return match ? match[1] : "";
+  });
+
+  // Lazy state para procesar el código de país y el número local
+  const [codigoPais, setCodigoPais] = useState(() => {
+    const rawTel = usuarioEditando?.telefono || "";
+    const match = rawTel.match(/^(\+[0-9]{1,3})/);
+    return match ? match[1] : (rawTel ? "" : "+54");
+  });
+
+  const [telefonoLocal, setTelefonoLocal] = useState(() => {
+    const rawTel = usuarioEditando?.telefono || "";
+    const match = rawTel.match(/^(\+[0-9]{1,3})/);
+    return match ? rawTel.substring(match[1].length).trim() : rawTel;
+  });
+
+  const [loading, setLoading] = useState(false);
+  const [errorForm, setErrorForm] = useState<string | null>(null);
+
+  const esEdicion = Boolean(usuarioEditando);
+
+  // Cláusula de escape obligatoria debajo de los Hooks
   if (!modalAbierto) return null;
 
-  const limpiarErrorCampo = (campo: string) => {
-    setErrors(prev => {
-      const nuevosErrores = { ...prev };
-      delete nuevosErrores[campo];
-      return nuevosErrores;
-    });
-  };
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
-    
-    if (errors[name]) {
-      limpiarErrorCampo(name);
-    }
-  };
-
-  const reiniciarFormulario = () => {
-    setFormData(ESTADO_INICIAL);
-    setGeneralError(null);
-    setErrors({});
-  };
-
-  const validarFormulario = (): boolean => {
-    const nuevosErrores: { [key: string]: string } = {};
-    const { name, email, ufNumero, numeroTelefono } = formData;
-
-    if (!name.trim()) {
-      nuevosErrores.name = "El nombre completo es obligatorio.";
-    } else if (name.trim().length < 3) {
-      nuevosErrores.name = "Debe tener al menos 3 caracteres.";
-    } else if (!/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/.test(name.trim())) {
-      nuevosErrores.name = "Solo se permiten letras y espacios.";
-    }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email.trim())) {
-      nuevosErrores.email = "Ingresa un correo electrónico válido.";
-    }
-
-    if (ufNumero.trim() && !/^\d+$/.test(ufNumero.trim())) {
-      nuevosErrores.ufNumero = "La UF debe ser un número entero.";
-    }
-
-    if (numeroTelefono.trim() && !/^\d+$/.test(numeroTelefono.replace(/\s+/g, ""))) {
-      nuevosErrores.numeroTelefono = "El teléfono solo puede contener números.";
-    }
-
-    setErrors(nuevosErrores);
-    return Object.keys(nuevosErrores).length === 0;
-  };
-
-  const manejarSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  const manejarSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setGeneralError(null);
+    if (loading) return; 
+    
+    setErrorForm(null);
 
-    if (!validarFormulario()) return;
+    // 1. Sanitización inicial de valores comprimiendo espacios laterales
+    const nombreLimpio = name.trim();
+    const emailLimpio = email.trim().toLowerCase();
+    const ufLimpia = uf.trim();
+    const pisoLimpio = piso.trim();
+    const dtoLimpio = dto.trim();
+    const codPaisLimpio = codigoPais.trim();
+    const telLocalLimpio = telefonoLocal.trim();
 
-    setGuardando(true);
-    const { name, email, role, ufNumero, piso, depto, codigoPais, numeroTelefono } = formData;
+    // 2. 🛡️ AGREGADO: Validaciones de lógica de negocio (Client-side validation)
+    
+    // Validación de longitud del nombre
+    if (nombreLimpio.length < 3) {
+      setErrorForm("El nombre completo debe tener al menos 3 caracteres.");
+      return;
+    }
 
-    const partesUF = [
-      ufNumero.trim() ? `UF ${ufNumero.trim()}` : "",
-      piso.trim() ? `Piso ${piso.trim()}` : "",
-      depto.trim() ? `Dpto ${depto.trim()}` : ""
-    ].filter(Boolean);
-    const unidadFuncionalCompuesta = partesUF.join(" - ").replace("Piso  - Dpto", "Piso ");
+    // Validación del teléfono (si se completó)
+    if (telLocalLimpio) {
+      // Validar código de país: Permitir opcionalmente el '+' inicial seguido de 1 a 4 números
+      const regexCodPais = /^\+?[0-9]{1,4}$/;
+      if (!regexCodPais.test(codPaisLimpio)) {
+        setErrorForm("El código de país no es válido. Ej: +54");
+        return;
+      }
 
-    const telefonoUnificado = numeroTelefono.trim()
-      ? `${codigoPais.trim().startsWith("+") ? codigoPais.trim() : `+${codigoPais.trim()}`} ${numeroTelefono.trim().replace(/\s+/g, "")}`
-      : undefined;
+      // Validar número local: Permitir solo números, espacios, guiones o paréntesis
+      const regexTelLocal = /^[0-9\s\-()]+$/;
+      if (!regexTelLocal.test(telLocalLimpio)) {
+        setErrorForm("El número de teléfono local solo puede contener números, espacios o guiones.");
+        return;
+      }
+
+      if (telLocalLimpio.length < 6) {
+        setErrorForm("El número de teléfono parece demasiado corto.");
+        return;
+      }
+    }
+
+    setLoading(true);
+
+    // Recomposición limpia de la Unidad Funcional
+    const partesUf: string[] = [];
+    if (ufLimpia) partesUf.push(`UF ${ufLimpia}`);
+    if (pisoLimpio) partesUf.push(`Piso ${pisoLimpio}`);
+    if (dtoLimpio) partesUf.push(`Dto ${dtoLimpio}`);
+    const ufCompuesta = partesUf.join(" ");
+
+    // Recomposición limpia del Teléfono
+    let telUnificado = "";
+    if (telLocalLimpio) {
+      const prefix = codPaisLimpio 
+        ? (codPaisLimpio.startsWith("+") ? codPaisLimpio : `+${codPaisLimpio}`)
+        : "";
+      telUnificado = prefix ? `${prefix} ${telLocalLimpio}` : telLocalLimpio;
+    }
+
+    const payload = {
+      name: nombreLimpio,
+      email: emailLimpio,
+      role,
+      unidadFuncional: ufCompuesta,
+      telefono: telUnificado,
+    };
 
     try {
-      await api.post('/users', {
-        name: name.trim(),
-        email: email.trim(),
-        role,
-        unidadFuncional: unidadFuncionalCompuesta || undefined,
-        telefono: telefonoUnificado,
+      const url = esEdicion 
+        ? `${getBaseUrl()}/api/users/${usuarioEditando?._id}` 
+        : `${getBaseUrl()}/api/users`;
+        
+      const respuesta = await fetch(url, {
+        method: esEdicion ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
       });
 
-      reiniciarFormulario();
-      onUsuarioCreado(); 
-      onCerrar();        
-    } catch (err: unknown) {
-      console.error(err);
-      const errorData = err as { response?: { data?: { message?: string } } };
-      setGeneralError(errorData.response?.data?.message || "Error al registrar el usuario en el sistema.");
-    } finally {
-      setGuardando(false);
-    }
-  };
+      const resultado = await respuesta.json();
 
-  const manejarCierreCompleto = () => {
-    if (!guardando) {
-      reiniciarFormulario();
-      onCerrar();
+      if (resultado.success) {
+        onUsuarioCreado();
+        onCerrar();
+      } else {
+        setErrorForm(resultado.message || "Ocurrió un error en la solicitud.");
+      }
+    } catch (err) {
+      console.error("Error en submit de usuario:", err);
+      setErrorForm("Error de conexión con el servidor backend.");
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div 
-      className="fixed inset-0 z-50 flex justify-end bg-slate-900/30 backdrop-blur-xs animate-in fade-in duration-200"
-      onClick={manejarCierreCompleto}
-    >
-      <div 
-        className="bg-white w-full max-w-md h-full shadow-2xl border-l border-slate-100 flex flex-col animate-in slide-in-from-right duration-300 pointer-events-auto"
-        onClick={(e) => e.stopPropagation()} 
-      >
-        {/* Cabecera */}
-        <div className="px-6 py-5 border-b border-slate-100 flex items-start justify-between bg-slate-50/50">
-          <div className="space-y-1 pr-4">
-            <div className="flex items-center gap-2.5 text-slate-900">
-              <div className="p-1.5 bg-slate-100 rounded-lg text-slate-700">
-                <HiOutlineUser className="w-4 h-4 text-emerald-600" />
-              </div>
-              <h3 className="text-sm font-bold tracking-tight">Alta Nuevo Usuario</h3>
-            </div>
-            <p className="text-xs text-slate-500 leading-relaxed pl-8">
-              Formulario para dar de alta a usuarios, se enviará una invitación por correo.
-            </p>
+    <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300">
+      <div className="absolute inset-0 -z-10" onClick={onCerrar} />
+
+      <div className="bg-white w-full max-w-md h-full shadow-2xl border-l border-slate-100 flex flex-col animate-in slide-in-from-right duration-300 ease-out">
+        
+        {/* Encabezado */}
+        <div className="px-6 py-5 border-b border-slate-100 bg-slate-50/50 shrink-0">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-black text-slate-900 tracking-tight">
+              {esEdicion ? "Editar Datos del Usuario" : "Registrar Nuevo Usuario"}
+            </h3>
+            <button 
+              type="button" 
+              onClick={onCerrar} 
+              className="text-slate-400 hover:text-slate-600 text-sm font-bold p-1 rounded-lg hover:bg-slate-100 transition cursor-pointer"
+            >
+              ✕
+            </button>
           </div>
-          <button 
-            type="button"
-            onClick={manejarCierreCompleto}
-            className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition cursor-pointer shrink-0"
-          >
-            <HiX className="w-4 h-4" />
-          </button>
+          <p className="text-xs text-slate-500 font-medium mt-1">
+            {esEdicion 
+              ? "Modificá la información asignada de este miembro del consorcio." 
+              : "Se le enviará un correo electrónico para que configure su contraseña de acceso."}
+          </p>
         </div>
 
-        {/* Cuerpo del Formulario - Se agrega autoComplete="off" global */}
-        <form 
-          id="form-alta-usuario" 
-          onSubmit={manejarSubmit} 
-          autoComplete="off" 
-          className="flex-1 overflow-y-auto p-6 space-y-4"
-        >
-          {generalError && (
-            <div className="p-3 bg-red-50 border border-red-100 rounded-xl flex items-start gap-2 text-xs font-bold text-red-600 animate-in fade-in duration-150">
-              <HiOutlineShieldExclamation className="w-4 h-4 shrink-0 mt-0.5" />
-              <span>{generalError}</span>
-            </div>
-          )}
+        {/* Formulario */}
+        <form onSubmit={manejarSubmit} className="flex flex-col flex-1 h-full overflow-hidden">
+          <div className="p-6 space-y-4 overflow-y-auto flex-1">
+            {errorForm && (
+              <div className="p-3 bg-red-50 border border-red-100 text-red-600 text-xs font-bold rounded-xl animate-in fade-in zoom-in-95 duration-200">
+                {errorForm}
+              </div>
+            )}
 
-          {/* Campo: Nombre Completo */}
-          <div className="space-y-1">
-            <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Nombre Completo *</label>
-            <div className="relative">
-              <span className={`absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none transition-colors ${errors.name ? 'text-red-400' : 'text-slate-400'}`}>
-                <HiOutlineUser className="w-4 h-4" />
-              </span>
-              <input 
-                type="text" 
-                name="name" 
-                id="alta-user-name"
-                required 
-                autoComplete="disabled"
-                value={formData.name} 
-                onChange={handleChange} 
-                placeholder="Ej: Juan Pérez" 
-                className={`w-full pl-10 pr-3 py-2 bg-white border rounded-xl text-sm font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 transition shadow-sm ${
-                  errors.name 
-                    ? 'border-red-300 focus:border-red-500 focus:ring-red-500' 
-                    : 'border-slate-200 focus:border-slate-900 focus:ring-slate-900'
-                }`} 
-              />
+            {/* Input Nombre */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Nombre Completo</label>
+              <div className="relative">
+                <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400"><HiOutlineUser className="w-4 h-4" /></span>
+                <input required type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ej. Juan Pérez" className="w-full pl-9 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:border-slate-900 transition" />
+              </div>
             </div>
-            {errors.name && <p className="text-[11px] text-red-600 font-bold pl-1">{errors.name}</p>}
-          </div>
 
-          {/* Campo: Email */}
-          <div className="space-y-1">
-            <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Correo Electrónico *</label>
-            <div className="relative">
-              <span className={`absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none transition-colors ${errors.email ? 'text-red-400' : 'text-slate-400'}`}>
-                <HiOutlineMail className="w-4 h-4" />
-              </span>
-              <input 
-                type="email" 
-                name="email" 
-                id="alta-user-email"
-                required 
-                autoComplete="new-email"
-                value={formData.email} 
-                onChange={handleChange} 
-                placeholder="ejemplo@consorcia.com" 
-                className={`w-full pl-10 pr-3 py-2 bg-white border rounded-xl text-sm font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 transition shadow-sm ${
-                  errors.email 
-                    ? 'border-red-300 focus:border-red-500 focus:ring-red-500' 
-                    : 'border-slate-200 focus:border-slate-900 focus:ring-slate-900'
-                }`} 
-              />
+            {/* Input Email */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Correo Electrónico</label>
+              <div className="relative">
+                <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400"><HiOutlineMail className="w-4 h-4" /></span>
+                <input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="juan@correo.com" className="w-full pl-9 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:border-slate-900 transition" />
+              </div>
             </div>
-            {errors.email && <p className="text-[11px] text-red-600 font-bold pl-1">{errors.email}</p>}
-          </div>
 
-          {/* Campo: Rol */}
-          <div className="space-y-1">
-            <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Rol en el Consorcio</label>
-            <div className="relative">
-              <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400 pointer-events-none">
-                <HiOutlineBriefcase className="w-4 h-4" />
-              </span>
-              <select name="role" value={formData.role} onChange={handleChange} className="w-full pl-10 pr-9 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition appearance-none cursor-pointer shadow-sm">
+            {/* Selector de Rol */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Rol Asignado</label>
+              <select value={role} onChange={(e) => startTransition(() => setRole(e.target.value as Rol))} className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:outline-none focus:border-slate-900 transition appearance-none cursor-pointer">
                 <option value="propietario">Propietario</option>
                 <option value="consejo">Consejo de Administración</option>
                 <option value="admin">Administrador</option>
               </select>
-              <span className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-slate-400">
-                <HiChevronDown className="w-4 h-4" />
-              </span>
+            </div>
+
+            {/* Grilla Datos de la Unidad Funcional */}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="col-span-1">
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">U. Funcional</label>
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-0 flex items-center pl-2.5 text-slate-400"><HiOutlineOfficeBuilding className="w-3.5 h-3.5" /></span>
+                  <input type="text" value={uf} onChange={(e) => setUf(e.target.value)} placeholder="Ej. 12" className="w-full pl-8 pr-2 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:border-slate-900 transition" />
+                </div>
+              </div>
+
+              <div className="col-span-1">
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Piso</label>
+                <input type="text" value={piso} onChange={(e) => setPiso(e.target.value)} placeholder="Ej. 3" className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:border-slate-900 transition" />
+              </div>
+
+              <div className="col-span-1">
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Depto</label>
+                <input type="text" value={dto} onChange={(e) => setDto(e.target.value)} placeholder="Ej. B" className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:border-slate-900 transition" />
+              </div>
+            </div>
+
+            {/* Grilla para Teléfono */}
+            <div className="grid grid-cols-4 gap-3">
+              <div className="col-span-1">
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Cód. País</label>
+                <input 
+                  type="text" 
+                  value={codigoPais} 
+                  onChange={(e) => setCodigoPais(e.target.value)} 
+                  placeholder="+54" 
+                  className="w-full px-2.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 text-center focus:outline-none focus:border-slate-900 transition" 
+                />
+              </div>
+
+              <div className="col-span-3">
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Teléfono (Opcional)</label>
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
+                    <HiOutlinePhone className="w-4 h-4" />
+                  </span>
+                  <input 
+                    type="tel" 
+                    value={telefonoLocal} 
+                    onChange={(e) => setTelefonoLocal(e.target.value)} 
+                    placeholder="Ej. 11 2345 6789" 
+                    className="w-full pl-9 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:border-slate-900 transition" 
+                  />
+                </div>
+              </div>
             </div>
           </div>
 
-          <div className="h-px bg-slate-100 my-1" />
-
-          {/* Grilla de Ubicación */}
-          <div className="grid grid-cols-3 gap-3">
-            <div className="space-y-1 col-span-1">
-              <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">N° UF</label>
-              <input 
-                type="text" 
-                name="ufNumero" 
-                id="alta-user-uf"
-                autoComplete="dont-track"
-                value={formData.ufNumero} 
-                onChange={handleChange} 
-                placeholder="Ej: 14" 
-                className={`w-full px-3 py-2 bg-white border rounded-xl text-sm text-center text-slate-800 ${
-                  errors.ufNumero ? 'border-red-300 focus:border-red-500' : 'border-slate-200 focus:border-slate-900'
-                }`} 
-              />
-            </div>
-            <div className="space-y-1 col-span-1">
-              <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Piso</label>
-              <input type="text" name="piso" id="alta-user-piso" autoComplete="off" value={formData.piso} onChange={handleChange} placeholder="Ej: 4" className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm text-center text-slate-800 focus:border-slate-900 focus:outline-none" />
-            </div>
-            <div className="space-y-1 col-span-1">
-              <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Dpto</label>
-              <input type="text" name="depto" id="alta-user-depto" autoComplete="off" value={formData.depto} onChange={handleChange} placeholder="Ej: B" className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm text-center text-slate-800 focus:border-slate-900 focus:outline-none" />
-            </div>
-            {errors.ufNumero && <p className="text-[11px] text-red-600 font-bold col-span-3 pl-1">{errors.ufNumero}</p>}
-          </div>
-
-          {/* Campo: Teléfono de Contacto */}
-          <div className="space-y-1">
-            <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Teléfono de Contacto</label>
-            <div className="grid grid-cols-[100px_1fr] gap-2.5">
-              <input type="text" name="codigoPais" id="alta-user-codpais" autoComplete="off" value={formData.codigoPais} onChange={handleChange} placeholder="+54" className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm text-center font-bold text-slate-800 focus:border-slate-900 focus:outline-none" />
-              <input 
-                type="tel" 
-                name="numeroTelefono" 
-                id="alta-user-tel"
-                autoComplete="new-phone"
-                value={formData.numeroTelefono} 
-                onChange={handleChange} 
-                placeholder="Ej: 11 5234 5678" 
-                className={`w-full px-3 py-2 bg-white border rounded-xl text-sm text-slate-800 ${
-                  errors.numeroTelefono ? 'border-red-300 focus:border-red-500' : 'border-slate-200 focus:border-slate-900'
-                }`} 
-              />
-            </div>
-            {errors.numeroTelefono && <p className="text-[11px] text-red-600 font-bold pl-1">{errors.numeroTelefono}</p>}
+          {/* Acciones */}
+          <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-3 shrink-0">
+            <button type="button" onClick={onCerrar} disabled={loading} className="px-4 py-2.5 text-sm font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition cursor-pointer">
+              Cancelar
+            </button>
+            <button type="submit" disabled={loading} className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-sm font-bold rounded-xl transition shadow-sm disabled:opacity-50 cursor-pointer">
+              {loading ? "Guardando..." : esEdicion ? "Guardar Cambios" : "Dar de Alta"}
+            </button>
           </div>
         </form>
-
-        {/* Acciones */}
-        <div className="p-6 border-t border-slate-100 flex items-center justify-end gap-3 bg-slate-50/30">
-          <button 
-            type="button" 
-            disabled={guardando} 
-            onClick={manejarCierreCompleto} 
-            className="px-4 py-2.5 text-xs font-bold text-slate-500 hover:bg-slate-50 rounded-xl transition cursor-pointer disabled:opacity-50"
-          >
-            Cancelar
-          </button>
-          <button 
-            type="submit" 
-            form="form-alta-usuario" 
-            disabled={guardando} 
-            className="px-5 py-2.5 bg-slate-950 hover:bg-slate-900 text-white text-xs font-bold rounded-xl shadow-sm transition flex items-center gap-2 cursor-pointer disabled:opacity-50"
-          >
-            {guardando ? "Registrando..." : "Registrar Cuenta"}
-          </button>
-        </div>
       </div>
     </div>
   );

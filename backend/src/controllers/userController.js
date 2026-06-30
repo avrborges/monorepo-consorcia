@@ -247,7 +247,7 @@ const loginUser = async (req, res) => {
   }
 };
 
-// 🆕 MÉTODO NUEVO: Reenviar link de invitación a un usuario con cuenta pendiente
+// MÉTODO: Reenviar link de invitación a un usuario con cuenta pendiente
 const reenviarInvitacion = async (req, res) => {
   try {
     const { id } = req.params;
@@ -296,13 +296,63 @@ const reenviarInvitacion = async (req, res) => {
     });
   }
 };
+// METODO: Editar datos de usuario
+const updateUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, email, role, unidadFuncional, telefono } = req.body;
+
+    // 1. Validar que el usuario exista
+    const usuario = await User.findById(id);
+    if (!usuario) {
+      return res.status(404).json({
+        success: false,
+        message: "El usuario que intentás editar no existe.",
+      });
+    }
+
+    // 2. Validar si el email fue cambiado y si ya le pertenece a otro usuario
+    if (email && email !== usuario.email) {
+      const emailDuplicado = await User.findOne({ email });
+      if (emailDuplicado) {
+        return res.status(400).json({
+          success: false,
+          message: "El correo electrónico ya está registrado por otro usuario.",
+        });
+      }
+    }
+
+    // 3. Asignar los nuevos valores
+    usuario.name = name || usuario.name;
+    usuario.email = email ? email.toLowerCase() : usuario.email;
+    usuario.role = role || usuario.role;
+    usuario.unidadFuncional = unidadFuncional; // Se puede sobreescribir o limpiar si viene undefined
+    usuario.telefono = telefono;
+
+    // 4. Guardar en Atlas de forma definitiva
+    const usuarioActualizado = await usuario.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Usuario actualizado correctamente.",
+      user: usuarioActualizado,
+    });
+  } catch (error) {
+    console.error("Error al actualizar usuario:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error interno del servidor al procesar la actualización.",
+    });
+  }
+};
 
 module.exports = {
   loginUser,
   getUsers,
   crearUsuario,
-  activarCuenta, // 🆕 Exportamos la nueva función
+  activarCuenta, 
   toggleStatus,
   eliminarUsuario,
-  reenviarInvitacion
+  reenviarInvitacion,
+  updateUser
 };
