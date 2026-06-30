@@ -98,7 +98,7 @@ const verificarAcceso = (): boolean => {
   }
 };
 
-// 🛡️ MODIFICADO: Inyectamos correctamente el token JWT para evitar errores 401
+// 🛡️ Inyectamos correctamente el token JWT para evitar errores 401
 async function fetchUsuariosRequest(
   signal?: AbortSignal
 ): Promise<UsuariosResponse> {
@@ -132,6 +132,17 @@ export default function ListaUsuarios() {
 
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [error, setError] = useState<string | null>(null);
+
+  // 🔑 Extraemos el rol de la sesión de manera segura para el renderizado de la Tab
+  const [rolUsuario] = useState<Rol | null>(() => {
+    try {
+      const userString = localStorage.getItem("user");
+      if (!userString) return null;
+      return JSON.parse(userString)?.role || null;
+    } catch {
+      return null;
+    }
+  });
 
   // 📝 Gestión de pestañas activas para el Admin
   const [pestanaActiva, setPestanaActiva] = useState<"lista" | "auditoria">("lista");
@@ -270,13 +281,13 @@ export default function ListaUsuarios() {
     setLoading(true);
     setError(null);
     try {
-      const token = localStorage.getItem("token"); // 🔑 Token inyectado
+      const token = localStorage.getItem("token");
 
       const respuesta = await fetch(`${getBaseUrl()}/api/users/${id}/status`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}` // 🛡️ Cabecera añadida
+          "Authorization": `Bearer ${token}`
         },
       });
 
@@ -303,13 +314,13 @@ export default function ListaUsuarios() {
     setLoading(true);
     setError(null);
     try {
-      const token = localStorage.getItem("token"); // 🔑 Token inyectado
+      const token = localStorage.getItem("token");
 
       const respuesta = await fetch(`${getBaseUrl()}/api/users/${id}/reenviar-invitacion`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}` // 🛡️ Cabecera añadida
+          "Authorization": `Bearer ${token}`
         },
       });
 
@@ -347,12 +358,12 @@ export default function ListaUsuarios() {
     const idAEliminar = usuarioParaEliminar._id;
 
     try {
-      const token = localStorage.getItem("token"); // 🔑 Token inyectado
+      const token = localStorage.getItem("token");
 
       const respuesta = await fetch(`${getBaseUrl()}/api/users/${idAEliminar}`, {
         method: "DELETE",
         headers: {
-          "Authorization": `Bearer ${token}` // 🛡️ Cabecera añadida
+          "Authorization": `Bearer ${token}`
         }
       });
 
@@ -395,7 +406,6 @@ export default function ListaUsuarios() {
     }));
   }, []);
 
-  // 🛠️ Control de seguridad corregido sin duplicaciones
   if (!tieneAcceso) {
     return (
       <div className="min-h-[60vh] flex flex-col items-center justify-center p-6 bg-white border border-slate-100 rounded-2xl shadow-sm text-center">
@@ -471,22 +481,26 @@ export default function ListaUsuarios() {
               : "text-slate-400 hover:text-slate-600"
           }`}
         >
-          Nómina de Usuarios
+          Lista de Usuarios
         </button>
-        <button
-          type="button"
-          onClick={() => setPestanaActiva("auditoria")}
-          className={`pb-3 transition-all relative cursor-pointer ${
-            pestanaActiva === "auditoria"
-              ? "text-slate-900 border-b-2 border-slate-900"
-              : "text-slate-400 hover:text-slate-600"
-          }`}
-        >
-          Historial de Auditoría
-        </button>
+
+        {/* 🔐 RENDERIZADO CONDICIONAL: Solo visible para superadmin */}
+        {rolUsuario === "superadmin" && (
+          <button
+            type="button"
+            onClick={() => setPestanaActiva("auditoria")}
+            className={`pb-3 transition-all relative cursor-pointer ${
+              pestanaActiva === "auditoria"
+                ? "text-slate-900 border-b-2 border-slate-900"
+                : "text-slate-400 hover:text-slate-600"
+            }`}
+          >
+            Historial de Auditoría
+          </button>
+        )}
       </div>
 
-      {/* 🔄 RENDERIZADO CONDICIONAL */}
+      {/* 🔄 RENDERIZADO DE CONTENIDO SEGÚN TAB */}
       {pestanaActiva === "lista" ? (
         <div className="space-y-6 animate-in fade-in duration-150">
           {/* Barra de herramientas */}
@@ -597,7 +611,7 @@ export default function ListaUsuarios() {
           )}
         </div>
       ) : (
-        /* 📝 Línea de tiempo inyectada limpiamente */
+        /* 📝 Vista exclusiva del Historial de Auditoría */
         <HistorialAuditoria />
       )}
 

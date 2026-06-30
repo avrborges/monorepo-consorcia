@@ -1,75 +1,94 @@
-// src/scripts/seed.js
-
+// backend/src/scripts/seed.js
 const mongoose = require('mongoose');
 const path = require('path');
-const bcrypt = require('bcryptjs'); // 💡 IMPORTANTE: Importamos bcrypt para hashear
+const bcrypt = require('bcryptjs'); // 🔒 Importación explícita de bcryptjs
 require('dotenv').config({ path: path.join(__dirname, '../../.env') });
 
 const User = require(path.join(__dirname, '../models/User'));
 
 const crearUsuariosIniciales = async () => {
   try {
+    // 🌐 Conexión a la base de datos
+    if (!process.env.MONGO_URI) {
+      throw new Error("La variable MONGO_URI no está definida en el entorno (.env)");
+    }
     await mongoose.connect(process.env.MONGO_URI);
-    console.log("Conectado a Atlas para insertar usuarios de prueba...");
+    console.log("Conectado a MongoDB Atlas para insertar usuarios semilla...");
 
-    // Limpiamos usuarios previos
+    // 🧹 Limpieza preventiva de usuarios previos
     await User.deleteMany({});
     console.log("Base de datos de usuarios limpia.");
 
-    // Generamos los hashes de las contraseñas usando un "salt" de 10 rondas (estándar)
-    console.log("Encriptando contraseñas de prueba...");
-    const hashSuper = await bcrypt.hash("Super123", 10);
-    const hashAdmin = await bcrypt.hash("Admin123", 10);
-    const hashConsejo = await bcrypt.hash("Consejo123", 10);
-    const hashProp = await bcrypt.hash("Prop123", 10);
-    const hashInq = await bcrypt.hash("Inq123", 10);
+    // 🔑 Generamos los hashes de las contraseñas manualmente antes de insertar
+    console.log("Encriptando contraseñas con bcryptjs...");
+    const saltRounds = 10;
+    const hashSuper = await bcrypt.hash("Super123", saltRounds);
+    const hashAdmin = await bcrypt.hash("Admin123", saltRounds);
+    const hashConsejo = await bcrypt.hash("Consejo123", saltRounds);
+    const hashProp = await bcrypt.hash("Prop123", saltRounds);
+    const hashInq = await bcrypt.hash("Inq123", saltRounds);
 
-    // Definición de la suite de usuarios con sus claves encriptadas
+    // 👥 Definición de la suite de usuarios con sus claves ya encriptadas
     const usuariosPrueba = [
       {
         name: "Super Admin",
         email: "superadmin@consorcia.com.ar",
-        password: hashSuper, // 🔒 Guardamos el hash
-        role: "superadmin"
+        password: hashSuper, 
+        role: "superadmin",
+        estado: "activo",
+        debeCambiarPassword: false
       },
       {
         name: "Alejandro Borges",
         email: "admin@consorcia.com.ar",
-        password: hashAdmin, // 🔒 Guardamos el hash
-        role: "admin"
+        password: hashAdmin, 
+        role: "admin",
+        estado: "activo",
+        debeCambiarPassword: false
       },
       {
         name: "Consejo de Administración",
         email: "consejo@consorcia.com.ar",
-        password: hashConsejo, // 🔒 Guardamos el hash
-        role: "consejo"
+        password: hashConsejo, 
+        role: "consejo",
+        estado: "activo",
+        debeCambiarPassword: false
       },
       {
         name: "Propietario Prueba",
         email: "propietario@consorcia.com.ar",
-        password: hashProp, // 🔒 Guardamos el hash
-        role: "propietario"
+        password: hashProp, 
+        role: "propietario",
+        estado: "activo",
+        debeCambiarPassword: false
       },
       {
         name: "Inquilino Prueba",
         email: "inquilino@consorcia.com.ar",
-        password: hashInq, // 🔒 Guardamos el hash
-        role: "inquilino"
+        password: hashInq, 
+        role: "inquilino",
+        estado: "activo",
+        debeCambiarPassword: false
       }
     ];
 
-    // Insertamos todos los documentos en bloque
+    console.log("Insertando registros en bloque (insertMany)...");
+    
+    // Al usar insertMany con contraseñas ya hasheadas, el middleware pre('save') 
+    // de tu modelo no alterará el hash (ya que detectará que 'password' no viene vacío)
     const usuariosInsertados = await User.insertMany(usuariosPrueba);
     
     console.log(`\n¡${usuariosInsertados.length} usuarios de prueba insertados con éxito! 🎉`);
     usuariosInsertados.forEach(u => {
-      console.log(` - ${u.name} [${u.role.toUpperCase()}] -> ${u.email}`);
+      console.log(` - ${u.name} [${u.role.toUpperCase()}] -> ${u.email} (${u.estado})`);
     });
 
-    mongoose.connection.close();
-    console.log("\nConexión a MongoDB cerrada de forma segura.");
   } catch (error) {
-    console.error("Error al insertar los usuarios de prueba:", error);
+    console.error("❌ Error al insertar los usuarios de prueba:", error);
+  } finally {
+    // 🔌 Cierre seguro de conexiones
+    await mongoose.connection.close();
+    console.log("Conexión a MongoDB cerrada de forma segura.");
   }
 };
 
