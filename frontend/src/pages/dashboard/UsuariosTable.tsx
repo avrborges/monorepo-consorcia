@@ -89,7 +89,7 @@ interface UsuariosTableProps {
 }
 
 /* ============================================================
- * COMPONENTE PRINCIPAL (100% IDEMPOTENTE)
+ * COMPONENTE PRINCIPAL
  * ============================================================ */
 export default function UsuariosTable({
   usuarios,
@@ -103,11 +103,8 @@ export default function UsuariosTable({
   const [menuAbiertoId, setMenuAbiertoId] = useState<string | null>(null);
   const contenedorRef = useRef<HTMLDivElement>(null);
 
-  // Captura el tiempo actual una única vez al comienzo del renderizado del componente
-  // mitigando por completo el error del linter de React "Cannot call impure function durante el render"
   const ahoraMs = new Date().getTime();
 
-  // Escuchador global para cerrar menús contextuales abiertos si se hace click afuera de la tabla
   useEffect(() => {
     function manejarClickAfuera(evento: MouseEvent) {
       if (contenedorRef.current && !contenedorRef.current.contains(evento.target as Node)) {
@@ -136,8 +133,8 @@ export default function UsuariosTable({
   };
 
   return (
-    <div ref={contenedorRef} className="overflow-visible">
-      {/* min-w-[950px] garantiza scroll horizontal nativo y predecible en pantallas móviles */}
+    /* 🎯 CAMBIO CLAVE: Se configuró un comportamiento de scroll controlado y aislado */
+    <div ref={contenedorRef} className="w-full overflow-x-auto overflow-y-hidden min-h-0">
       <table className="w-full min-w-237.5 text-left border-collapse layout-auto">
         <thead>
           <tr className="bg-slate-50/70 border-b border-slate-100">
@@ -187,10 +184,8 @@ export default function UsuariosTable({
               const esPendiente = u.estado === "pendiente";
               const elMenuEstaAbierto = menuAbiertoId === u._id;
               
-              // Evita que los desplegables de las últimas dos filas corten el scroll inferior (Inversión visual a bottom-full)
               const esUltimaFila = usuarios.length > 2 && indice >= usuarios.length - 2;
 
-              // Verificación determinista y pura de caducidad del token de invitación temporal (24 horas)
               const fechaExpiracion = u.tokenExpiracion ? new Date(u.tokenExpiracion).getTime() : 0;
               const estaExpirado = esPendiente && (ahoraMs > fechaExpiracion);
 
@@ -256,9 +251,8 @@ export default function UsuariosTable({
                     )}
                   </td>
                   
-                  {/* Desplegable Contextual de Acciones */}
-                  <td className="px-4 py-4 text-right relative overflow-visible">
-                    <div className="flex items-center justify-end relative overflow-visible">
+                  <td className="px-4 py-4 text-right relative">
+                    <div className="flex items-center justify-end relative">
                       
                       <button
                         onClick={(e) => {
@@ -283,8 +277,6 @@ export default function UsuariosTable({
                               : "top-full mt-1 origin-top-right slide-in-from-top-2"
                           }`}
                         >
-                          
-                          {/* Reenviar / Renovar Invitación */}
                           {esPendiente && (
                             <button
                               onClick={async () => {
@@ -298,7 +290,6 @@ export default function UsuariosTable({
                             </button>
                           )}
 
-                          {/* Opción Editar */}
                           <button
                             onClick={() => {
                               setMenuAbiertoId(null);
@@ -310,7 +301,6 @@ export default function UsuariosTable({
                             <span>Editar Datos</span>
                           </button>
 
-                          {/* Opción Conmutar Estado Activo / Inactivo */}
                           {!estaExpirado && (
                             <button
                               onClick={() => {
@@ -335,7 +325,6 @@ export default function UsuariosTable({
 
                           <div className="h-px bg-slate-100 my-1" />
 
-                          {/* Opción Eliminar definitivo de la Base de Datos */}
                           <button
                             onClick={() => {
                               setMenuAbiertoId(null);

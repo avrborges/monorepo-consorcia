@@ -249,11 +249,15 @@ export default function ListaUsuarios() {
     );
   }, [usuarios, busquedaDebounced, filtroRol, filtroEstado, orden]);
 
-  const claveFiltros = `${busquedaDebounced}|${filtroRol}|${filtroEstado}`;
-  const [claveFiltrosPrevia, setClaveFiltrosPrevia] = useState(claveFiltros);
+  // 🛠️ Optimización: Reseteo controlado de paginación basado en mutaciones de filtros
+  const [filtrosPrevios, setFiltrosPrevios] = useState({ busquedaDebounced, filtroRol, filtroEstado });
 
-  if (claveFiltrosPrevia !== claveFiltros) {
-    setClaveFiltrosPrevia(claveFiltros);
+  if (
+    filtrosPrevios.busquedaDebounced !== busquedaDebounced ||
+    filtrosPrevios.filtroRol !== filtroRol ||
+    filtrosPrevios.filtroEstado !== filtroEstado
+  ) {
+    setFiltrosPrevios({ busquedaDebounced, filtroRol, filtroEstado });
     setPaginaActual(1);
   }
 
@@ -584,29 +588,36 @@ export default function ListaUsuarios() {
               </button>
             </div>
           ) : (
-            <div className="bg-white border border-slate-100 rounded-2xl shadow-sm overflow-hidden relative">
+            /* 🎨 CONTENEDOR OPTIMIZADO: Evita el desborde y scroll vertical en el layout del dashboard */
+            <div className="bg-white border border-slate-100 rounded-2xl shadow-sm flex flex-col min-h-0 relative">
               {loading && (
                 <div className="absolute inset-0 bg-white/40 backdrop-blur-[1px] flex items-center justify-center z-10" />
               )}
 
-              <UsuariosTable
-                usuarios={usuariosPaginados}
-                orden={orden}
-                onClickOrden={manejarClickOrden}
-                onEditar={manejarEditar}
-                onToggleEstado={toggleEstadoUsuario}
-                onEliminar={manejarAperturaBorrado}
-                onReenviarInvitacion={manejarReenviarInvitacion}
-              />
+              {/* Contenedor de la tabla aislado para scroll horizontal en resoluciones móviles */}
+              <div className="w-full overflow-x-auto overflow-y-hidden min-h-0">
+                <UsuariosTable
+                  usuarios={usuariosPaginados}
+                  orden={orden}
+                  onClickOrden={manejarClickOrden}
+                  onEditar={manejarEditar}
+                  onToggleEstado={toggleEstadoUsuario}
+                  onEliminar={manejarAperturaBorrado}
+                  onReenviarInvitacion={manejarReenviarInvitacion}
+                />
+              </div>
 
-              <Paginador
-                paginaActual={paginaEfectiva}
-                totalPaginas={totalPaginas}
-                indicePrimerItem={indicePrimerItem}
-                indiceUltimoItem={indiceUltimoItem}
-                totalFiltrados={usuariosFiltrados.length}
-                onCambioPagina={setPaginaActual}
-              />
+              {/* Paginación anclada de manera estática al pie de la tarjeta */}
+              <div className="border-t border-slate-100 bg-slate-50/50 rounded-b-2xl shrink-0">
+                <Paginador
+                  paginaActual={paginaEfectiva}
+                  totalPaginas={totalPaginas}
+                  indicePrimerItem={indicePrimerItem}
+                  indiceUltimoItem={indiceUltimoItem}
+                  totalFiltrados={usuariosFiltrados.length}
+                  onCambioPagina={setPaginaActual}
+                />
+              </div>
             </div>
           )}
         </div>

@@ -18,22 +18,21 @@ export default function DashboardLayout() {
     navigate("/login");
   };
 
-  // 1. Definimos los ítems base comunes para cualquier rol
   const menuItems = [
     { name: "Panel de Control", path: "/dashboard", icon: <HiChartPie className="w-5 h-5" /> },
   ];
 
-  // 2. Condicional para inyectar la nómina de usuarios si es admin o superadmin
   if (user.role === "admin" || user.role === "superadmin") {
     menuItems.push({
       name: "Lista de Usuarios",
-      path: "/dashboard/usuarios", // Ajustá el path según tus rutas
+      path: "/dashboard/usuarios", 
       icon: <HiOutlineUserGroup className="w-5 h-5" />
     });
   }
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] flex font-sans text-slate-800 antialiased relative">
+    // 🎯 CORRECCIÓN 1: Clava el viewport global para evitar el scroll infinito en la ventana del navegador
+    <div className="h-screen w-screen overflow-hidden bg-[#f8fafc] flex font-sans text-slate-800 antialiased relative">
       
       {/* 1. CAPA OSCURA DE FONDO (BACKDROP PARA MÓVILES) */}
       {isSidebarOpen && (
@@ -44,9 +43,10 @@ export default function DashboardLayout() {
       )}
 
       {/* 2. BARRA LATERAL (ESTILO ASIMÉTRICO PREMIUM) */}
+      {/* 🎯 CORRECCIÓN 2: Se agrega h-full para asegurar que el sidebar mantenga siempre el alto estricto de la pantalla */}
       <aside className={`
         fixed inset-y-0 left-0 z-50 bg-[#0b132b] text-slate-300 flex flex-col justify-between shadow-xl transition-transform duration-300
-        w-64 border-r border-white/3
+        w-64 border-r border-white/3 h-full
         ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"} 
         md:relative md:translate-x-0 shrink-0
       `}>
@@ -121,10 +121,12 @@ export default function DashboardLayout() {
       </aside>
 
       {/* CONTENEDOR DERECHO PRINCIPAL */}
-      <div className="flex-1 flex flex-col min-w-0">
+      {/* 🎯 CORRECCIÓN 3: Agregamos h-full para acompañar el bloqueo del contenedor padre */}
+      <div className="flex-1 flex flex-col min-w-0 h-full">
         
         {/* 3. BARRA SUPERIOR ULTRA LIMPIA */}
-        <header className="bg-white/80 backdrop-blur-md border-b border-slate-100 h-16 flex items-center justify-between px-4 sm:px-6 sticky top-0 z-30">
+        {/* Cambiamos sticky por shrink-0 ya que el header debe permanecer estático arriba */}
+        <header className="bg-white/80 backdrop-blur-md border-b border-slate-100 h-16 flex items-center justify-between px-4 sm:px-6 shrink-0 z-30">
           <div className="flex items-center space-x-3">
             <button
               onClick={() => setIsSidebarOpen(true)}
@@ -146,8 +148,11 @@ export default function DashboardLayout() {
         </header>
 
         {/* 4. CONTENEDOR DEL CONTENIDO VARIABLE */}
-        <main className="p-4 sm:p-8 flex-1 overflow-y-auto max-w-400 w-full mx-auto animate-fade-in">
-          <Outlet />
+        {/* 🎯 CORRECCIÓN 4: Se agrega min-h-0 para habilitar correctamente el scroll del flexbox interno */}
+        <main className="p-4 sm:p-8 flex-1 overflow-y-auto w-full mx-auto animate-fade-in min-h-0">
+          <div className="max-w-[1600px] mx-auto">
+            <Outlet />
+          </div>
         </main>
       </div>
 

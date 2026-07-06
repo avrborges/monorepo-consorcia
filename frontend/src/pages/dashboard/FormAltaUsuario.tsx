@@ -1,5 +1,6 @@
 // src/components/dashboard/FormAltaUsuario.tsx
-import { useState, startTransition } from "react";
+import { useState, startTransition, useEffect } from "react";
+import { createPortal } from "react-dom"; // 🎯 IMPORTACIÓN CLAVE
 import { HiOutlineUser, HiOutlineMail, HiOutlinePhone, HiOutlineOfficeBuilding } from "react-icons/hi";
 import type { Usuario, Rol } from "./ListaUsuarios";
 
@@ -21,12 +22,10 @@ export default function FormAltaUsuario({
   usuarioEditando,
 }: FormAltaUsuarioProps) {
   
-  // Todos los Hooks declarados al inicio para cumplir con las reglas de React
   const [name, setName] = useState(() => usuarioEditando?.name || "");
   const [email, setEmail] = useState(() => usuarioEditando?.email || "");
   const [role, setRole] = useState<Rol>(() => usuarioEditando?.role || "propietario");
 
-  // Lazy state para procesar la Unidad Funcional de forma segura
   const [uf, setUf] = useState(() => {
     const raw = usuarioEditando?.unidadFuncional || "";
     let ufPura = raw.replace(/Piso\s+[^\s]+/i, "").replace(/Dto\s+[^\s]+/i, "").trim();
@@ -46,7 +45,6 @@ export default function FormAltaUsuario({
     return match ? match[1] : "";
   });
 
-  // Lazy state para procesar el código de país y el número local
   const [codigoPais, setCodigoPais] = useState(() => {
     const rawTel = usuarioEditando?.telefono || "";
     const match = rawTel.match(/^(\+[0-9]{1,3})/);
@@ -64,7 +62,16 @@ export default function FormAltaUsuario({
 
   const esEdicion = Boolean(usuarioEditando);
 
-  // Cláusula de escape obligatoria debajo de los Hooks
+  useEffect(() => {
+    if (modalAbierto) {
+      const originalStyle = window.getComputedStyle(document.body).overflow;
+      document.body.style.overflow = "hidden";
+      return () => {
+        document.body.style.overflow = originalStyle;
+      };
+    }
+  }, [modalAbierto]);
+
   if (!modalAbierto) return null;
 
   const manejarSubmit = async (e: React.FormEvent) => {
@@ -73,7 +80,6 @@ export default function FormAltaUsuario({
     
     setErrorForm(null);
 
-    // 1. Sanitización inicial de valores comprimiendo espacios laterales
     const nombreLimpio = name.trim();
     const emailLimpio = email.trim().toLowerCase();
     const ufLimpia = uf.trim();
@@ -82,7 +88,6 @@ export default function FormAltaUsuario({
     const codPaisLimpio = codigoPais.trim();
     const telLocalLimpio = telefonoLocal.trim();
 
-    // 2. Validaciones de lógica de negocio (Client-side validation)
     if (nombreLimpio.length < 3) {
       setErrorForm("El nombre completo debe tener al menos 3 caracteres.");
       return;
@@ -109,14 +114,12 @@ export default function FormAltaUsuario({
 
     setLoading(true);
 
-    // Recomposición limpia de la Unidad Funcional
     const partesUf: string[] = [];
     if (ufLimpia) partesUf.push(`UF ${ufLimpia}`);
     if (pisoLimpio) partesUf.push(`Piso ${pisoLimpio}`);
     if (dtoLimpio) partesUf.push(`Dto ${dtoLimpio}`);
     const ufCompuesta = partesUf.join(" ");
 
-    // Recomposición limpia del Teléfono
     let telUnificado = "";
     if (telLocalLimpio) {
       const prefix = codPaisLimpio 
@@ -134,9 +137,7 @@ export default function FormAltaUsuario({
     };
 
     try {
-      // 🔑 Recuperamos el token JWT guardado en el inicio de sesión
       const token = localStorage.getItem("token");
-
       const url = esEdicion 
         ? `${getBaseUrl()}/api/users/${usuarioEditando?._id}` 
         : `${getBaseUrl()}/api/users`;
@@ -145,7 +146,6 @@ export default function FormAltaUsuario({
         method: esEdicion ? "PUT" : "POST",
         headers: { 
           "Content-Type": "application/json",
-          // 🛡️ Inyectamos la cabecera para autorizar la mutación (Soluciona el error 401)
           "Authorization": `Bearer ${token}`
         },
         body: JSON.stringify(payload),
@@ -167,11 +167,13 @@ export default function FormAltaUsuario({
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300">
+  // 🎯 PORTAL DE REACT: Renderiza el HTML directamente bajo el <body> para independizarlo de layouts padres limitados
+  return createPortal(
+    <div className="fixed inset-0 z-[999] flex justify-end bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300">
       <div className="absolute inset-0 -z-10" onClick={onCerrar} />
 
-      <div className="bg-white w-full max-w-md h-full shadow-2xl border-l border-slate-100 flex flex-col animate-in slide-in-from-right duration-300 ease-out">
+      {/* Al estar montado sobre el body, h-screen tomará de forma estricta la altura total del navegador sin cortarse */}
+      <div className="bg-white w-full max-w-md h-screen flex flex-col overflow-hidden animate-in slide-in-from-right duration-300 ease-out border-l border-slate-100 shadow-2xl">
         
         {/* Encabezado */}
         <div className="px-6 py-5 border-b border-slate-100 bg-slate-50/50 shrink-0">
@@ -195,8 +197,10 @@ export default function FormAltaUsuario({
         </div>
 
         {/* Formulario */}
-        <form onSubmit={manejarSubmit} className="flex flex-col flex-1 h-full overflow-hidden">
-          <div className="p-6 space-y-4 overflow-y-auto flex-1">
+        <form onSubmit={manejarSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+          
+          {/* Zona de inputs con scroll independiente */}
+          <div className="p-6 space-y-4 overflow-y-auto flex-1 min-h-0">
             {errorForm && (
               <div className="p-3 bg-red-50 border border-red-100 text-red-600 text-xs font-bold rounded-xl animate-in fade-in zoom-in-95 duration-200">
                 {errorForm}
@@ -217,7 +221,7 @@ export default function FormAltaUsuario({
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Correo Electrónico</label>
               <div className="relative">
                 <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400"><HiOutlineMail className="w-4 h-4" /></span>
-                <input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="juan@correo.com" className="w-full pl-9 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:border-slate-990 transition" />
+                <input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="juan@correo.com" className="w-full pl-9 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:border-slate-900 transition" />
               </div>
             </div>
 
@@ -283,7 +287,7 @@ export default function FormAltaUsuario({
             </div>
           </div>
 
-          {/* Acciones */}
+          {/* Acciones (Permanecen visibles abajo en todo momento) */}
           <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-3 shrink-0">
             <button type="button" onClick={onCerrar} disabled={loading} className="px-4 py-2.5 text-sm font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition cursor-pointer">
               Cancelar
@@ -294,6 +298,7 @@ export default function FormAltaUsuario({
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body // Nodo del DOM destino del Portal
   );
 }
