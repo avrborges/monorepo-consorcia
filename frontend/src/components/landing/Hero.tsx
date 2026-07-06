@@ -12,7 +12,7 @@ export const Hero = () => {
     <section className="relative min-h-screen flex flex-col items-center justify-center pt-28 pb-12 px-4 overflow-hidden bg-grid-pattern">
       
       {/* Luces de fondo (Glow effects) */}
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-blue-900/20 blur-[120px] rounded-full pointer-events-none" />
+      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-125 h-125 bg-blue-900/20 blur-[120px] rounded-full pointer-events-none" />
 
       {/* Isotipo central */}
       <div className="mb-10 animate-fade-in relative">

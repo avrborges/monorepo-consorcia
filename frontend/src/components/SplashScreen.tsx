@@ -21,7 +21,7 @@ export default function SplashScreen() {
   if (!isVisible) return null;
 
   return (
-    <div className="fixed inset-0 bg-[#0b132b] z-[9999] flex items-center justify-center animate-screen-fade">
+    <div className="fixed inset-0 bg-[#0b132b] z-9999 flex items-center justify-center animate-screen-fade">
       
       {/* Contenedor central con animaciones fluidas */}
       <div className="flex flex-col items-center text-center select-none animate-brand-entrance">

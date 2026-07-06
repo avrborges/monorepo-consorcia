@@ -1,54 +1,123 @@
 // backend/src/controllers/userController.js
-const User = require('../models/User');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const crypto = require('crypto'); // Nativo de Node.js, no requiere instalación
-const { enviarMailInvitacion } = require('../services/emailService'); // Nuestro cartero
+const User = require("../models/User");
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+const crypto = require("crypto");
+const { enviarMailInvitacion } = require("../services/emailService");
+const { registrarLog } = require("../services/loggerService");
 
-// 📝 NUEVO: Importamos el logger para la auditoría de acciones del administrador
-const { registrarLog } = require('../services/loggerService');
+/* ============================================================
+ * HELPER: Resolver URL del frontend para links de activación
+ * ============================================================ */
+const obtenerFrontendUrl = (req) => {
+  const frontendUrlEnv = process.env.FRONTEND_URL;
 
-// MÉTODO: Obtener la nómina completa de usuarios para el Administrador
+  /*
+   * Caso 1:
+   * Si FRONTEND_URL tiene una URL fija real, la usamos.
+   *
+   * Ejemplos:
+   * FRONTEND_URL=https://consorcia.com
+   * FRONTEND_URL=http://localhost:5173
+   * FRONTEND_URL=http://192.168.1.38:5173
+   */
+  if (frontendUrlEnv && frontendUrlEnv.toLowerCase() !== "auto") {
+    return frontendUrlEnv.replace(/\/$/, "");
+  }
+
+  /*
+   * Caso 2:
+   * Si FRONTEND_URL=auto, intentamos usar Origin.
+   *
+   * Ejemplos:
+   * Origin: http://localhost:5173
+   * Origin: http://192.168.0.55:5173
+   */
+  const origin = req.get("origin");
+
+  if (origin) {
+    return origin.replace(/\/$/, "");
+  }
+
+  /*
+   * Caso 3:
+   * Si no vino Origin, intentamos usar Referer.
+   */
+  const referer = req.get("referer");
+
+  if (referer) {
+    try {
+      return new URL(referer).origin.replace(/\/$/, "");
+    } catch {
+      // Si Referer no es válido, continuamos con fallback final.
+    }
+  }
+
+  /*
+   * Caso 4:
+   * Fallback final para desarrollo local.
+   */
+  return "http://localhost:5173";
+};
+
+/* ============================================================
+ * MÉTODO: Obtener la nómina completa de usuarios para el Administrador
+ * ============================================================ */
 const getUsers = async (req, res) => {
   try {
-    const users = await User.find({}).select('-password').sort({ createdAt: -1 });
-    
+    const users = await User.find({})
+      .select("-password")
+      .sort({ createdAt: -1 });
+
     return res.status(200).json({
       success: true,
-      users
+      users,
     });
   } catch (error) {
     console.error("Error en getUsers:", error);
+
     return res.status(500).json({
       success: false,
-      message: "Hubo un error al obtener el listado de usuarios."
+      message: "Hubo un error al obtener el listado de usuarios.",
     });
   }
 };
 
-// MÉTODO: Registrar un nuevo usuario desde el Panel de Administración
+/* ============================================================
+ * MÉTODO: Registrar un nuevo usuario desde el Panel de Administración
+ * ============================================================ */
 const crearUsuario = async (req, res) => {
   try {
     const { name, email, role, unidadFuncional, telefono } = req.body;
 
     if (!name || !name.trim()) {
-      return res.status(400).json({ success: false, message: "El nombre completo es obligatorio." });
-    }
-    if (!email || !email.trim()) {
-      return res.status(400).json({ success: false, message: "El correo electrónico es obligatorio." });
-    }
-
-    const emailLimpio = email.trim().toLowerCase();
-    const usuarioExistente = await User.findOne({ email: emailLimpio });
-    if (usuarioExistente) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "Ya existe un usuario registrado con este correo electrónico." 
+      return res.status(400).json({
+        success: false,
+        message: "El nombre completo es obligatorio.",
       });
     }
 
-    // 1. Generar token de 64 caracteres y su vencimiento (24hs)
-    const token = crypto.randomBytes(32).toString('hex');
+    if (!email || !email.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "El correo electrónico es obligatorio.",
+      });
+    }
+
+    const emailLimpio = email.trim().toLowerCase();
+
+    const usuarioExistente = await User.findOne({ email: emailLimpio });
+
+    if (usuarioExistente) {
+      return res.status(400).json({
+        success: false,
+        message: "Ya existe un usuario registrado con este correo electrónico.",
+      });
+    }
+
+    // 1. Generar token de 64 caracteres y vencimiento de 24 hs
+    const token = crypto.randomBytes(32).toString("hex");
+
     const expiracion = new Date();
     expiracion.setHours(expiracion.getHours() + 24);
 
@@ -56,201 +125,255 @@ const crearUsuario = async (req, res) => {
     const nuevoUsuario = new User({
       name: name.trim(),
       email: emailLimpio,
-      role: role || 'propietario',
+      role: role || "propietario",
       unidadFuncional: unidadFuncional || "",
       telefono: telefono || "",
-      estado: 'pendiente',
+      estado: "pendiente",
       debeCambiarPassword: true,
       tokenActivacion: token,
-      tokenExpiracion: expiracion
+      tokenExpiracion: expiracion,
     });
 
     await nuevoUsuario.save();
 
-    // 3. Armar la URL y disparar el correo en segundo plano
-    const baseUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-    const urlActivacion = `${baseUrl}/activar-cuenta?token=${token}`;
+    // 3. Armar URL de activación dinámica y disparar correo en segundo plano
+    const baseUrl = obtenerFrontendUrl(req);
+    const urlActivacion = `${baseUrl}/activar-cuenta?token=${encodeURIComponent(
+      token
+    )}`;
 
-    enviarMailInvitacion(nuevoUsuario.email, nuevoUsuario.name, urlActivacion)
-      .catch(err => console.error("Error al enviar mail de invitación:", err));
+    enviarMailInvitacion(
+      nuevoUsuario.email,
+      nuevoUsuario.name,
+      urlActivacion
+    ).catch((err) =>
+      console.error("Error al enviar mail de invitación:", err)
+    );
 
-    // 📝 NUEVO: Registrar acción en el Log de Auditoría
+    // 4. Registrar acción en el Log de Auditoría
     await registrarLog(req, "USUARIO_CREADO", nuevoUsuario._id, {
       nombreUsuario: nuevoUsuario.name,
-      cambios: { email: nuevoUsuario.email, role: nuevoUsuario.role, unidadFuncional: nuevoUsuario.unidadFuncional }
+      cambios: {
+        email: nuevoUsuario.email,
+        role: nuevoUsuario.role,
+        unidadFuncional: nuevoUsuario.unidadFuncional,
+      },
     });
 
-    return res.status(201).json({ 
-      success: true, 
-      message: "Usuario registrado con éxito. Se ha enviado el correo de invitación.",
+    return res.status(201).json({
+      success: true,
+      message:
+        "Usuario registrado con éxito. Se ha enviado el correo de invitación.",
       user: {
         id: nuevoUsuario._id,
         name: nuevoUsuario.name,
         email: nuevoUsuario.email,
         role: nuevoUsuario.role,
-        estado: nuevoUsuario.estado
-      }
+        estado: nuevoUsuario.estado,
+      },
     });
-
   } catch (error) {
     console.error("Error en crearUsuario:", error);
-    return res.status(500).json({ 
-      success: false, 
-      message: "Hubo un error interno en el servidor al procesar el alta." 
+
+    return res.status(500).json({
+      success: false,
+      message: "Hubo un error interno en el servidor al procesar el alta.",
     });
   }
 };
 
-// MÉTODO NUEVO: Activar cuenta desde el link del correo
+/* ============================================================
+ * MÉTODO: Activar cuenta desde el link del correo
+ * ============================================================ */
 const activarCuenta = async (req, res) => {
   try {
     const { token, password } = req.body;
 
     if (!token || !password) {
-      return res.status(400).json({ success: false, message: "El token y la contraseña son obligatorios." });
-    }
-
-    // Buscamos al usuario que tenga este token y que no esté vencido
-    const usuario = await User.findOne({
-      tokenActivacion: token,
-      tokenExpiracion: { $gt: new Date() } // El vencimiento debe ser mayor a "ahora"
-    });
-
-    if (!usuario) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "El enlace de activación es inválido o ha expirado. Solicitá uno nuevo al administrador." 
+      return res.status(400).json({
+        success: false,
+        message: "El token y la contraseña son obligatorios.",
       });
     }
 
-    // Actualizamos los datos. El middleware pre('save') de User.js encriptará la clave.
+    const usuario = await User.findOne({
+      tokenActivacion: token,
+      tokenExpiracion: { $gt: new Date() },
+    });
+
+    if (!usuario) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "El enlace de activación es inválido o ha expirado. Solicitá uno nuevo al administrador.",
+      });
+    }
+
+    /*
+     * El middleware pre("save") del modelo User debería encriptar la clave.
+     */
     usuario.password = password;
-    usuario.estado = 'activo';
+    usuario.estado = "activo";
     usuario.debeCambiarPassword = false;
-    usuario.tokenActivacion = null; // Destruimos el token para que no se use 2 veces
+    usuario.tokenActivacion = null;
     usuario.tokenExpiracion = null;
 
     await usuario.save();
 
     return res.status(200).json({
       success: true,
-      message: "Tu cuenta ha sido activada exitosamente. Ya podés iniciar sesión."
+      message: "Tu cuenta ha sido activada exitosamente. Ya podés iniciar sesión.",
     });
-
   } catch (error) {
     console.error("Error en activarCuenta:", error);
+
     return res.status(500).json({
       success: false,
-      message: "Hubo un error al intentar activar la cuenta."
+      message: "Hubo un error al intentar activar la cuenta.",
     });
   }
 };
 
-// MÉTODO: Alternar el estado del usuario (Activar / Inactivar)
+/* ============================================================
+ * MÉTODO: Alternar el estado del usuario
+ * ============================================================ */
 const toggleStatus = async (req, res) => {
   try {
     const { id } = req.params;
 
     const usuario = await User.findById(id);
+
     if (!usuario) {
-      return res.status(404).json({ success: false, message: "Usuario no encontrado." });
+      return res.status(404).json({
+        success: false,
+        message: "Usuario no encontrado.",
+      });
     }
 
-    const nuevoEstado = usuario.estado === 'inactivo' ? 'activo' : 'inactivo';
+    const nuevoEstado = usuario.estado === "inactivo" ? "activo" : "inactivo";
     usuario.estado = nuevoEstado;
 
     await usuario.save();
 
-    // 📝 NUEVO: Registrar acción en el Log de Auditoría
     await registrarLog(req, "USUARIO_EDITADO", usuario._id, {
       nombreUsuario: usuario.name,
-      cambios: { estado: nuevoEstado }
+      cambios: { estado: nuevoEstado },
     });
 
     return res.status(200).json({
       success: true,
       message: `El usuario ha sido marcado como ${nuevoEstado} con éxito.`,
-      estado: nuevoEstado
+      estado: nuevoEstado,
     });
-
   } catch (error) {
     console.error("Error en toggleStatus:", error);
-    return res.status(500).json({ success: false, message: "Hubo un error en el servidor al cambiar el estado." });
+
+    return res.status(500).json({
+      success: false,
+      message: "Hubo un error en el servidor al cambiar el estado.",
+    });
   }
 };
 
-// MÉTODO: Eliminar definitivamente un usuario de la base de datos
+/* ============================================================
+ * MÉTODO: Eliminar definitivamente un usuario
+ * ============================================================ */
 const eliminarUsuario = async (req, res) => {
   try {
     const { id } = req.params;
+
     const usuarioEliminado = await User.findByIdAndDelete(id);
 
     if (!usuarioEliminado) {
-      return res.status(404).json({ success: false, message: "El usuario que intenta eliminar ya no existe." });
+      return res.status(404).json({
+        success: false,
+        message: "El usuario que intenta eliminar ya no existe.",
+      });
     }
 
-    // 📝 NUEVO: Registrar acción en el Log de Auditoría
     await registrarLog(req, "USUARIO_ELIMINADO", id, {
       nombreUsuario: usuarioEliminado.name,
-      cambios: { email: usuarioEliminado.email, role: usuarioEliminado.role }
+      cambios: {
+        email: usuarioEliminado.email,
+        role: usuarioEliminado.role,
+      },
     });
 
     return res.status(200).json({
       success: true,
-      message: `La cuenta de ${usuarioEliminado.name} ha sido eliminada definitivamente.`
+      message: `La cuenta de ${usuarioEliminado.name} ha sido eliminada definitivamente.`,
     });
-
   } catch (error) {
     console.error("Error en eliminarUsuario:", error);
-    return res.status(500).json({ success: false, message: "Error interno al intentar eliminar el usuario." });
+
+    return res.status(500).json({
+      success: false,
+      message: "Error interno al intentar eliminar el usuario.",
+    });
   }
 };
 
-// MÉTODO: Inicio de sesión
+/* ============================================================
+ * MÉTODO: Inicio de sesión
+ * ============================================================ */
 const loginUser = async (req, res) => {
   const { email, password } = req.body;
 
   try {
     if (!email || !password) {
-      return res.status(400).json({ success: false, message: "Por favor, completa todos los campos obligatorios." });
-    }
-
-    const userFound = await User.findOne({ email: email.toLowerCase() });
-
-    // Frenamos al usuario si su cuenta sigue pendiente (no activó desde el mail)
-    if (userFound && userFound.estado === 'pendiente') {
-      return res.status(403).json({
+      return res.status(400).json({
         success: false,
-        message: "Tu cuenta aún no está activada. Revisá tu correo electrónico para activarla."
+        message: "Por favor, completa todos los campos obligatorios.",
       });
     }
 
-    if (userFound && (userFound.estado === 'inactive' || userFound.estado === 'inactivo')) {
+    const emailLimpio = email.trim().toLowerCase();
+
+    const userFound = await User.findOne({ email: emailLimpio });
+
+    if (userFound && userFound.estado === "pendiente") {
       return res.status(403).json({
         success: false,
-        message: "Tu cuenta se encuentra inactiva. Por favor, contactá al administrador."
+        message:
+          "Tu cuenta aún no está activada. Revisá tu correo electrónico para activarla.",
       });
     }
 
-    const isMatch = userFound ? await bcrypt.compare(password, userFound.password) : false;
+    if (
+      userFound &&
+      (userFound.estado === "inactive" || userFound.estado === "inactivo")
+    ) {
+      return res.status(403).json({
+        success: false,
+        message:
+          "Tu cuenta se encuentra inactiva. Por favor, contactá al administrador.",
+      });
+    }
+
+    const isMatch = userFound
+      ? await bcrypt.compare(password, userFound.password)
+      : false;
 
     if (!isMatch) {
       return res.status(401).json({
         success: false,
-        message: "El correo electrónico o la contraseña son incorrectos."
+        message: "El correo electrónico o la contraseña son incorrectos.",
       });
     }
 
     const token = jwt.sign(
-      { id: userFound._id, role: userFound.role },
+      {
+        id: userFound._id,
+        role: userFound.role,
+      },
       process.env.JWT_SECRET,
-      { expiresIn: '24h' }
+      { expiresIn: "24h" }
     );
 
     return res.status(200).json({
       success: true,
       message: `¡Inicio de sesión exitoso! Bienvenido, ${userFound.name}`,
-      token, 
+      token,
       user: {
         name: userFound.name,
         email: userFound.email,
@@ -258,74 +381,89 @@ const loginUser = async (req, res) => {
         unidadFuncional: userFound.unidadFuncional,
         telefono: userFound.telefono,
         estado: userFound.estado,
-        debeCambiarPassword: userFound.debeCambiarPassword 
-      }
+        debeCambiarPassword: userFound.debeCambiarPassword,
+      },
     });
-
   } catch (error) {
     console.error("Error en loginUser:", error);
-    return res.status(500).json({ success: false, message: "Hubo un error interno en el servidor." });
+
+    return res.status(500).json({
+      success: false,
+      message: "Hubo un error interno en el servidor.",
+    });
   }
 };
 
-// MÉTODO: Reenviar link de invitación a un usuario con cuenta pendiente
+/* ============================================================
+ * MÉTODO: Reenviar link de invitación a usuario pendiente
+ * ============================================================ */
 const reenviarInvitacion = async (req, res) => {
   try {
     const { id } = req.params;
 
     const usuario = await User.findById(id);
-    if (!usuario) {
-      return res.status(404).json({ success: false, message: "Usuario no encontrado." });
-    }
 
-    // Validación crucial: solo reenviar si sigue pendiente
-    if (usuario.estado !== 'pendiente') {
-      return res.status(400).json({ 
-        success: false, 
-        message: `No se puede reenviar la invitación porque el usuario ya está ${usuario.estado}.` 
+    if (!usuario) {
+      return res.status(404).json({
+        success: false,
+        message: "Usuario no encontrado.",
       });
     }
 
-    // 1. Generar nuevo token y extender expiración (24 horas más)
-    const nuevoToken = crypto.randomBytes(32).toString('hex');
+    if (usuario.estado !== "pendiente") {
+      return res.status(400).json({
+        success: false,
+        message: `No se puede reenviar la invitación porque el usuario ya está ${usuario.estado}.`,
+      });
+    }
+
+    // 1. Generar nuevo token y extender expiración por 24 horas
+    const nuevoToken = crypto.randomBytes(32).toString("hex");
+
     const nuevaExpiracion = new Date();
     nuevaExpiracion.setHours(nuevaExpiracion.getHours() + 24);
 
-    // 2. Actualizar los campos del usuario en la base de datos
+    // 2. Actualizar token en la base
     usuario.tokenActivacion = nuevoToken;
     usuario.tokenExpiracion = nuevaExpiracion;
+
     await usuario.save();
 
-    // 3. Armar la nueva URL y disparar el correo de invitación
-    const baseUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-    const urlActivacion = `${baseUrl}/activar-cuenta?token=${nuevoToken}`;
+    // 3. Armar URL dinámica y disparar correo
+    const baseUrl = obtenerFrontendUrl(req);
+    const urlActivacion = `${baseUrl}/activar-cuenta?token=${encodeURIComponent(
+      nuevoToken
+    )}`;
 
-    // Despachamos el mail in segundo plano
-    enviarMailInvitacion(usuario.email, usuario.name, urlActivacion)
-      .catch(err => console.error("Error al reenviar mail de invitación:", err));
+    enviarMailInvitacion(usuario.email, usuario.name, urlActivacion).catch(
+      (err) => console.error("Error al reenviar mail de invitación:", err)
+    );
 
     return res.status(200).json({
       success: true,
-      message: `Se ha reenviado el correo de invitación a ${usuario.email} de forma exitosa.`
+      message: `Se ha reenviado el correo de invitación a ${usuario.email} de forma exitosa.`,
     });
-
   } catch (error) {
     console.error("Error en reenviarInvitacion:", error);
+
     return res.status(500).json({
       success: false,
-      message: "Hubo un error interno en el servidor al intentar reenviar la invitación."
+      message:
+        "Hubo un error interno en el servidor al intentar reenviar la invitación.",
     });
   }
 };
 
-// METODO: Editar datos de usuario
+/* ============================================================
+ * MÉTODO: Editar datos de usuario
+ * ============================================================ */
 const updateUser = async (req, res) => {
   try {
     const { id } = req.params;
     const { name, email, role, unidadFuncional, telefono } = req.body;
 
-    // 1. Validar que el usuario exista
     const usuario = await User.findById(id);
+
     if (!usuario) {
       return res.status(404).json({
         success: false,
@@ -333,37 +471,41 @@ const updateUser = async (req, res) => {
       });
     }
 
-    // 2. Validar si el email fue cambiado y si ya le pertenece a otro usuario
-    if (email && email !== usuario.email) {
-      const emailDuplicado = await User.findOne({ email });
+    if (email && email.trim().toLowerCase() !== usuario.email) {
+      const emailLimpio = email.trim().toLowerCase();
+
+      const emailDuplicado = await User.findOne({
+        email: emailLimpio,
+        _id: { $ne: usuario._id },
+      });
+
       if (emailDuplicado) {
         return res.status(400).json({
           success: false,
           message: "El correo electrónico ya está registrado por otro usuario.",
         });
       }
+
+      usuario.email = emailLimpio;
     }
 
-    // 3. Asignar los nuevos valores
-    usuario.name = name || usuario.name;
-    usuario.email = email ? email.toLowerCase() : usuario.email;
+    usuario.name = name ? name.trim() : usuario.name;
     usuario.role = role || usuario.role;
-    usuario.unidadFuncional = unidadFuncional; // Se puede sobreescribir o limpiar si viene undefined
-    usuario.telefono = telefono;
+    usuario.unidadFuncional =
+      typeof unidadFuncional === "string" ? unidadFuncional : usuario.unidadFuncional;
+    usuario.telefono = typeof telefono === "string" ? telefono : usuario.telefono;
 
-    // 4. Guardar en Atlas de forma definitiva
     const usuarioActualizado = await usuario.save();
 
-    // 📝 NUEVO: Registrar acción en el Log de Auditoría
     await registrarLog(req, "USUARIO_EDITADO", usuarioActualizado._id, {
       nombreUsuario: usuarioActualizado.name,
-      cambios: { 
-        name: usuarioActualizado.name, 
-        email: usuarioActualizado.email, 
-        role: usuarioActualizado.role, 
+      cambios: {
+        name: usuarioActualizado.name,
+        email: usuarioActualizado.email,
+        role: usuarioActualizado.role,
         unidadFuncional: usuarioActualizado.unidadFuncional,
-        telefono: usuarioActualizado.telefono
-      }
+        telefono: usuarioActualizado.telefono,
+      },
     });
 
     return res.status(200).json({
@@ -373,6 +515,7 @@ const updateUser = async (req, res) => {
     });
   } catch (error) {
     console.error("Error al actualizar usuario:", error);
+
     return res.status(500).json({
       success: false,
       message: "Error interno del servidor al procesar la actualización.",
@@ -380,23 +523,27 @@ const updateUser = async (req, res) => {
   }
 };
 
-// MÉTODO: Obtener el historial de auditoría (logs) para el Administrador
+/* ============================================================
+ * MÉTODO: Obtener historial de auditoría
+ * ============================================================ */
 const getAuditLogs = async (req, res) => {
   try {
-    const AuditLog = require('../models/AuditLog'); // Lo requerimos de forma interna para evitar referencias circulares
-    
-    // Buscamos todos los logs, ordenados del más reciente al más viejo
-    const logs = await AuditLog.find({}).sort({ timestamp: -1 }).limit(100); // Limitamos a los últimos 100 por rendimiento
-    
+    const AuditLog = require("../models/AuditLog");
+
+    const logs = await AuditLog.find({})
+      .sort({ timestamp: -1 })
+      .limit(100);
+
     return res.status(200).json({
       success: true,
-      logs
+      logs,
     });
   } catch (error) {
     console.error("Error en getAuditLogs:", error);
+
     return res.status(500).json({
       success: false,
-      message: "Hubo un error al obtener el historial de auditoría."
+      message: "Hubo un error al obtener el historial de auditoría.",
     });
   }
 };
@@ -405,10 +552,10 @@ module.exports = {
   loginUser,
   getUsers,
   crearUsuario,
-  activarCuenta, 
+  activarCuenta,
   toggleStatus,
   eliminarUsuario,
   reenviarInvitacion,
   updateUser,
-  getAuditLogs
+  getAuditLogs,
 };

@@ -2,75 +2,121 @@
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 
-// 🛡️ Middleware para rutas accesibles por Admin y Super Admin
-const protegerAdmin = async (req, res, next) => {
-  let token;
+/* ============================================================
+ * HELPERS
+ * ============================================================ */
 
-  if (req.headers.authorization && req.headers.authorization.startsWith("Bearer")) {
-    try {
-      token = req.headers.authorization.split(" ")[1];
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      req.user = await User.findById(decoded.id).select("-password");
+/**
+ * Extrae el token JWT desde el header Authorization.
+ * Formato esperado:
+ * Authorization: Bearer TOKEN
+ */
+const extraerToken = (req) => {
+  const authorization = req.headers.authorization;
 
-      if (req.user && (req.user.role === "admin" || req.user.role === "superadmin")) {
-        return next();
-      } else {
-        return res.status(403).json({ 
-          success: false, 
-          message: "Acceso denegado. Se requieren privilegios de administración." 
-        });
-      }
-    } catch (error) {
-      console.error("Error de autenticación en middleware admin:", error);
-      return res.status(401).json({ 
-        success: false, 
-        message: "Token inválido o expirado. Iniciá sesión nuevamente." 
-      });
-    }
+  if (!authorization || !authorization.startsWith("Bearer ")) {
+    return null;
   }
 
-  if (!token) {
-    return res.status(401).json({ 
-      success: false, 
-      message: "No autorizado, no se proporcionó ningún token de acceso." 
-    });
-  }
+  const token = authorization.split(" ")[1];
+
+  return token || null;
 };
 
-// 👑 NUEVO: Middleware exclusivo para el rol Super Admin
-const protegerSuperAdmin = async (req, res, next) => {
-  let token;
-
-  if (req.headers.authorization && req.headers.authorization.startsWith("Bearer")) {
+/**
+ * Middleware genérico para proteger rutas según roles permitidos.
+ */
+const protegerPorRoles = (rolesPermitidos = []) => {
+  return async (req, res, next) => {
     try {
-      token = req.headers.authorization.split(" ")[1];
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      req.user = await User.findById(decoded.id).select("-password");
+      const token = extraerToken(req);
 
-      // Verificación estricta de Super Admin
-      if (req.user && req.user.role === "superadmin") {
-        return next();
-      } else {
-        return res.status(403).json({ 
-          success: false, 
-          message: "Acceso denegado. Esta acción requiere permisos exclusivos de Super Admin." 
+      if (!token) {
+        return res.status(401).json({
+          success: false,
+          message: "No autorizado, no se proporcionó ningún token de acceso.",
         });
       }
+
+      if (!process.env.JWT_SECRET) {
+        console.error("JWT_SECRET no está configurado en las variables de entorno.");
+
+        return res.status(500).json({
+          success: false,
+          message: "Error de configuración del servidor.",
+        });
+      }
+
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+      if (!decoded || !decoded.id) {
+        return res.status(401).json({
+          success: false,
+          message: "Token inválido. Iniciá sesión nuevamente.",
+        });
+      }
+
+      const usuario = await User.findById(decoded.id).select("-password");
+
+      if (!usuario) {
+        return res.status(401).json({
+          success: false,
+          message: "Usuario no encontrado. Iniciá sesión nuevamente.",
+        });
+      }
+
+      if (usuario.estado === "pendiente") {
+        return res.status(403).json({
+          success: false,
+          message: "La cuenta aún no está activada.",
+        });
+      }
+
+      if (usuario.estado === "inactivo" || usuario.estado === "inactive") {
+        return res.status(403).json({
+          success: false,
+          message: "La cuenta se encuentra inactiva.",
+        });
+      }
+
+      const tieneRolPermitido = rolesPermitidos.includes(usuario.role);
+
+      if (!tieneRolPermitido) {
+        return res.status(403).json({
+          success: false,
+          message: "Acceso denegado. No tenés permisos suficientes para realizar esta acción.",
+        });
+      }
+
+      req.user = usuario;
+
+      return next();
     } catch (error) {
-      console.error("Error de autenticación en middleware superadmin:", error);
-      return res.status(401).json({ 
-        success: false, 
-        message: "Token inválido o expirado. Iniciá sesión nuevamente." 
+      console.error("Error de autenticación en authMiddleware:", error);
+
+      return res.status(401).json({
+        success: false,
+        message: "Token inválido o expirado. Iniciá sesión nuevamente.",
       });
     }
-  }
-
-  if (!token) {
-    return res.status(401).json({ 
-      success: false, 
-      message: "No autorizado, no se proporcionó ningún token de acceso." 
-    });
-  }
+  };
 };
 
-module.exports = { protegerAdmin, protegerSuperAdmin };
+/* ============================================================
+ * MIDDLEWARES EXPORTADOS
+ * ============================================================ */
+
+/**
+ * Rutas accesibles por Admin y Super Admin.
+ */
+const protegerAdmin = protegerPorRoles(["admin", "superadmin"]);
+
+/**
+ * Rutas exclusivas para Super Admin.
+ */
+const protegerSuperAdmin = protegerPorRoles(["superadmin"]);
+
+module.exports = {
+  protegerAdmin,
+  protegerSuperAdmin,
+};

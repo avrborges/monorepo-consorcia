@@ -46,14 +46,14 @@ export default function DashboardLayout() {
       {/* 2. BARRA LATERAL (ESTILO ASIMÉTRICO PREMIUM) */}
       <aside className={`
         fixed inset-y-0 left-0 z-50 bg-[#0b132b] text-slate-300 flex flex-col justify-between shadow-xl transition-transform duration-300
-        w-64 border-r border-white/[0.03]
+        w-64 border-r border-white/3
         ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"} 
         md:relative md:translate-x-0 shrink-0
       `}>
         <div className="flex flex-col flex-1 min-h-0">
           
           {/* SECCIÓN SUPERIOR: PERFIL DE USUARIO PRINCIPAL */}
-          <div className="py-8 px-4 flex flex-col items-center text-center border-b border-white/[0.04] shrink-0 relative">
+          <div className="py-8 px-4 flex flex-col items-center text-center border-b border-white/4 shrink-0 relative">
             <button 
               onClick={() => setIsSidebarOpen(false)}
               className="absolute top-4 right-4 text-slate-500 hover:text-white transition md:hidden p-1"
@@ -63,7 +63,7 @@ export default function DashboardLayout() {
 
             <div className="relative">
               {/* Avatar circular */}
-              <div className="h-14 w-14 rounded-full bg-white/[0.06] text-white border border-white/[0.1] flex items-center justify-center font-black text-lg shadow-md">
+              <div className="h-14 w-14 rounded-full bg-white/6 text-white border border-white/10 flex items-center justify-center font-black text-lg shadow-md">
                 {user.name.charAt(0).toUpperCase()}
               </div>
               {/* Indicador de estado online */}
@@ -92,7 +92,7 @@ export default function DashboardLayout() {
                     className={`flex items-center space-x-3 px-4 py-3 transition-all duration-150 group relative ${
                       isActive 
                         ? "bg-[#f8fafc] text-slate-900 font-bold rounded-l-xl border-l-4 border-[#fca311]" 
-                        : "text-slate-400/80 hover:bg-white/[0.02] hover:text-slate-200 rounded-l-xl mr-3"
+                        : "text-slate-400/80 hover:bg-white/2 hover:text-slate-200 rounded-l-xl mr-3"
                     }`}
                   >
                     {/* Ícono dinámico */}
@@ -109,7 +109,7 @@ export default function DashboardLayout() {
         </div>
 
         {/* PIE DEL SIDEBAR: BOTÓN CERRAR SESIÓN */}
-        <div className="p-3 border-t border-white/[0.04] bg-transparent shrink-0">
+        <div className="p-3 border-t border-white/4 bg-transparent shrink-0">
           <button
             onClick={handleLogout}
             className="w-full flex items-center space-x-3 px-4 py-3 text-slate-400/70 hover:bg-rose-500/10 hover:text-rose-400 rounded-xl transition duration-150 group cursor-pointer"
@@ -146,7 +146,7 @@ export default function DashboardLayout() {
         </header>
 
         {/* 4. CONTENEDOR DEL CONTENIDO VARIABLE */}
-        <main className="p-4 sm:p-8 flex-1 overflow-y-auto max-w-[1600px] w-full mx-auto animate-fade-in">
+        <main className="p-4 sm:p-8 flex-1 overflow-y-auto max-w-400 w-full mx-auto animate-fade-in">
           <Outlet />
         </main>
       </div>
