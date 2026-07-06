@@ -150,7 +150,7 @@ export default function DashboardLayout() {
         {/* 4. CONTENEDOR DEL CONTENIDO VARIABLE */}
         {/* 🎯 CORRECCIÓN 4: Se agrega min-h-0 para habilitar correctamente el scroll del flexbox interno */}
         <main className="p-4 sm:p-8 flex-1 overflow-y-auto w-full mx-auto animate-fade-in min-h-0">
-          <div className="max-w-[1600px] mx-auto">
+          <div className="max-w-400 mx-auto">
             <Outlet />
           </div>
         </main>

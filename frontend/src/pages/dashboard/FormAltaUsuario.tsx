@@ -169,7 +169,7 @@ export default function FormAltaUsuario({
 
   // 🎯 PORTAL DE REACT: Renderiza el HTML directamente bajo el <body> para independizarlo de layouts padres limitados
   return createPortal(
-    <div className="fixed inset-0 z-[999] flex justify-end bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300">
+    <div className="fixed inset-0 z-999 flex justify-end bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300">
       <div className="absolute inset-0 -z-10" onClick={onCerrar} />
 
       {/* Al estar montado sobre el body, h-screen tomará de forma estricta la altura total del navegador sin cortarse */}
