@@ -3,7 +3,7 @@ import type { SyntheticEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { MdErrorOutline } from "react-icons/md";
 import { CiCircleCheck } from "react-icons/ci";
-import { HiOutlineEye, HiOutlineEyeOff } from "react-icons/hi";
+import { HiOutlineEye, HiOutlineEyeOff, HiOutlineMail, HiOutlineLockClosed } from "react-icons/hi";
 
 import AuthLayout from "../components/AuthLayout";
 import { loginRequest } from "../api";
@@ -58,7 +58,6 @@ export default function Login() {
       setErrorMsg(result.message);
     } catch (error) {
       console.error("Error durante el inicio de sesión:", error);
-
       setErrorMsg(
         "No fue posible conectarse con el servidor. Intente nuevamente."
       );
@@ -82,140 +81,146 @@ export default function Login() {
       title="Bienvenido de nuevo"
       subtitle="Ingresa tus credenciales para acceder al panel administrativo."
     >
-      {/* Mensajes de feedback */}
-      {errorMsg && (
-        <div className="mb-4 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-medium text-red-600">
-          <MdErrorOutline className="shrink-0 text-lg" />
-          <span>{errorMsg}</span>
-        </div>
-      )}
+      {/* Contenedor tipo Card para Mobile: Agrupa y rompe el fondo plano */}
+      <div className="bg-white rounded-2xl border border-slate-100 p-5 sm:p-6 shadow-xl shadow-slate-200/50">
+        
+        {/* Mensajes de feedback */}
+        {errorMsg && (
+          <div className="mb-5 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-medium text-red-600 animate-in fade-in zoom-in-95 duration-200">
+            <MdErrorOutline className="shrink-0 text-lg" />
+            <span>{errorMsg}</span>
+          </div>
+        )}
 
-      {successMsg && (
-        <div className="mb-4 flex items-center gap-2 rounded-xl border border-teal-200 bg-teal-50 p-3 text-sm font-medium text-teal-700">
-          <CiCircleCheck className="shrink-0 text-lg" />
-          <span>{successMsg} Redirigiendo...</span>
-        </div>
-      )}
+        {successMsg && (
+          <div className="mb-5 flex items-center gap-2 rounded-xl border border-teal-200 bg-teal-50 p-3 text-sm font-medium text-teal-700 animate-in fade-in zoom-in-95 duration-200">
+            <CiCircleCheck className="shrink-0 text-lg" />
+            <span>{successMsg} Redirigiendo...</span>
+          </div>
+        )}
 
-      {/* Formulario */}
-      <form className="space-y-5" onSubmit={handleSubmit}>
-        <div>
-          <label
-            htmlFor="email"
-            className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500"
-          >
-            Correo electrónico
-          </label>
-
-          <input
-            id="email"
-            name="email"
-            type="email"
-            required
-            autoFocus // 🎯 Autofoco inteligente al cargar la pantalla
-            disabled={isLoading}
-            autoComplete="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 shadow-sm transition-all focus:border-teal-600 focus:ring-4 focus:ring-teal-600/10 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
-          />
-        </div>
-
-        <div>
-          <div className="mb-2 flex items-end justify-between">
+        {/* Formulario */}
+        <form className="space-y-5" onSubmit={handleSubmit}>
+          <div>
             <label
-              htmlFor="password"
-              className="block text-xs font-bold uppercase tracking-wider text-slate-500"
+              htmlFor="email"
+              className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500"
             >
-              Contraseña
+              Correo electrónico
             </label>
-
-            <button
-              type="button"
-              disabled={isLoading}
-              onClick={handleForgotPasswordClick}
-              className="text-xs font-bold text-teal-600 transition-colors hover:text-teal-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              ¿Olvidaste tu contraseña?
-            </button>
+            <div className="relative">
+              {/* Ícono de Email */}
+              <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400 pointer-events-none">
+                <HiOutlineMail className="w-5 h-5" />
+              </span>
+              <input
+                id="email"
+                name="email"
+                type="email"
+                required
+                autoFocus
+                disabled={isLoading}
+                autoComplete="email"
+                placeholder="ejemplo@correo.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-white pl-11 pr-4 py-3 text-sm text-slate-800 shadow-sm transition-all focus:border-teal-600 focus:ring-4 focus:ring-teal-600/10 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed placeholder:text-slate-300"
+              />
+            </div>
           </div>
 
-          <div className="relative">
-            <input
-              id="password"
-              name="password"
-              type={showPassword ? "text" : "password"}
-              required
-              disabled={isLoading}
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-white pl-4 pr-12 py-3 font-mono text-sm text-slate-800 shadow-sm transition-all focus:border-teal-600 focus:ring-4 focus:ring-teal-600/10 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
-            />
-            
-            <button
-              type="button"
-              disabled={isLoading}
-              onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors p-1 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-              title={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
-            >
-              {showPassword ? (
-                <HiOutlineEyeOff className="w-5 h-5" />
-              ) : (
-                <HiOutlineEye className="w-5 h-5" />
-              )}
-            </button>
-          </div>
-        </div>
-
-        {/* 🎯 Botón optimizado con flex, gap y spinner animado */}
-        <button
-          type="submit"
-          disabled={isLoading}
-          className="w-full rounded-xl bg-[#1e6f65] py-3 font-bold text-white shadow-lg shadow-teal-900/20 transition hover:bg-[#16524b] disabled:cursor-not-allowed disabled:opacity-70 cursor-pointer flex items-center justify-center gap-2"
-        >
-          {isLoading ? (
-            <>
-              <svg 
-                className="animate-spin h-5 w-5 text-white" 
-                xmlns="http://www.w3.org/2000/svg" 
-                fill="none" 
-                viewBox="0 0 24 24"
+          <div>
+            <div className="mb-2 flex items-end justify-between">
+              <label
+                htmlFor="password"
+                className="block text-xs font-bold uppercase tracking-wider text-slate-500"
               >
-                <circle 
-                  className="opacity-25" 
-                  cx="12" 
-                  cy="12" 
-                  r="10" 
-                  stroke="currentColor" 
-                  strokeWidth="4"
-                ></circle>
-                <path 
-                  className="opacity-75" 
-                  fill="currentColor" 
-                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                ></path>
-              </svg>
-              <span>Validando...</span>
-            </>
-          ) : (
-            "Iniciar sesión"
-          )}
-        </button>
-      </form>
+                Contraseña
+              </label>
 
-      <p className="mt-8 text-center text-sm font-semibold text-slate-500 lg:text-left">
-        ¿Tu consorcio aún no cuenta con el servicio?{" "}
-        <button
-          type="button"
-          disabled={isLoading}
-          onClick={handleContactClick}
-          className="font-bold text-teal-600 hover:text-teal-700 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-        >
-          Hablemos
-        </button>
-      </p>
+              <button
+                type="button"
+                disabled={isLoading}
+                onClick={handleForgotPasswordClick}
+                className="text-xs font-bold text-teal-600 transition-colors hover:text-teal-700 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+              >
+                ¿Olvidaste tu contraseña?
+              </button>
+            </div>
+
+            <div className="relative">
+              {/* Ícono de Password */}
+              <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400 pointer-events-none">
+                <HiOutlineLockClosed className="w-5 h-5" />
+              </span>
+              <input
+                id="password"
+                name="password"
+                type={showPassword ? "text" : "password"}
+                required
+                disabled={isLoading}
+                autoComplete="current-password"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-white pl-11 pr-12 py-3 font-mono text-sm text-slate-800 shadow-sm transition-all focus:border-teal-600 focus:ring-4 focus:ring-teal-600/10 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed placeholder:text-slate-200"
+              />
+              
+              <button
+                type="button"
+                disabled={isLoading}
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors p-1 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                title={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+              >
+                {showPassword ? (
+                  <HiOutlineEyeOff className="w-5 h-5" />
+                ) : (
+                  <HiOutlineEye className="w-5 h-5" />
+                )}
+              </button>
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            disabled={isLoading}
+            className="w-full rounded-xl bg-[#1e6f65] py-3 text-sm font-bold text-white shadow-lg shadow-teal-900/20 transition-all hover:bg-[#16524b] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-70 cursor-pointer flex items-center justify-center gap-2 mt-2"
+          >
+            {isLoading ? (
+              <>
+                <svg 
+                  className="animate-spin h-5 w-5 text-white" 
+                  xmlns="http://www.w3.org/2000/svg" 
+                  fill="none" 
+                  viewBox="0 0 24 24"
+                >
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <span>Validando...</span>
+              </>
+            ) : (
+              "Iniciar sesión"
+            )}
+          </button>
+        </form>
+      </div>
+
+      {/* Footer del login refinado */}
+      <div className="mt-8 text-center p-4 bg-slate-50/60 rounded-xl border border-slate-100/80">
+        <p className="text-xs font-semibold text-slate-500">
+          ¿Tu consorcio aún no cuenta con el servicio?{" "}
+          <button
+            type="button"
+            disabled={isLoading}
+            onClick={handleContactClick}
+            className="font-bold text-teal-600 hover:text-teal-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+          >
+            Hablemos
+          </button>
+        </p>
+      </div>
     </AuthLayout>
   );
 }

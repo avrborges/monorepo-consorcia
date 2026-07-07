@@ -628,7 +628,7 @@ export default function ListaUsuarios() {
 
       {/* Modales correspondientes */}
       <FormAltaUsuario 
-        key={usuarioEditando?._id || "alta-usuario"} 
+        key={modalAbierto ? `abierto-${usuarioEditando?._id || "alta"}` : "cerrado"}
         modalAbierto={modalAbierto} 
         onCerrar={manejarCerrarModal} 
         onUsuarioCreado={recargarUsuarios} 
