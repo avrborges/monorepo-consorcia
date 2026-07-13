@@ -5,7 +5,7 @@ const { protegerAdmin } = require('../middleware/authMiddleware'); // 🔑 Impor
 
 // Protegemos todos los endpoints de las Unidades Funcionales para admins y superadmins
 router.use(protegerAdmin); 
-
+router.post('/', unidadController.crearUnidad);
 router.get('/', unidadController.getUnidades);
 router.put('/:id/vincular', unidadController.vincularHabitantes);
 

@@ -11,6 +11,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import DashboardLayout from "./components/DashboardLayout";
 import Overview from "./pages/dashboard/Overview";
 import ListaUsuarios from "./pages/dashboard/ListaUsuarios";
+import MapaEdificio from "./pages/dashboard/MapaEdificio"; // 🆕 Importamos tu nueva pantalla
 
 /* ============================================================
  * CONSTANTES
@@ -21,7 +22,6 @@ const MOBILE_BREAKPOINT = 768;
  * HOOK: detección reactiva de mobile (via matchMedia)
  * ============================================================ */
 function useIsMobile(breakpoint = MOBILE_BREAKPOINT): boolean {
-  // Usamos matchMedia también en el estado inicial → misma fuente de verdad
   const [isMobile, setIsMobile] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
     return window.matchMedia(`(max-width: ${breakpoint - 1}px)`).matches;
@@ -29,11 +29,8 @@ function useIsMobile(breakpoint = MOBILE_BREAKPOINT): boolean {
 
   useEffect(() => {
     const media = window.matchMedia(`(max-width: ${breakpoint - 1}px)`);
-
     const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
-
     media.addEventListener("change", handler);
-
     return () => media.removeEventListener("change", handler);
   }, [breakpoint]);
 
@@ -52,14 +49,9 @@ function estaAutenticado(): boolean {
  * ============================================================ */
 function RootHandler() {
   const isMobile = useIsMobile();
-
-  // Si ya hay sesión activa, saltamos directo al dashboard
   if (estaAutenticado()) {
     return <Navigate to="/dashboard" replace />;
   }
-
-  // Mobile → splash screen (que decide su propio redirect)
-  // Desktop → landing page pública
   return isMobile ? <SplashScreen /> : <Landing />;
 }
 
@@ -67,7 +59,6 @@ function RootHandler() {
  * FALLBACK 404 / RUTA NO ENCONTRADA
  * ============================================================ */
 function NotFoundRedirect() {
-  // Autenticado → dashboard; sin sesión → login
   const destino = estaAutenticado() ? "/dashboard" : "/login";
   return <Navigate to={destino} replace />;
 }
@@ -100,6 +91,7 @@ function App() {
               }
             >
               <Route path="usuarios" element={<ListaUsuarios />} />
+              <Route path="unidades" element={<MapaEdificio />} /> {/* 🆕 Registrada bajo /dashboard/unidades */}
             </Route>
           </Route>
         </Route>

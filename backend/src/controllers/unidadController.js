@@ -24,6 +24,55 @@ exports.getUnidades = async (req, res) => {
 };
 
 /**
+ * Crea una nueva Unidad Funcional en la base de datos.
+ */
+exports.crearUnidad = async (req, res) => {
+  try {
+    const { piso, departamento, coeficiente, estadoOcupacion } = req.body;
+
+    // Validación estricta de campos obligatorios
+    if (!piso || !departamento) {
+      return res.status(400).json({ 
+        ok: false, 
+        msg: 'El piso y el departamento son datos obligatorios.' 
+      });
+    }
+
+    // Comprobamos duplicados en el mismo piso/departamento para evitar inconsistencias
+    const unidadExistente = await UnidadFuncional.findOne({ piso, departamento });
+    if (unidadExistente) {
+      return res.status(400).json({ 
+        ok: false, 
+        msg: `La unidad ${piso}° "${departamento}" ya se encuentra registrada.` 
+      });
+    }
+
+    // Instanciamos el documento
+    const nuevaUnidad = new UnidadFuncional({
+      piso,
+      departamento,
+      coeficiente: coeficiente || 0,
+      estadoOcupacion: estadoOcupacion || 'vacio',
+    });
+
+    await nuevaUnidad.save();
+
+    // Retornamos la unidad creada con éxito para que impacte directo en el plano del frontend
+    return res.status(201).json({
+      ok: true,
+      msg: 'Unidad funcional dada de alta con éxito.',
+      unidad: nuevaUnidad,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      msg: 'Error al dar de alta la unidad funcional.',
+      error: error.message,
+    });
+  }
+};
+
+/**
  * Vincula o desvincula usuarios (propietario/inquilino) a una U.F.
  */
 exports.vincularHabitantes = async (req, res) => {

@@ -1,19 +1,21 @@
 // src/components/ProtectedRoute.tsx
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 
+// 1. Definimos la interfaz para que TypeScript acepte la propiedad opcional
+interface ProtectedRouteProps {
+  rolesPermitidos?: string[];
+}
+
 // Función auxiliar para parsear y validar JWT de forma segura
 function isTokenValid(token: string | null): boolean {
   if (!token) return false;
   
   try {
-    // Un JWT válido siempre tiene 3 partes separadas por puntos
     const parts = token.split('.');
     if (parts.length !== 3) return false;
 
-    // Decodificamos el payload (la parte del medio)
     const payload = JSON.parse(atob(parts[1]));
     
-    // Si el token tiene fecha de expiración ('exp'), verificamos que no haya pasado
     if (payload.exp) {
       const currentTime = Date.now() / 1000;
       return payload.exp > currentTime;
@@ -22,21 +24,41 @@ function isTokenValid(token: string | null): boolean {
     return true; 
   } catch (error) {
     console.error("Error al validar el token de sesión:", error);
-    return false; // Si falla el parseo, el token está corrupto
+    return false;
   }
 }
 
-export default function ProtectedRoute() {
+// Función auxiliar para extraer el rol de manera segura
+function obtenerRolUsuario(token: string | null): string | null {
+  if (!token) return null;
+  try {
+    const parts = token.split('.');
+    const payload = JSON.parse(atob(parts[1]));
+    return payload.role || null; // 💡 Ajustá 'role' según cómo venga nombrado en tu JWT payload
+  } catch {
+    return null;
+  }
+}
+
+export default function ProtectedRoute({ rolesPermitidos }: ProtectedRouteProps) {
   const token = localStorage.getItem("token");
   const location = useLocation();
 
-  // 💡 Ahora validamos la existencia Y la integridad/expiración del token
+  // 1. Verificación primaria de autenticación
   if (!isTokenValid(token)) {
-    // Limpiamos basura en caso de que el token haya estado corrupto/expirado
     localStorage.removeItem("token");
     localStorage.removeItem("user");
-    
     return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  // 2. Verificación secundaria de autorización por rol
+  if (rolesPermitidos) {
+    const rolUsuario = obtenerRolUsuario(token);
+
+    if (!rolUsuario || !rolesPermitidos.includes(rolUsuario)) {
+      // Si no tiene el rol necesario, lo mandamos al index del dashboard de forma segura
+      return <Navigate to="/dashboard" replace />;
+    }
   }
 
   return <Outlet />;

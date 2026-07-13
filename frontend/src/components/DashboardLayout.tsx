@@ -1,7 +1,13 @@
 // src/components/DashboardLayout.tsx
 import { useState } from "react";
 import { Outlet, useNavigate, Link, useLocation } from "react-router-dom";
-import { HiChartPie, HiMenu, HiX, HiOutlineUserGroup } from "react-icons/hi"; 
+import { 
+  HiChartPie, 
+  HiMenu, 
+  HiX, 
+  HiOutlineUserGroup, 
+  HiOutlineOfficeBuilding // 🏢 Ícono importado para Unidades Funcionales
+} from "react-icons/hi"; 
 import { FaSignOutAlt } from "react-icons/fa";
 
 export default function DashboardLayout() {
@@ -22,7 +28,14 @@ export default function DashboardLayout() {
     { name: "Panel de Control", path: "/dashboard", icon: <HiChartPie className="w-5 h-5" /> },
   ];
 
+  // Restringimos la visibilidad de las herramientas estructurales para administradores
   if (user.role === "admin" || user.role === "superadmin") {
+    menuItems.push({
+      name: "Unidades Funcionales",
+      path: "/dashboard/unidades", // Asegurate de que esta ruta coincida con tu App.tsx
+      icon: <HiOutlineOfficeBuilding className="w-5 h-5" />
+    });
+
     menuItems.push({
       name: "Lista de Usuarios",
       path: "/dashboard/usuarios", 
@@ -31,7 +44,6 @@ export default function DashboardLayout() {
   }
 
   return (
-    // 🎯 CORRECCIÓN 1: Clava el viewport global para evitar el scroll infinito en la ventana del navegador
     <div className="h-screen w-screen overflow-hidden bg-[#f8fafc] flex font-sans text-slate-800 antialiased relative">
       
       {/* 1. CAPA OSCURA DE FONDO (BACKDROP PARA MÓVILES) */}
@@ -43,7 +55,6 @@ export default function DashboardLayout() {
       )}
 
       {/* 2. BARRA LATERAL (ESTILO ASIMÉTRICO PREMIUM) */}
-      {/* 🎯 CORRECCIÓN 2: Se agrega h-full para asegurar que el sidebar mantenga siempre el alto estricto de la pantalla */}
       <aside className={`
         fixed inset-y-0 left-0 z-50 bg-[#0b132b] text-slate-300 flex flex-col justify-between shadow-xl transition-transform duration-300
         w-64 border-r border-white/3 h-full
@@ -121,11 +132,9 @@ export default function DashboardLayout() {
       </aside>
 
       {/* CONTENEDOR DERECHO PRINCIPAL */}
-      {/* 🎯 CORRECCIÓN 3: Agregamos h-full para acompañar el bloqueo del contenedor padre */}
       <div className="flex-1 flex flex-col min-w-0 h-full">
         
         {/* 3. BARRA SUPERIOR ULTRA LIMPIA */}
-        {/* Cambiamos sticky por shrink-0 ya que el header debe permanecer estático arriba */}
         <header className="bg-white/80 backdrop-blur-md border-b border-slate-100 h-16 flex items-center justify-between px-4 sm:px-6 shrink-0 z-30">
           <div className="flex items-center space-x-3">
             <button
@@ -148,7 +157,6 @@ export default function DashboardLayout() {
         </header>
 
         {/* 4. CONTENEDOR DEL CONTENIDO VARIABLE */}
-        {/* 🎯 CORRECCIÓN 4: Se agrega min-h-0 para habilitar correctamente el scroll del flexbox interno */}
         <main className="p-4 sm:p-8 flex-1 overflow-y-auto w-full mx-auto animate-fade-in min-h-0">
           <div className="max-w-400 mx-auto">
             <Outlet />
