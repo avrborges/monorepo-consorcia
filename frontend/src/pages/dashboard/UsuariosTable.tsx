@@ -133,7 +133,6 @@ export default function UsuariosTable({
   };
 
   return (
-    /* 🎯 CAMBIO CLAVE: Se configuró un comportamiento de scroll controlado y aislado */
     <div ref={contenedorRef} className="w-full overflow-x-auto overflow-y-hidden min-h-0">
       <table className="w-full min-w-237.5 text-left border-collapse layout-auto">
         <thead>
@@ -189,61 +188,66 @@ export default function UsuariosTable({
               const fechaExpiracion = u.tokenExpiracion ? new Date(u.tokenExpiracion).getTime() : 0;
               const estaExpirado = esPendiente && (ahoraMs > fechaExpiracion);
 
+              const filaAtenuada = esInactivo || estaExpirado;
+              
+              // Variable de control para atenuar las celdas de texto individuales sin afectar las acciones
+              const claseOpacidad = filaAtenuada ? "opacity-40" : "";
+
               return (
                 <tr
                   key={u._id}
-                  className={`hover:bg-slate-50/40 transition-colors ${
-                    esInactivo ? "bg-slate-50/40 opacity-75" : ""
+                  className={`hover:bg-slate-50 transition-colors ${
+                    filaAtenuada ? "bg-slate-50/20" : ""
                   }`}
                 >
-                  <td className={`px-4 py-4 font-bold ${esInactivo ? "text-slate-500 line-through font-medium" : "text-slate-900"}`}>
+                  <td className={`px-4 py-4 font-bold ${claseOpacidad} ${filaAtenuada ? "text-slate-400 line-through font-medium" : "text-slate-900"}`}>
                     {u.name}
                   </td>
-                  <td className="px-4 py-4 text-slate-500">
+                  <td className={`px-4 py-4 text-slate-500 ${claseOpacidad}`}>
                     <div className="flex items-center gap-2 max-w-60 truncate" title={u.email}>
-                      <HiOutlineMail className="w-4 h-4 text-slate-400 shrink-0" />
-                      <span className={`${esInactivo ? "line-through" : ""} truncate`}>
+                      <HiOutlineMail className={`w-4 h-4 shrink-0 ${filaAtenuada ? "text-slate-300" : "text-slate-400"}`} />
+                      <span className={`${filaAtenuada ? "line-through text-slate-400" : ""} truncate`}>
                         {u.email}
                       </span>
                     </div>
                   </td>
-                  <td className="px-4 py-4">
+                  <td className={`px-4 py-4 ${claseOpacidad}`}>
                     <BadgeRol role={u.role} />
                   </td>
                   
-                  <td className="hidden xl:table-cell px-4 py-4 text-slate-600 font-bold">
+                  <td className={`hidden xl:table-cell px-4 py-4 text-slate-600 font-bold ${claseOpacidad}`}>
                     {u.unidadFuncional ? (
                       <div className="flex items-center gap-1.5">
-                        <HiOutlineOfficeBuilding className="w-4 h-4 text-slate-400 shrink-0" />
-                        <span className={esInactivo ? "line-through font-medium text-slate-400" : ""}>
+                        <HiOutlineOfficeBuilding className={`w-4 h-4 shrink-0 ${filaAtenuada ? "text-slate-300" : "text-slate-400"}`} />
+                        <span className={filaAtenuada ? "line-through font-medium text-slate-400" : ""}>
                           {u.unidadFuncional}
                         </span>
                       </div>
                     ) : (
-                      <span className="text-slate-300 font-normal">-</span>
+                      <span className="text-slate-300 font-normal select-none">-</span>
                     )}
                   </td>
                   
-                  <td className="hidden lg:table-cell px-4 py-4 text-slate-500">
+                  <td className={`hidden lg:table-cell px-4 py-4 text-slate-500 ${claseOpacidad}`}>
                     {u.telefono ? (
                       <div className="flex items-center gap-1.5">
-                        <HiOutlinePhone className="w-4 h-4 text-slate-400 shrink-0" />
-                        <span className={esInactivo ? "line-through" : ""}>
+                        <HiOutlinePhone className={`w-4 h-4 shrink-0 ${filaAtenuada ? "text-slate-300" : "text-slate-400"}`} />
+                        <span className={filaAtenuada ? "line-through text-slate-400" : ""}>
                           {u.telefono}
                         </span>
                       </div>
                     ) : (
-                      <span className="text-slate-300 font-normal">-</span>
+                      <span className="text-slate-300 font-normal select-none">-</span>
                     )}
                   </td>
                   
-                  <td className="px-4 py-4">
+                  <td className={`px-4 py-4 ${claseOpacidad}`}>
                     {estaExpirado ? (
                       <div 
-                        className="flex items-center gap-1.5 text-rose-600 font-bold text-xs shrink-0 cursor-help" 
+                        className="flex items-center gap-1.5 text-rose-500/90 font-bold text-xs shrink-0 cursor-help" 
                         title="El enlace de invitación enviado por correo caducó (límite de 24 hs)."
                       >
-                        <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse" />
                         <span>Expirada</span>
                       </div>
                     ) : (
@@ -251,6 +255,7 @@ export default function UsuariosTable({
                     )}
                   </td>
                   
+                  {/* Esta celda de acciones se mantiene sin claseOpacidad para que el menú flote al 100% */}
                   <td className="px-4 py-4 text-right relative">
                     <div className="flex items-center justify-end relative">
                       
