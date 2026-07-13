@@ -16,7 +16,6 @@ import FormAltaUsuario from "./FormAltaUsuario";
 import UsuariosTable from "./UsuariosTable";
 import Paginador from "./Paginador";
 import ModalConfirmacion from "./ModalConfirmacion";
-// 📝 Importamos el componente de auditoría corregido y tipado de forma segura
 import HistorialAuditoria from "./HistorialAuditoria";
 
 /* ============================================================
