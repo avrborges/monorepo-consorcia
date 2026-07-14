@@ -119,3 +119,36 @@ exports.vincularHabitantes = async (req, res) => {
     });
   }
 };
+
+/**
+ * Elimina una Unidad Funcional de la base de datos por su ID.
+ */
+exports.eliminarUnidad = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Buscamos si la unidad existe
+    const unidad = await UnidadFuncional.findById(id);
+    if (!unidad) {
+      return res.status(404).json({ 
+        ok: false, 
+        msg: 'La unidad funcional no existe o ya fue eliminada.' 
+      });
+    }
+
+    // Eliminamos la unidad
+    await UnidadFuncional.findByIdAndDelete(id);
+
+    return res.status(200).json({
+      ok: true,
+      msg: 'Unidad funcional eliminada con éxito.',
+      idEliminado: id // Retornamos el id para facilitar el filtrado del estado en React
+    });
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      msg: 'Error al eliminar la unidad funcional.',
+      error: error.message,
+    });
+  }
+};

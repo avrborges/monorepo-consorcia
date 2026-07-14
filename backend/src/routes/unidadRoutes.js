@@ -8,5 +8,6 @@ router.use(protegerAdmin);
 router.post('/', unidadController.crearUnidad);
 router.get('/', unidadController.getUnidades);
 router.put('/:id/vincular', unidadController.vincularHabitantes);
+router.delete('/:id', unidadController.eliminarUnidad); // 🗑️ Endpoint para eliminar una unidad funcional
 
 module.exports = router;

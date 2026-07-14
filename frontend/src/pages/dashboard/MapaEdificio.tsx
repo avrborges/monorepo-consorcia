@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback, memo } from "react";
 import { createPortal } from "react-dom";
 import { 
   HiOutlineOfficeBuilding, 
@@ -6,7 +6,8 @@ import {
   HiOutlineTrendingUp,
   HiOutlineExclamationCircle,
   HiX,
-  HiCheck
+  HiCheck,
+  HiOutlineTrash
 } from "react-icons/hi";
 import api from "../../api"; 
 
@@ -32,11 +33,145 @@ export interface UnidadFuncional {
   notas?: string;
 }
 
+// Subcomponente de detalle optimizado para evitar re-renderizados innecesarios
+const DetalleUnidad = memo(({ 
+  unidad, 
+  onCerrar, 
+  onGestionar,
+  onEliminar,
+  eliminando
+}: { 
+  unidad: UnidadFuncional; 
+  onCerrar: () => void; 
+  onGestionar: () => void; 
+  onEliminar: (id: string) => Promise<void>;
+  eliminando: boolean;
+}) => {
+  // El estado se inicializa en false. Gracias al uso de la prop `key` en el componente padre,
+  // este componente se desmonta y remonta automáticamente al cambiar de unidad, 
+  // reseteando este estado a false de manera natural y sin usar useEffect.
+  const [confirmandoBorrado, setConfirmandoBorrado] = useState(false);
+
+  const handleIntentarEliminar = () => {
+    if (confirmandoBorrado) {
+      onEliminar(unidad._id);
+    } else {
+      setConfirmandoBorrado(true);
+    }
+  };
+
+  return (
+    <div className="w-full bg-white border border-slate-200 lg:rounded-2xl p-6 shadow-xs max-h-[calc(100vh-3rem)] overflow-y-auto">
+      <div className="border-b border-slate-100 pb-4 mb-4 flex justify-between items-start">
+        <div>
+          <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400">Detalle de Unidad</span>
+          <h3 className="text-xl lg:text-2xl font-black text-slate-900 mt-0.5">
+            {unidad.piso === "0" || unidad.piso.toLowerCase() === "pb" 
+              ? `P. Baja "${unidad.departamento}"` 
+              : `Piso ${unidad.piso}° "${unidad.departamento}"`}
+          </h3>
+        </div>
+        <button 
+          onClick={onCerrar}
+          className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition cursor-pointer"
+        >
+          <HiX className="w-5 h-5" />
+        </button>
+      </div>
+
+      <div className="space-y-4">
+        <div>
+          <label className="text-slate-400 text-[11px] font-bold uppercase tracking-wider flex items-center gap-1">
+            <HiOutlineTrendingUp className="w-3.5 h-3.5" /> Coeficiente de Expensas
+          </label>
+          <p className="text-slate-900 font-bold text-sm mt-0.5">
+            {(unidad.coeficiente * 100).toFixed(2)}% ({unidad.coeficiente})
+          </p>
+        </div>
+
+        <div className="h-px bg-slate-100" />
+
+        <div>
+          <label className="text-slate-400 text-[11px] font-bold uppercase tracking-wider flex items-center gap-1">
+            <HiOutlineUser className="w-3.5 h-3.5" /> Propietario
+          </label>
+          {unidad.propietario ? (
+            <div className="mt-1">
+              <p className="text-slate-900 font-bold text-sm">{unidad.propietario.name}</p>
+              <p className="text-slate-500 text-xs truncate">{unidad.propietario.email}</p>
+            </div>
+          ) : (
+            <p className="text-amber-600 font-medium text-xs mt-1 italic flex items-center gap-1">
+              <HiOutlineExclamationCircle className="w-3.5 h-3.5" /> Sin propietario asignado
+            </p>
+          )}
+        </div>
+
+        {(unidad.estadoOcupacion === "inquilino" || !!unidad.inquilino) && (
+          <div>
+            <label className="text-slate-400 text-[11px] font-bold uppercase tracking-wider flex items-center gap-1">
+              <HiOutlineUser className="w-3.5 h-3.5 text-blue-500" /> Inquilino Ocupante
+            </label>
+            {unidad.inquilino ? (
+              <div className="mt-1">
+                <p className="text-slate-900 font-bold text-sm">{unidad.inquilino.name}</p>
+                <p className="text-slate-500 text-xs truncate">{unidad.inquilino.email}</p>
+              </div>
+            ) : (
+              <p className="text-slate-400 font-medium text-xs mt-1 italic">Cargando inquilino...</p>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="mt-6 pt-4 border-t border-slate-100 space-y-2">
+        <button 
+          onClick={onGestionar}
+          className="w-full bg-[#0f172a] hover:bg-slate-800 text-white font-bold text-xs py-3.5 rounded-xl transition cursor-pointer active:scale-[0.98] shadow-lg shadow-slate-900/10"
+        >
+          Gestionar Habitantes
+        </button>
+
+        <button 
+          onClick={handleIntentarEliminar}
+          disabled={eliminando}
+          className={`w-full font-bold text-xs py-3 rounded-xl transition cursor-pointer active:scale-[0.98] flex items-center justify-center gap-1.5 border ${
+            confirmandoBorrado 
+              ? "bg-red-600 hover:bg-red-700 text-white border-transparent animate-pulse" 
+              : "bg-white hover:bg-red-50 text-red-600 border-red-200"
+          } disabled:opacity-50`}
+        >
+          <HiOutlineTrash className="w-4 h-4 shrink-0" />
+          <span>
+            {eliminando 
+              ? "Eliminando..." 
+              : confirmandoBorrado 
+                ? "¿Confirmar Eliminación?" 
+                : "Eliminar Unidad"}
+          </span>
+        </button>
+
+        {confirmandoBorrado && (
+          <button
+            onClick={() => setConfirmandoBorrado(false)}
+            className="w-full text-center text-[10px] font-bold text-slate-400 hover:text-slate-600 transition py-1 cursor-pointer"
+          >
+            Cancelar acción
+          </button>
+        )}
+      </div>
+    </div>
+  );
+});
+
+DetalleUnidad.displayName = "DetalleUnidad";
+
 export default function MapaEdificio() {
   const [unidades, setUnidades] = useState<UnidadFuncional[]>([]);
   const [usuariosSistema, setUsuariosSistema] = useState<Persona[]>([]);
   const [cargando, setCargando] = useState<boolean>(true);
   const [unidadSeleccionada, setUnidadSeleccionada] = useState<UnidadFuncional | null>(null);
+  const [eliminandoUnidad, setEliminandoUnidad] = useState<boolean>(false);
   
   // Estados para el alta de nueva unidad
   const [mostrarFormAlta, setMostrarFormAlta] = useState<boolean>(false);
@@ -94,7 +229,7 @@ export default function MapaEdificio() {
     };
   }, []);
 
-  const handleCrearUnidad = async (e: React.FormEvent) => {
+  const handleCrearUnidad = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     if (!nuevoPiso || !nuevoDepto) return;
     setCreandoUnidad(true);
@@ -122,16 +257,31 @@ export default function MapaEdificio() {
     } finally {
       setCreandoUnidad(false);
     }
-  };
+  }, [nuevoPiso, nuevoDepto, nuevoCoeficiente]);
 
-  const abrirGestionHabitantes = () => {
+  const handleEliminarUnidad = useCallback(async (id: string) => {
+    setEliminandoUnidad(true);
+    try {
+      const res = await api.delete(`/unidades/${id}`);
+      if (res.data && res.data.ok) {
+        setUnidades((prev) => prev.filter((u) => u._id !== id));
+        setUnidadSeleccionada(null);
+      }
+    } catch (error) {
+      console.error("Error al eliminar la unidad funcional:", error);
+    } finally {
+      setEliminandoUnidad(false);
+    }
+  }, []);
+
+  const abrirGestionHabitantes = useCallback(() => {
     if (!unidadSeleccionada) return;
     setNuevoPropietarioId(unidadSeleccionada.propietario?._id || "");
     setNuevoInquilinoId(unidadSeleccionada.inquilino?._id || "");
     setDrawerAbierto(true);
-  };
+  }, [unidadSeleccionada]);
 
-  const guardarHabitantes = async (e: React.FormEvent) => {
+  const guardarHabitantes = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     if (!unidadSeleccionada) return;
     setGuardando(true);
@@ -153,30 +303,33 @@ export default function MapaEdificio() {
     } finally {
       setGuardando(false);
     }
-  };
+  }, [unidadSeleccionada, nuevoPropietarioId, nuevoInquilinoId]);
 
-  // Bloquear el scroll del viewport para evitar saltos en mobile al abrir modales
+  const handleCerrarDetalle = useCallback(() => {
+    setUnidadSeleccionada(null);
+  }, []);
+
+  // Bloquear el scroll de forma limpia y responsiva
   useEffect(() => {
-    const interactivoAbierto = drawerAbierto || (unidadSeleccionada !== null && window.innerWidth < 1024);
-    
-    if (interactivoAbierto) {
-      document.body.style.overflow = "hidden";
-      const style = document.createElement("style");
-      style.id = "bloqueo-scroll-modal";
-      style.innerHTML = `
-        body, html, main, #root, .flex-1, [class*="overflow-y-auto"] { 
-          overflow: hidden !important; 
-        }
-      `;
-      document.head.appendChild(style);
-    } else {
-      document.body.style.overflow = "";
-      document.getElementById("bloqueo-scroll-modal")?.remove();
-    }
+    const evaluarScroll = () => {
+      const esPantallaPequeña = window.innerWidth < 1024;
+      const interactivoAbierto = drawerAbierto || (unidadSeleccionada !== null && esPantallaPequeña);
+      
+      if (interactivoAbierto) {
+        document.documentElement.style.overflow = "hidden";
+        document.body.style.overflow = "hidden";
+      } else {
+        document.documentElement.style.overflow = "";
+        document.body.style.overflow = "";
+      }
+    };
 
+    evaluarScroll();
+    window.addEventListener("resize", evaluarScroll);
     return () => {
+      window.removeEventListener("resize", evaluarScroll);
+      document.documentElement.style.overflow = "";
       document.body.style.overflow = "";
-      document.getElementById("bloqueo-scroll-modal")?.remove();
     };
   }, [drawerAbierto, unidadSeleccionada]);
 
@@ -209,7 +362,7 @@ export default function MapaEdificio() {
   return (
     <div className="p-4 md:p-8 bg-slate-50/50 min-h-screen pb-28 lg:pb-6">
       
-      {/* 1. CABECERA DE LA PÁGINA */}
+      {/* 1. CABECERA */}
       <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4 mb-6">
         <div>
           <h1 className="text-2xl md:text-[32px] font-extrabold tracking-tight text-[#0f172a]">
@@ -221,7 +374,7 @@ export default function MapaEdificio() {
         </div>
         
         <button
-          onClick={() => setMostrarFormAlta(!mostrarFormAlta)}
+          onClick={() => setMostrarFormAlta(prev => !prev)}
           className="flex items-center justify-center gap-2 bg-[#0f172a] hover:bg-slate-800 text-white text-xs font-bold py-3 px-5 rounded-xl transition cursor-pointer active:scale-[0.99] shrink-0"
         >
           {mostrarFormAlta ? (
@@ -373,178 +526,47 @@ export default function MapaEdificio() {
         <div className="w-full lg:col-span-1">
           {unidadSeleccionada ? (
             <>
-              {/* En pantallas grandes (Desktop) lo renderizamos en su lugar natural del Grid */}
+              {/* Desktop */}
               <div className="hidden lg:block lg:sticky lg:top-6 z-0 w-full shrink-0">
-                <div className="w-full bg-white border border-slate-200 rounded-2xl p-6 shadow-xs max-h-[calc(100vh-3rem)] overflow-y-auto">
-                  <div className="border-b border-slate-100 pb-4 mb-4 flex justify-between items-start">
-                    <div>
-                      <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400">Detalle de Unidad</span>
-                      <h3 className="text-xl lg:text-2xl font-black text-slate-900 mt-0.5">
-                        {unidadSeleccionada.piso === "0" || unidadSeleccionada.piso.toLowerCase() === "pb" 
-                          ? `P. Baja "${unidadSeleccionada.departamento}"` 
-                          : `Piso ${unidadSeleccionada.piso}° "${unidadSeleccionada.departamento}"`}
-                      </h3>
-                    </div>
-                    <button 
-                      onClick={() => setUnidadSeleccionada(null)}
-                      className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition cursor-pointer"
-                    >
-                      <HiX className="w-5 h-5" />
-                    </button>
-                  </div>
-
-                  <div className="space-y-4">
-                    <div>
-                      <label className="text-slate-400 text-[11px] font-bold uppercase tracking-wider flex items-center gap-1">
-                        <HiOutlineTrendingUp className="w-3.5 h-3.5" /> Coeficiente de Expensas
-                      </label>
-                      <p className="text-slate-900 font-bold text-sm mt-0.5">
-                        {(unidadSeleccionada.coeficiente * 100).toFixed(2)}% ({unidadSeleccionada.coeficiente})
-                      </p>
-                    </div>
-
-                    <div className="h-px bg-slate-100" />
-
-                    <div>
-                      <label className="text-slate-400 text-[11px] font-bold uppercase tracking-wider flex items-center gap-1">
-                        <HiOutlineUser className="w-3.5 h-3.5" /> Propietario
-                      </label>
-                      {unidadSeleccionada.propietario ? (
-                        <div className="mt-1">
-                          <p className="text-slate-900 font-bold text-sm">{unidadSeleccionada.propietario.name}</p>
-                          <p className="text-slate-500 text-xs truncate">{unidadSeleccionada.propietario.email}</p>
-                        </div>
-                      ) : (
-                        <p className="text-amber-600 font-medium text-xs mt-1 italic flex items-center gap-1">
-                          <HiOutlineExclamationCircle className="w-3.5 h-3.5" /> Sin propietario asignado
-                        </p>
-                      )}
-                    </div>
-
-                    {(unidadSeleccionada.estadoOcupacion === "inquilino" || !!unidadSeleccionada.inquilino) && (
-                      <div>
-                        <label className="text-slate-400 text-[11px] font-bold uppercase tracking-wider flex items-center gap-1">
-                          <HiOutlineUser className="w-3.5 h-3.5 text-blue-500" /> Inquilino Ocupante
-                        </label>
-                        {unidadSeleccionada.inquilino ? (
-                          <div className="mt-1">
-                            <p className="text-slate-900 font-bold text-sm">{unidadSeleccionada.inquilino.name}</p>
-                            <p className="text-slate-500 text-xs truncate">{unidadSeleccionada.inquilino.email}</p>
-                          </div>
-                        ) : (
-                          <p className="text-slate-400 font-medium text-xs mt-1 italic">Cargando inquilino...</p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="mt-6 pt-4 border-t border-slate-100">
-                    <button 
-                      onClick={abrirGestionHabitantes}
-                      className="w-full bg-[#0f172a] hover:bg-slate-800 text-white font-bold text-xs py-3.5 rounded-xl transition cursor-pointer active:scale-[0.98] shadow-lg shadow-slate-900/10"
-                    >
-                      Gestionar Habitantes
-                    </button>
-                  </div>
-                </div>
+                <DetalleUnidad 
+                  key={unidadSeleccionada._id} // 🔑 Clave mágica: Resetea el estado interno del componente de forma óptima
+                  unidad={unidadSeleccionada} 
+                  onCerrar={handleCerrarDetalle} 
+                  onGestionar={abrirGestionHabitantes} 
+                  onEliminar={handleEliminarUnidad}
+                  eliminando={eliminandoUnidad}
+                />
               </div>
 
-              {/* En Mobile (pantallas chicas) usamos un Portal para sacarlo del DOM y pegarlo al Body */}
+              {/* Mobile (Portal) */}
               {createPortal(
-                <div className="fixed inset-x-0 bottom-0 z-[110] flex items-end justify-center lg:hidden w-screen h-screen pointer-events-none">
-                  {/* Backdrop */}
+                <div className="fixed inset-x-0 bottom-0 z-110 flex items-end justify-center lg:hidden w-screen h-screen pointer-events-none">
                   <div 
                     className="absolute inset-0 bg-slate-950/60 backdrop-blur-xs transition-opacity pointer-events-auto"
-                    onClick={() => setUnidadSeleccionada(null)}
+                    onClick={handleCerrarDetalle}
                   />
-
-                  {/* Bottom Sheet */}
-                  <div className="relative w-full bg-white border-t border-slate-200 rounded-t-3xl p-6 pb-12 shadow-2xl animate-in slide-in-from-bottom duration-300 ease-out z-10 max-h-[85vh] overflow-y-auto pointer-events-auto">
+                  <div className="relative w-full bg-white border-t border-slate-200 rounded-t-3xl shadow-2xl animate-in slide-in-from-bottom duration-300 ease-out z-10 max-h-[85vh] overflow-y-auto pointer-events-auto pb-12">
                     <div 
-                      className="w-12 h-1 bg-slate-200 rounded-full mx-auto mb-5 cursor-pointer" 
-                      onClick={() => setUnidadSeleccionada(null)} 
+                      className="w-12 h-1 bg-slate-200 rounded-full mx-auto my-4 cursor-pointer" 
+                      onClick={handleCerrarDetalle} 
                     />
-
-                    <div className="border-b border-slate-100 pb-4 mb-4 flex justify-between items-start">
-                      <div>
-                        <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400">Detalle de Unidad</span>
-                        <h3 className="text-xl font-black text-slate-900 mt-0.5">
-                          {unidadSeleccionada.piso === "0" || unidadSeleccionada.piso.toLowerCase() === "pb" 
-                            ? `P. Baja "${unidadSeleccionada.departamento}"` 
-                            : `Piso ${unidadSeleccionada.piso}° "${unidadSeleccionada.departamento}"`}
-                        </h3>
-                      </div>
-                      <button 
-                        onClick={() => setUnidadSeleccionada(null)}
-                        className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition cursor-pointer"
-                      >
-                        <HiX className="w-5 h-5" />
-                      </button>
-                    </div>
-
-                    <div className="space-y-4">
-                      <div>
-                        <label className="text-slate-400 text-[11px] font-bold uppercase tracking-wider flex items-center gap-1">
-                          <HiOutlineTrendingUp className="w-3.5 h-3.5" /> Coeficiente de Expensas
-                        </label>
-                        <p className="text-slate-900 font-bold text-sm mt-0.5">
-                          {(unidadSeleccionada.coeficiente * 100).toFixed(2)}% ({unidadSeleccionada.coeficiente})
-                        </p>
-                      </div>
-
-                      <div className="h-px bg-slate-100" />
-
-                      <div>
-                        <label className="text-slate-400 text-[11px] font-bold uppercase tracking-wider flex items-center gap-1">
-                          <HiOutlineUser className="w-3.5 h-3.5" /> Propietario
-                        </label>
-                        {unidadSeleccionada.propietario ? (
-                          <div className="mt-1">
-                            <p className="text-slate-900 font-bold text-sm">{unidadSeleccionada.propietario.name}</p>
-                            <p className="text-slate-500 text-xs truncate">{unidadSeleccionada.propietario.email}</p>
-                          </div>
-                        ) : (
-                          <p className="text-amber-600 font-medium text-xs mt-1 italic flex items-center gap-1">
-                            <HiOutlineExclamationCircle className="w-3.5 h-3.5" /> Sin propietario asignado
-                          </p>
-                        )}
-                      </div>
-
-                      {(unidadSeleccionada.estadoOcupacion === "inquilino" || !!unidadSeleccionada.inquilino) && (
-                        <div>
-                          <label className="text-slate-400 text-[11px] font-bold uppercase tracking-wider flex items-center gap-1">
-                            <HiOutlineUser className="w-3.5 h-3.5 text-blue-500" /> Inquilino Ocupante
-                          </label>
-                          {unidadSeleccionada.inquilino ? (
-                            <div className="mt-1">
-                              <p className="text-slate-900 font-bold text-sm">{unidadSeleccionada.inquilino.name}</p>
-                              <p className="text-slate-500 text-xs truncate">{unidadSeleccionada.inquilino.email}</p>
-                            </div>
-                          ) : (
-                            <p className="text-slate-400 font-medium text-xs mt-1 italic">Cargando inquilino...</p>
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="mt-6 pt-4 border-t border-slate-100">
-                      <button 
-                        onClick={abrirGestionHabitantes}
-                        className="w-full bg-[#0f172a] hover:bg-slate-800 text-white font-bold text-xs py-3.5 rounded-xl transition cursor-pointer active:scale-[0.98] shadow-lg shadow-slate-900/10"
-                      >
-                        Gestionar Habitantes
-                      </button>
-                    </div>
+                    <DetalleUnidad 
+                      key={unidadSeleccionada._id} // 🔑 Clave mágica: Resetea el estado interno del componente de forma óptima
+                      unidad={unidadSeleccionada} 
+                      onCerrar={handleCerrarDetalle} 
+                      onGestionar={abrirGestionHabitantes} 
+                      onEliminar={handleEliminarUnidad}
+                      eliminando={eliminandoUnidad}
+                    />
                   </div>
                 </div>,
                 document.body
               )}
             </>
           ) : (
-            /* Estado Vacío (solo visible en desktop) */
-            <div className="hidden lg:flex border border-dashed border-slate-200 rounded-2xl p-8 text-center text-slate-400 font-medium text-xs h-[320px] flex-col items-center justify-center gap-3 bg-white shadow-xs lg:sticky lg:top-6">
+            <div className="hidden lg:flex border border-dashed border-slate-200 rounded-2xl p-8 text-center text-slate-400 font-medium text-xs h-80 flex-col items-center justify-center gap-3 bg-white shadow-xs lg:sticky lg:top-6">
               <HiOutlineOfficeBuilding className="w-10 h-10 text-slate-300" />
-              <span className="max-w-[200px] leading-relaxed text-[#64748b]">
+              <span className="max-w-50 leading-relaxed text-[#64748b]">
                 Seleccioná un departamento del mapa para ver y gestionar sus habitantes, expensas y datos de ocupación.
               </span>
             </div>
@@ -552,33 +574,23 @@ export default function MapaEdificio() {
         </div>
       </div>
 
-      {/* DRAWER / BOTTOM SHEET: GESTIONAR HABITANTES */}
+      {/* GESTIÓN DE HABITANTES (DRAWER / BOTTOM SHEET) */}
       {drawerAbierto && unidadSeleccionada && (
         createPortal(
-          <div 
-            className="fixed inset-0 z-[120] overflow-hidden flex justify-end items-end lg:items-stretch pointer-events-none" 
-            role="dialog" 
-            aria-modal="true"
-            onTouchMove={(e) => e.stopPropagation()}
-          >
-            {/* Backdrop oscuro con blur */}
+          <div className="fixed inset-0 z-120 overflow-hidden flex justify-end items-end lg:items-stretch pointer-events-none" role="dialog" aria-modal="true">
             <div 
               className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity duration-300 animate-in fade-in pointer-events-auto"
               onClick={() => setDrawerAbierto(false)}
             />
-
-            {/* Contenedor del Formulario (Drawer en Desktop, Bottom-Sheet en Mobile) */}
             <form 
               onSubmit={guardarHabitantes}
               className="relative w-full lg:max-w-md bg-white shadow-2xl rounded-t-3xl lg:rounded-t-none transition-all duration-300 ease-in-out animate-in slide-in-from-bottom lg:slide-in-from-right flex flex-col justify-between pointer-events-auto max-h-[85vh] lg:max-h-screen"
             >
               <div>
-                {/* Tirador visual exclusivo para mobile */}
                 <div 
                   className="w-12 h-1 bg-slate-200 rounded-full mx-auto my-4 lg:hidden cursor-pointer" 
                   onClick={() => setDrawerAbierto(false)} 
                 />
-
                 <div className="border-b border-slate-100 p-5 md:p-6">
                   <div className="flex items-center justify-between">
                     <h4 className="text-sm md:text-base font-black text-slate-900">
@@ -633,7 +645,6 @@ export default function MapaEdificio() {
                 </div>
               </div>
 
-              {/* Botones de acción inferiores */}
               <div className="border-t border-slate-100 p-5 md:p-6 bg-slate-50/50 flex items-center justify-end gap-3 pb-10 md:pb-6">
                 <button
                   type="button"
@@ -651,7 +662,6 @@ export default function MapaEdificio() {
                   <span>{guardando ? "Guardando..." : "Confirmar Cambios"}</span>
                 </button>
               </div>
-
             </form>
           </div>,
           document.body
