@@ -47,9 +47,6 @@ const DetalleUnidad = memo(({
   onEliminar: (id: string) => Promise<void>;
   eliminando: boolean;
 }) => {
-  // El estado se inicializa en false. Gracias al uso de la prop `key` en el componente padre,
-  // este componente se desmonta y remonta automáticamente al cambiar de unidad, 
-  // reseteando este estado a false de manera natural y sin usar useEffect.
   const [confirmandoBorrado, setConfirmandoBorrado] = useState(false);
 
   const handleIntentarEliminar = () => {
@@ -529,7 +526,7 @@ export default function MapaEdificio() {
               {/* Desktop */}
               <div className="hidden lg:block lg:sticky lg:top-6 z-0 w-full shrink-0">
                 <DetalleUnidad 
-                  key={unidadSeleccionada._id} // 🔑 Clave mágica: Resetea el estado interno del componente de forma óptima
+                  key={unidadSeleccionada._id}
                   unidad={unidadSeleccionada} 
                   onCerrar={handleCerrarDetalle} 
                   onGestionar={abrirGestionHabitantes} 
@@ -551,7 +548,7 @@ export default function MapaEdificio() {
                       onClick={handleCerrarDetalle} 
                     />
                     <DetalleUnidad 
-                      key={unidadSeleccionada._id} // 🔑 Clave mágica: Resetea el estado interno del componente de forma óptima
+                      key={unidadSeleccionada._id}
                       unidad={unidadSeleccionada} 
                       onCerrar={handleCerrarDetalle} 
                       onGestionar={abrirGestionHabitantes} 
@@ -577,14 +574,16 @@ export default function MapaEdificio() {
       {/* GESTIÓN DE HABITANTES (DRAWER / BOTTOM SHEET) */}
       {drawerAbierto && unidadSeleccionada && (
         createPortal(
-          <div className="fixed inset-0 z-120 overflow-hidden flex justify-end items-end lg:items-stretch pointer-events-none" role="dialog" aria-modal="true">
+          <div className="fixed inset-0 z-120 overflow-hidden flex items-end lg:items-start lg:justify-end" role="dialog" aria-modal="true">
+            {/* Fondo Oscuro / Backdrop */}
             <div 
-              className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity duration-300 animate-in fade-in pointer-events-auto"
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity duration-300 animate-in fade-in"
               onClick={() => setDrawerAbierto(false)}
             />
+            {/* Contenedor del Formulario */}
             <form 
               onSubmit={guardarHabitantes}
-              className="relative w-full lg:max-w-md bg-white shadow-2xl rounded-t-3xl lg:rounded-t-none transition-all duration-300 ease-in-out animate-in slide-in-from-bottom lg:slide-in-from-right flex flex-col justify-between pointer-events-auto max-h-[85vh] lg:max-h-screen"
+              className="relative w-full lg:w-96 h-[85vh] lg:h-screen bg-white shadow-2xl rounded-t-3xl lg:rounded-none transition-all duration-300 ease-in-out animate-in slide-in-from-bottom lg:slide-in-from-bottom-0 lg:slide-in-from-right flex flex-col justify-between z-10"
             >
               <div>
                 <div 
