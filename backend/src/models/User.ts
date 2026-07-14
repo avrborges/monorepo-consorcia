@@ -1,11 +1,21 @@
-// backend/src/models/User.js
-const mongoose = require("mongoose");
-const bcrypt = require("bcryptjs");
+// backend/src/models/User.ts
+import mongoose, { Schema, Model, HydratedDocument } from "mongoose";
+import bcrypt from "bcryptjs";
 
 /* ============================================================
- * CONSTANTES
+ * TIPOS Y CONSTANTES
  * ============================================================ */
-const ROLES_VALIDOS = [
+
+export type RolUsuario =
+  | "superadmin"
+  | "admin"
+  | "consejo"
+  | "propietario"
+  | "inquilino";
+
+export type EstadoUsuario = "activo" | "inactivo" | "pendiente";
+
+const ROLES_VALIDOS: RolUsuario[] = [
   "superadmin",
   "admin",
   "consejo",
@@ -13,14 +23,55 @@ const ROLES_VALIDOS = [
   "inquilino",
 ];
 
-const ESTADOS_VALIDOS = ["activo", "inactivo", "pendiente"];
+const ESTADOS_VALIDOS: EstadoUsuario[] = ["activo", "inactivo", "pendiente"];
 
 const REGEX_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /* ============================================================
+ * INTERFACES
+ * ============================================================ */
+
+/**
+ * Estructura de datos de un Usuario (sin métodos ni props internas de Mongoose).
+ * Sirve como contrato del dominio para el resto del backend.
+ */
+export interface IUser {
+  name: string;
+  email: string;
+  password?: string;
+  role: RolUsuario;
+  unidadFuncional: string;
+  telefono: string;
+  estado: EstadoUsuario;
+  debeCambiarPassword: boolean;
+  tokenActivacion: string | null;
+  tokenExpiracion: Date | null;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+/**
+ * Métodos de instancia disponibles en documentos User.
+ */
+export interface IUserMethods {
+  compararPassword(passwordIngresada: string): Promise<boolean>;
+}
+
+/**
+ * Tipo del Model (necesario para registrar métodos e hidratación tipada).
+ */
+export type UserModel = Model<IUser, {}, IUserMethods>;
+
+/**
+ * Tipo del documento hidratado (con métodos + props de Mongoose).
+ * Usalo en controllers cuando trabajes con un usuario obtenido de la DB.
+ */
+export type UserDocument = HydratedDocument<IUser, IUserMethods>;
+
+/* ============================================================
  * SCHEMA
  * ============================================================ */
-const userSchema = new mongoose.Schema(
+const userSchema = new Schema<IUser, UserModel, IUserMethods>(
   {
     name: {
       type: String,
@@ -116,7 +167,7 @@ const userSchema = new mongoose.Schema(
 /* ============================================================
  * MIDDLEWARE: Hash de contraseña
  * ============================================================ */
-userSchema.pre("save", async function () {
+userSchema.pre("save", async function (this: UserDocument) {
   /*
    * Si la contraseña no cambió o no existe, no hacemos nada.
    * Esto permite crear usuarios pendientes sin password.
@@ -147,13 +198,19 @@ userSchema.pre("save", async function () {
  * Permite comparar una contraseña plana contra el hash guardado.
  * No obliga a modificar loginUser ahora, pero queda disponible para refactor futuro.
  */
-userSchema.methods.compararPassword = async function (passwordIngresada) {
+userSchema.methods.compararPassword = async function (
+  this: UserDocument,
+  passwordIngresada: string
+): Promise<boolean> {
   if (!this.password || !passwordIngresada) return false;
-
   return bcrypt.compare(passwordIngresada, this.password);
 };
 
 /* ============================================================
  * EXPORT
  * ============================================================ */
-module.exports = mongoose.models.User || mongoose.model("User", userSchema);
+const User =
+  (mongoose.models.User as UserModel) ||
+  mongoose.model<IUser, UserModel>("User", userSchema);
+
+export default User;

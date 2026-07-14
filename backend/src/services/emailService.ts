@@ -1,5 +1,18 @@
-// backend/src/services/emailService.js
-const nodemailer = require("nodemailer");
+// backend/src/services/emailService.ts
+import nodemailer, {
+  type Transporter,
+  type SendMailOptions,
+  type SentMessageInfo,
+} from "nodemailer";
+
+/* ============================================================
+ * TIPOS
+ * ============================================================ */
+
+interface TemplateInvitacionParams {
+  nombreUsuario?: string;
+  urlActivacion: string;
+}
 
 /* ============================================================
  * HELPERS
@@ -8,14 +21,14 @@ const nodemailer = require("nodemailer");
 /**
  * Convierte strings tipo "true" / "false" a boolean.
  */
-const parseBoolean = (value) => {
+const parseBoolean = (value: unknown): boolean => {
   return String(value).toLowerCase() === "true";
 };
 
 /**
  * Escapa texto dinámico que se inyecta en HTML.
  */
-const escaparHtml = (valor) => {
+const escaparHtml = (valor: unknown): string => {
   return String(valor ?? "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -27,22 +40,20 @@ const escaparHtml = (valor) => {
 /**
  * Valida las variables mínimas SMTP.
  */
-const validarConfiguracionSmtp = () => {
+const validarConfiguracionSmtp = (): void => {
   const variablesObligatorias = [
     "SMTP_HOST",
     "SMTP_PORT",
     "SMTP_USER",
     "SMTP_PASS",
-  ];
+  ] as const;
 
   const faltantes = variablesObligatorias.filter(
     (variable) => !process.env[variable]
   );
 
   if (faltantes.length > 0) {
-    throw new Error(
-      `Faltan variables SMTP en .env: ${faltantes.join(", ")}`
-    );
+    throw new Error(`Faltan variables SMTP en .env: ${faltantes.join(", ")}`);
   }
 };
 
@@ -52,7 +63,7 @@ const validarConfiguracionSmtp = () => {
  * Opcional en .env:
  * SMTP_FROM="Consorcia Administración <tu_correo@gmail.com>"
  */
-const obtenerRemitente = () => {
+const obtenerRemitente = (): string => {
   return (
     process.env.SMTP_FROM ||
     `"Consorcia Administración" <${process.env.SMTP_USER}>`
@@ -65,9 +76,9 @@ const obtenerRemitente = () => {
 
 validarConfiguracionSmtp();
 
-const smtpPort = Number(process.env.SMTP_PORT || 587);
+const smtpPort: number = Number(process.env.SMTP_PORT || 587);
 
-const transporter = nodemailer.createTransport({
+const transporter: Transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
   port: smtpPort,
   secure: process.env.SMTP_SECURE
@@ -83,7 +94,10 @@ const transporter = nodemailer.createTransport({
  * TEMPLATES
  * ============================================================ */
 
-const generarHtmlInvitacion = ({ nombreUsuario, urlActivacion }) => {
+const generarHtmlInvitacion = ({
+  nombreUsuario,
+  urlActivacion,
+}: TemplateInvitacionParams): string => {
   const nombreSeguro = escaparHtml(nombreUsuario || "Usuario");
   const urlSegura = escaparHtml(urlActivacion);
   const year = new Date().getFullYear();
@@ -125,12 +139,7 @@ const generarHtmlInvitacion = ({ nombreUsuario, urlActivacion }) => {
           </p>
 
           <div style="text-align:center; margin:32px 0;">
-            <a href="${urlSegura}" target="_blank" rel="noopener noreferrer" style="background-color:#0f172a; color:#ffffff; padding:13px 24px; text-decoration:none; font-weight:bold; border-radius:10px; display:inline-block; font-size:14px;">
-              Activar mi cuenta
-            </a>
-          </div>
-
-          <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:14px;">
+            <a href="${urlSegura}" target="_blank" rel="noopener noreferrer" style="background-color:#0f172a; color:#ffffff; padding:13order:1px solid #e2e8f0; border-radius:12px; padding:14px;">
             <p style="color:#64748b; font-size:12px; line-height:1.5; margin:0; text-align:center;">
               Este enlace es de un solo uso y expirará en <strong>24 horas</strong>.
             </p>
@@ -150,7 +159,10 @@ const generarHtmlInvitacion = ({ nombreUsuario, urlActivacion }) => {
   `;
 };
 
-const generarTextoInvitacion = ({ nombreUsuario, urlActivacion }) => {
+const generarTextoInvitacion = ({
+  nombreUsuario,
+  urlActivacion,
+}: TemplateInvitacionParams): string => {
   return `
 Hola ${nombreUsuario || "Usuario"},
 
@@ -173,11 +185,11 @@ Gestión Inteligente
  * SERVICIO: ENVIAR INVITACIÓN
  * ============================================================ */
 
-const enviarMailInvitacion = async (
-  emailDestino,
-  nombreUsuario,
-  urlActivacion
-) => {
+export const enviarMailInvitacion = async (
+  emailDestino: string,
+  nombreUsuario: string | undefined,
+  urlActivacion: string
+): Promise<boolean> => {
   try {
     if (!emailDestino) {
       throw new Error("No se indicó el destinatario del correo.");
@@ -197,13 +209,15 @@ const enviarMailInvitacion = async (
       urlActivacion,
     });
 
-    const info = await transporter.sendMail({
+    const mailOptions: SendMailOptions = {
       from: obtenerRemitente(),
       to: emailDestino,
       subject: "Activación de cuenta - Consorcia",
       html: htmlContent,
       text: textContent,
-    });
+    };
+
+    const info: SentMessageInfo = await transporter.sendMail(mailOptions);
 
     console.log(
       `Mail enviado con éxito a ${emailDestino} (ID: ${info.messageId})`
@@ -212,11 +226,6 @@ const enviarMailInvitacion = async (
     return true;
   } catch (error) {
     console.error("Error enviando el mail de invitación:", error);
-
     throw new Error("No se pudo enviar el correo de activación.");
   }
-};
-
-module.exports = {
-  enviarMailInvitacion,
 };

@@ -1,50 +1,87 @@
-// backend/src/controllers/userController.js
-const User = require("../models/User");
-const bcrypt = require("bcryptjs");
-const jwt = require("jsonwebtoken");
-const crypto = require("crypto");
-const { enviarMailInvitacion } = require("../services/emailService");
-const { registrarLog } = require("../services/loggerService");
+// backend/src/controllers/userController.ts
+import type { Request, Response } from "express";
+import bcrypt from "bcryptjs";
+import jwt, { type SignOptions } from "jsonwebtoken";
+import crypto from "crypto";
+
+import User, { type RolUsuario } from "../models/User";
+import AuditLog from "../models/AuditLog";
+import { enviarMailInvitacion } from "../services/emailService";
+import { registrarLog } from "../services/loggerService";
+
+/* ============================================================
+ * TIPOS DE PAYLOAD
+ * ============================================================ */
+
+interface CrearUsuarioBody {
+  name?: string;
+  email?: string;
+  role?: RolUsuario;
+  unidadFuncional?: string;
+  telefono?: string;
+}
+
+interface ActivarCuentaBody {
+  token?: string;
+  password?: string;
+}
+
+interface LoginBody {
+  email?: string;
+  password?: string;
+}
+
+interface UpdateUserBody {
+  name?: string;
+  email?: string;
+  role?: RolUsuario;
+  unidadFuncional?: string;
+  telefono?: string;
+}
+
+interface ParamsId {
+  id: string;
+  [key: string]: string;
+}
 
 /* ============================================================
  * HELPER: Resolver URL del frontend para links de activación
  * ============================================================ */
-const obtenerFrontendUrl = (req) => {
+
+/**
+ * Interface mínima que necesita `obtenerFrontendUrl` de la petición.
+ * Solo usa `req.get("origin")` y `req.get("referer")`, así que no depende
+ * de los generics del tipo `Request` de Express.
+ */
+interface RequestConHeaders {
+  get(name: string): string | undefined;
+}
+
+const obtenerFrontendUrl = (req: RequestConHeaders): string => {
   const frontendUrlEnv = process.env.FRONTEND_URL;
 
   /*
-   * Caso 1:
-   * Si FRONTEND_URL tiene una URL fija real, la usamos.
-   *
-   * Ejemplos:
-   * FRONTEND_URL=https://consorcia.com
-   * FRONTEND_URL=http://localhost:5173
-   * FRONTEND_URL=http://192.168.1.38:5173
+   * Caso 1: Si FRONTEND_URL tiene una URL fija real, la usamos.
+   *   FRONTEND_URL=https://consorcia.com
+   *   FRONTEND_URL=http://localhost:5173
+   *   FRONTEND_URL=http://192.168.1.38:5173
    */
   if (frontendUrlEnv && frontendUrlEnv.toLowerCase() !== "auto") {
     return frontendUrlEnv.replace(/\/$/, "");
   }
 
   /*
-   * Caso 2:
-   * Si FRONTEND_URL=auto, intentamos usar Origin.
-   *
-   * Ejemplos:
-   * Origin: http://localhost:5173
-   * Origin: http://192.168.0.55:5173
+   * Caso 2: Si FRONTEND_URL=auto, intentamos usar Origin.
    */
   const origin = req.get("origin");
-
   if (origin) {
     return origin.replace(/\/$/, "");
   }
 
   /*
-   * Caso 3:
-   * Si no vino Origin, intentamos usar Referer.
+   * Caso 3: Si no vino Origin, intentamos usar Referer.
    */
   const referer = req.get("referer");
-
   if (referer) {
     try {
       return new URL(referer).origin.replace(/\/$/, "");
@@ -54,8 +91,7 @@ const obtenerFrontendUrl = (req) => {
   }
 
   /*
-   * Caso 4:
-   * Fallback final para desarrollo local.
+   * Caso 4: Fallback final para desarrollo local.
    */
   return "http://localhost:5173";
 };
@@ -63,7 +99,7 @@ const obtenerFrontendUrl = (req) => {
 /* ============================================================
  * MÉTODO: Obtener la nómina completa de usuarios para el Administrador
  * ============================================================ */
-const getUsers = async (req, res) => {
+export const getUsers = async (_req: Request, res: Response) => {
   try {
     const users = await User.find({})
       .select("-password")
@@ -75,7 +111,6 @@ const getUsers = async (req, res) => {
     });
   } catch (error) {
     console.error("Error en getUsers:", error);
-
     return res.status(500).json({
       success: false,
       message: "Hubo un error al obtener el listado de usuarios.",
@@ -86,7 +121,10 @@ const getUsers = async (req, res) => {
 /* ============================================================
  * MÉTODO: Registrar un nuevo usuario desde el Panel de Administración
  * ============================================================ */
-const crearUsuario = async (req, res) => {
+export const crearUsuario = async (
+  req: Request<unknown, unknown, CrearUsuarioBody>,
+  res: Response
+) => {
   try {
     const { name, email, role, unidadFuncional, telefono } = req.body;
 
@@ -105,7 +143,6 @@ const crearUsuario = async (req, res) => {
     }
 
     const emailLimpio = email.trim().toLowerCase();
-
     const usuarioExistente = await User.findOne({ email: emailLimpio });
 
     if (usuarioExistente) {
@@ -138,15 +175,9 @@ const crearUsuario = async (req, res) => {
 
     // 3. Armar URL de activación dinámica y disparar correo en segundo plano
     const baseUrl = obtenerFrontendUrl(req);
-    const urlActivacion = `${baseUrl}/activar-cuenta?token=${encodeURIComponent(
-      token
-    )}`;
+    const urlActivacion = `${baseUrl}/activar-cuenta?token=${encodeURIComponent(token)}`;
 
-    enviarMailInvitacion(
-      nuevoUsuario.email,
-      nuevoUsuario.name,
-      urlActivacion
-    ).catch((err) =>
+    enviarMailInvitacion(nuevoUsuario.email, nuevoUsuario.name, urlActivacion).catch((err) =>
       console.error("Error al enviar mail de invitación:", err)
     );
 
@@ -162,8 +193,7 @@ const crearUsuario = async (req, res) => {
 
     return res.status(201).json({
       success: true,
-      message:
-        "Usuario registrado con éxito. Se ha enviado el correo de invitación.",
+      message: "Usuario registrado con éxito. Se ha enviado el correo de invitación.",
       user: {
         id: nuevoUsuario._id,
         name: nuevoUsuario.name,
@@ -174,7 +204,6 @@ const crearUsuario = async (req, res) => {
     });
   } catch (error) {
     console.error("Error en crearUsuario:", error);
-
     return res.status(500).json({
       success: false,
       message: "Hubo un error interno en el servidor al procesar el alta.",
@@ -185,7 +214,10 @@ const crearUsuario = async (req, res) => {
 /* ============================================================
  * MÉTODO: Activar cuenta desde el link del correo
  * ============================================================ */
-const activarCuenta = async (req, res) => {
+export const activarCuenta = async (
+  req: Request<unknown, unknown, ActivarCuentaBody>,
+  res: Response
+) => {
   try {
     const { token, password } = req.body;
 
@@ -226,7 +258,6 @@ const activarCuenta = async (req, res) => {
     });
   } catch (error) {
     console.error("Error en activarCuenta:", error);
-
     return res.status(500).json({
       success: false,
       message: "Hubo un error al intentar activar la cuenta.",
@@ -237,7 +268,7 @@ const activarCuenta = async (req, res) => {
 /* ============================================================
  * MÉTODO: Alternar el estado del usuario
  * ============================================================ */
-const toggleStatus = async (req, res) => {
+export const toggleStatus = async (req: Request<ParamsId>, res: Response) => {
   try {
     const { id } = req.params;
 
@@ -267,7 +298,6 @@ const toggleStatus = async (req, res) => {
     });
   } catch (error) {
     console.error("Error en toggleStatus:", error);
-
     return res.status(500).json({
       success: false,
       message: "Hubo un error en el servidor al cambiar el estado.",
@@ -278,7 +308,7 @@ const toggleStatus = async (req, res) => {
 /* ============================================================
  * MÉTODO: Eliminar definitivamente un usuario
  * ============================================================ */
-const eliminarUsuario = async (req, res) => {
+export const eliminarUsuario = async (req: Request<ParamsId>, res: Response) => {
   try {
     const { id } = req.params;
 
@@ -305,7 +335,6 @@ const eliminarUsuario = async (req, res) => {
     });
   } catch (error) {
     console.error("Error en eliminarUsuario:", error);
-
     return res.status(500).json({
       success: false,
       message: "Error interno al intentar eliminar el usuario.",
@@ -316,7 +345,10 @@ const eliminarUsuario = async (req, res) => {
 /* ============================================================
  * MÉTODO: Inicio de sesión
  * ============================================================ */
-const loginUser = async (req, res) => {
+export const loginUser = async (
+  req: Request<unknown, unknown, LoginBody>,
+  res: Response
+) => {
   const { email, password } = req.body;
 
   try {
@@ -328,7 +360,6 @@ const loginUser = async (req, res) => {
     }
 
     const emailLimpio = email.trim().toLowerCase();
-
     const userFound = await User.findOne({ email: emailLimpio });
 
     if (userFound && userFound.estado === "pendiente") {
@@ -339,10 +370,7 @@ const loginUser = async (req, res) => {
       });
     }
 
-    if (
-      userFound &&
-      (userFound.estado === "inactive" || userFound.estado === "inactivo")
-    ) {
+    if (userFound && userFound.estado === "inactivo") {
       return res.status(403).json({
         success: false,
         message:
@@ -350,24 +378,35 @@ const loginUser = async (req, res) => {
       });
     }
 
-    const isMatch = userFound
-      ? await bcrypt.compare(password, userFound.password)
-      : false;
+    const isMatch =
+      userFound && userFound.password
+        ? await bcrypt.compare(password, userFound.password)
+        : false;
 
-    if (!isMatch) {
+    if (!userFound || !isMatch) {
       return res.status(401).json({
         success: false,
         message: "El correo electrónico o la contraseña son incorrectos.",
       });
     }
 
+    if (!process.env.JWT_SECRET) {
+      console.error("JWT_SECRET no está configurado en las variables de entorno.");
+      return res.status(500).json({
+        success: false,
+        message: "Error de configuración del servidor.",
+      });
+    }
+
+    const signOptions: SignOptions = { expiresIn: "24h" };
+
     const token = jwt.sign(
       {
-        id: userFound._id,
+        id: userFound._id.toString(),
         role: userFound.role,
       },
       process.env.JWT_SECRET,
-      { expiresIn: "24h" }
+      signOptions
     );
 
     return res.status(200).json({
@@ -386,7 +425,6 @@ const loginUser = async (req, res) => {
     });
   } catch (error) {
     console.error("Error en loginUser:", error);
-
     return res.status(500).json({
       success: false,
       message: "Hubo un error interno en el servidor.",
@@ -397,7 +435,7 @@ const loginUser = async (req, res) => {
 /* ============================================================
  * MÉTODO: Reenviar link de invitación a usuario pendiente
  * ============================================================ */
-const reenviarInvitacion = async (req, res) => {
+export const reenviarInvitacion = async (req: Request<ParamsId>, res: Response) => {
   try {
     const { id } = req.params;
 
@@ -431,12 +469,10 @@ const reenviarInvitacion = async (req, res) => {
 
     // 3. Armar URL dinámica y disparar correo
     const baseUrl = obtenerFrontendUrl(req);
-    const urlActivacion = `${baseUrl}/activar-cuenta?token=${encodeURIComponent(
-      nuevoToken
-    )}`;
+    const urlActivacion = `${baseUrl}/activar-cuenta?token=${encodeURIComponent(nuevoToken)}`;
 
-    enviarMailInvitacion(usuario.email, usuario.name, urlActivacion).catch(
-      (err) => console.error("Error al reenviar mail de invitación:", err)
+    enviarMailInvitacion(usuario.email, usuario.name, urlActivacion).catch((err) =>
+      console.error("Error al reenviar mail de invitación:", err)
     );
 
     return res.status(200).json({
@@ -445,7 +481,6 @@ const reenviarInvitacion = async (req, res) => {
     });
   } catch (error) {
     console.error("Error en reenviarInvitacion:", error);
-
     return res.status(500).json({
       success: false,
       message:
@@ -457,7 +492,10 @@ const reenviarInvitacion = async (req, res) => {
 /* ============================================================
  * MÉTODO: Editar datos de usuario
  * ============================================================ */
-const updateUser = async (req, res) => {
+export const updateUser = async (
+  req: Request<ParamsId, unknown, UpdateUserBody>,
+  res: Response
+) => {
   try {
     const { id } = req.params;
     const { name, email, role, unidadFuncional, telefono } = req.body;
@@ -515,7 +553,6 @@ const updateUser = async (req, res) => {
     });
   } catch (error) {
     console.error("Error al actualizar usuario:", error);
-
     return res.status(500).json({
       success: false,
       message: "Error interno del servidor al procesar la actualización.",
@@ -526,13 +563,9 @@ const updateUser = async (req, res) => {
 /* ============================================================
  * MÉTODO: Obtener historial de auditoría
  * ============================================================ */
-const getAuditLogs = async (req, res) => {
+export const getAuditLogs = async (_req: Request, res: Response) => {
   try {
-    const AuditLog = require("../models/AuditLog");
-
-    const logs = await AuditLog.find({})
-      .sort({ timestamp: -1 })
-      .limit(100);
+    const logs = await AuditLog.find({}).sort({ timestamp: -1 }).limit(100);
 
     return res.status(200).json({
       success: true,
@@ -540,22 +573,9 @@ const getAuditLogs = async (req, res) => {
     });
   } catch (error) {
     console.error("Error en getAuditLogs:", error);
-
     return res.status(500).json({
       success: false,
       message: "Hubo un error al obtener el historial de auditoría.",
     });
   }
-};
-
-module.exports = {
-  loginUser,
-  getUsers,
-  crearUsuario,
-  activarCuenta,
-  toggleStatus,
-  eliminarUsuario,
-  reenviarInvitacion,
-  updateUser,
-  getAuditLogs,
 };

@@ -1,6 +1,20 @@
-// backend/src/middleware/authMiddleware.js
-const jwt = require("jsonwebtoken");
-const User = require("../models/User");
+// backend/src/middleware/authMiddleware.ts
+import type { Request, Response, NextFunction, RequestHandler } from "express";
+import jwt, { type JwtPayload } from "jsonwebtoken";
+
+import User, { type RolUsuario } from "../models/User";
+
+/* ============================================================
+ * TIPOS
+ * ============================================================ */
+
+/**
+ * Estructura esperada del payload del JWT.
+ * Se firma en el controller de login con `{ id: usuario._id }`.
+ */
+interface AuthTokenPayload extends JwtPayload {
+  id: string;
+}
 
 /* ============================================================
  * HELPERS
@@ -8,10 +22,9 @@ const User = require("../models/User");
 
 /**
  * Extrae el token JWT desde el header Authorization.
- * Formato esperado:
- * Authorization: Bearer TOKEN
+ * Formato esperado: Authorization: Bearer TOKEN
  */
-const extraerToken = (req) => {
+const extraerToken = (req: Request): string | null => {
   const authorization = req.headers.authorization;
 
   if (!authorization || !authorization.startsWith("Bearer ")) {
@@ -26,8 +39,8 @@ const extraerToken = (req) => {
 /**
  * Middleware genérico para proteger rutas según roles permitidos.
  */
-const protegerPorRoles = (rolesPermitidos = []) => {
-  return async (req, res, next) => {
+const protegerPorRoles = (rolesPermitidos: RolUsuario[] = []): RequestHandler => {
+  return async (req: Request, res: Response, next: NextFunction) => {
     try {
       const token = extraerToken(req);
 
@@ -47,7 +60,7 @@ const protegerPorRoles = (rolesPermitidos = []) => {
         });
       }
 
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const decoded = jwt.verify(token, process.env.JWT_SECRET) as AuthTokenPayload;
 
       if (!decoded || !decoded.id) {
         return res.status(401).json({
@@ -72,7 +85,7 @@ const protegerPorRoles = (rolesPermitidos = []) => {
         });
       }
 
-      if (usuario.estado === "inactivo" || usuario.estado === "inactive") {
+      if (usuario.estado === "inactivo") {
         return res.status(403).json({
           success: false,
           message: "La cuenta se encuentra inactiva.",
@@ -109,14 +122,9 @@ const protegerPorRoles = (rolesPermitidos = []) => {
 /**
  * Rutas accesibles por Admin y Super Admin.
  */
-const protegerAdmin = protegerPorRoles(["admin", "superadmin"]);
+export const protegerAdmin: RequestHandler = protegerPorRoles(["admin", "superadmin"]);
 
 /**
  * Rutas exclusivas para Super Admin.
  */
-const protegerSuperAdmin = protegerPorRoles(["superadmin"]);
-
-module.exports = {
-  protegerAdmin,
-  protegerSuperAdmin,
-};
+export const protegerSuperAdmin: RequestHandler = protegerPorRoles(["superadmin"]);

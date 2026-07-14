@@ -1,22 +1,67 @@
-// backend/src/models/AuditLog.js
-const mongoose = require("mongoose");
+// backend/src/models/AuditLog.ts
+import mongoose, { Schema, Model, HydratedDocument, Types } from "mongoose";
 
 /* ============================================================
- * CONSTANTES
+ * TIPOS Y CONSTANTES
  * ============================================================ */
-const ACCIONES_AUDITORIA = [
+
+export type AccionAuditoria =
+  | "USUARIO_CREADO"
+  | "USUARIO_EDITADO"
+  | "USUARIO_ELIMINADO";
+
+const ACCIONES_AUDITORIA: AccionAuditoria[] = [
   "USUARIO_CREADO",
   "USUARIO_EDITADO",
   "USUARIO_ELIMINADO",
 ];
 
 /* ============================================================
+ * INTERFACES
+ * ============================================================ */
+
+/**
+ * Subdocumento `detalles` del registro de auditoría.
+ *
+ * `cambios` es Mixed → permite guardar cualquier estructura de payload
+ * (por ejemplo, diffs entre valores anteriores y nuevos).
+ */
+export interface IAuditLogDetalles {
+  nombreUsuario: string;
+  cambios: Record<string, unknown>;
+}
+
+/**
+ * Estructura de datos de un registro de auditoría.
+ * Sirve como contrato del dominio para el resto del backend.
+ */
+export interface IAuditLog {
+  adminId: Types.ObjectId;
+  adminName: string;
+  accion: AccionAuditoria;
+  targetUserId: Types.ObjectId;
+  detalles: IAuditLogDetalles;
+  timestamp: Date;
+}
+
+/**
+ * Tipo del Model.
+ */
+export type AuditLogModel = Model<IAuditLog>;
+
+/**
+ * Documento hidratado (con `.save()`, `_id`, etc.).
+ * Usalo en controllers cuando trabajes con un registro obtenido de la DB.
+ */
+export type AuditLogDocument = HydratedDocument<IAuditLog>;
+
+/* ============================================================
  * SCHEMA
  * ============================================================ */
-const AuditLogSchema = new mongoose.Schema(
+const AuditLogSchema = new Schema<IAuditLog, AuditLogModel>(
   {
     adminId: {
-      type: mongoose.Schema.Types.ObjectId,
+      type: Schema.Types.ObjectId,
       ref: "User",
       required: [true, "El ID del administrador es obligatorio."],
       index: true,
@@ -40,7 +85,7 @@ const AuditLogSchema = new mongoose.Schema(
     },
 
     targetUserId: {
-      type: mongoose.Schema.Types.ObjectId,
+      type: Schema.Types.ObjectId,
       ref: "User",
       required: [true, "El ID del usuario afectado es obligatorio."],
       index: true,
@@ -55,7 +100,7 @@ const AuditLogSchema = new mongoose.Schema(
       },
 
       cambios: {
-        type: mongoose.Schema.Types.Mixed,
+        type: Schema.Types.Mixed,
         default: {},
       },
     },
@@ -84,8 +129,7 @@ AuditLogSchema.index({ timestamp: -1 });
 
 /**
  * Optimiza búsquedas futuras por acción y fecha.
- * Ejemplo:
- * USUARIO_CREADO entre dos fechas.
+ * Ejemplo: USUARIO_CREADO entre dos fechas.
  */
 AuditLogSchema.index({ accion: 1, timestamp: -1 });
 
@@ -102,5 +146,8 @@ AuditLogSchema.index({ adminId: 1, timestamp: -1 });
 /* ============================================================
  * EXPORT
  * ============================================================ */
-module.exports =
-  mongoose.models.AuditLog || mongoose.model("AuditLog", AuditLogSchema);
+const AuditLog =
+  (mongoose.models.AuditLog as AuditLogModel) ||
+  mongoose.model<IAuditLog, AuditLogModel>("AuditLog", AuditLogSchema);
+
+export default AuditLog;
