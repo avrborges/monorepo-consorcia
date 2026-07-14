@@ -50,7 +50,7 @@ export default function ModalConfirmacion({
   if (!debeRenderizar) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[999] flex items-end justify-center md:items-center p-0 md:p-4 isolation-auto">
+    <div className="fixed inset-0 z-999 flex items-end justify-center md:items-center p-0 md:p-4 isolation-auto">
       
       {/* OVERLAY */}
       <div
