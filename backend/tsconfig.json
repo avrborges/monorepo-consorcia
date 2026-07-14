@@ -8,29 +8,13 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "allowJs": true,
+    "allowJs": false,
     "checkJs": false,
-    "strict": false,
-    "noImplicitAny": false,
-    "strictNullChecks": false,
+    "strict": true,
     "skipLibCheck": true,
     "moduleResolution": "node16",
     "typeRoots": ["./node_modules/@types", "./src/types"]
   },
   "include": ["src/**/*"],
-  "exclude": [
-    "node_modules",
-    "dist",
-    "src/models/User.js",
-    "src/models/UnidadFuncional.js",
-    "src/models/AuditLog.js",
-    "src/services/loggerService.js",
-    "src/services/emailService.js",
-    "src/middleware/authMiddleware.js",
-    "src/controllers/userController.js",
-    "src/controllers/unidadController.js",
-    "src/routes/userRoutes.js",
-    "src/routes/unidadRoutes.js",
-    "src/scripts/seed.js"
-  ]
+  "exclude": ["node_modules", "dist"]
 }
