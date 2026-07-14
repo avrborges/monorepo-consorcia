@@ -422,7 +422,7 @@ export default function MapaEdificio() {
             className="absolute inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity duration-300 animate-in fade-in"
             onClick={() => setDrawerAbierto(false)}
             // Evita que la rueda del mouse haga scroll al fondo si se usa encima del overlay
-            onWheel={(e) => e.preventDefault()}
+            // onWheel={(e) => e.preventDefault()}
           />
 
           <div className="absolute inset-y-0 right-0 flex max-w-full pl-10">
