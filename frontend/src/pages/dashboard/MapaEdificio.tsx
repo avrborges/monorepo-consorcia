@@ -1,175 +1,171 @@
+// frontend/src/pages/dashboard/MapaEdificio.tsx
 import { useState, useEffect, useMemo, useCallback, memo } from "react";
 import { createPortal } from "react-dom";
-import { 
-  HiOutlineOfficeBuilding, 
-  HiOutlineUser, 
+import {
+  HiOutlineOfficeBuilding,
+  HiOutlineUser,
   HiOutlineTrendingUp,
   HiOutlineExclamationCircle,
   HiX,
   HiCheck,
-  HiOutlineTrash
+  HiOutlineTrash,
 } from "react-icons/hi";
-import api from "../../api"; 
+import api from "../../api";
 
-export type EstadoOcupacion = "propietario" | "inquilino" | "vacio";
+// 🎯 Tipos de dominio compartidos entre backend y frontend (fuente única de verdad)
+import type { Persona, UnidadFuncional } from "@shared/types";
 
-export interface Persona {
-  _id: string;
-  name: string;
-  email: string;
-  telefono?: string;
-  role: string;
-}
-
-export interface UnidadFuncional {
-  _id: string;
-  piso: string;
-  departamento: string;
-  coeficiente: number;
-  estadoOcupacion: EstadoOcupacion;
-  propietario?: Persona;
-  inquilino?: Persona;
-  metrosCuadrados?: number;
-  notas?: string;
-}
+/**
+ * En este contexto SIEMPRE recibimos unidades populadas desde el backend
+ * (con `.populate("propietario")` y `.populate("inquilino")`), así que
+ * refinamos el tipo para tratar propietario/inquilino como Persona directa.
+ *
+ * Esto evita hacer type-narrowing en cada acceso a `.name`, `.email`, `._id`.
+ */
+type UnidadPopulada = Omit<UnidadFuncional, "propietario" | "inquilino"> & {
+  propietario?: Persona | null;
+  inquilino?: Persona | null;
+};
 
 // Subcomponente de detalle optimizado para evitar re-renderizados innecesarios
-const DetalleUnidad = memo(({ 
-  unidad, 
-  onCerrar, 
-  onGestionar,
-  onEliminar,
-  eliminando
-}: { 
-  unidad: UnidadFuncional; 
-  onCerrar: () => void; 
-  onGestionar: () => void; 
-  onEliminar: (id: string) => Promise<void>;
-  eliminando: boolean;
-}) => {
-  const [confirmandoBorrado, setConfirmandoBorrado] = useState(false);
+const DetalleUnidad = memo(
+  ({
+    unidad,
+    onCerrar,
+    onGestionar,
+    onEliminar,
+    eliminando,
+  }: {
+    unidad: UnidadPopulada;
+    onCerrar: () => void;
+    onGestionar: () => void;
+    onEliminar: (id: string) => Promise<void>;
+    eliminando: boolean;
+  }) => {
+    const [confirmandoBorrado, setConfirmandoBorrado] = useState(false);
 
-  const handleIntentarEliminar = () => {
-    if (confirmandoBorrado) {
-      onEliminar(unidad._id);
-    } else {
-      setConfirmandoBorrado(true);
-    }
-  };
+    const handleIntentarEliminar = () => {
+      if (confirmandoBorrado) {
+        onEliminar(unidad._id);
+      } else {
+        setConfirmandoBorrado(true);
+      }
+    };
 
-  return (
-    <div className="w-full bg-white border border-slate-200 lg:rounded-2xl p-6 shadow-xs max-h-[calc(100vh-3rem)] overflow-y-auto">
-      <div className="border-b border-slate-100 pb-4 mb-4 flex justify-between items-start">
-        <div>
-          <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400">Detalle de Unidad</span>
-          <h3 className="text-xl lg:text-2xl font-black text-slate-900 mt-0.5">
-            {unidad.piso === "0" || unidad.piso.toLowerCase() === "pb" 
-              ? `P. Baja "${unidad.departamento}"` 
-              : `Piso ${unidad.piso}° "${unidad.departamento}"`}
-          </h3>
-        </div>
-        <button 
-          onClick={onCerrar}
-          className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition cursor-pointer"
-        >
-          <HiX className="w-5 h-5" />
-        </button>
-      </div>
-
-      <div className="space-y-4">
-        <div>
-          <label className="text-slate-400 text-[11px] font-bold uppercase tracking-wider flex items-center gap-1">
-            <HiOutlineTrendingUp className="w-3.5 h-3.5" /> Coeficiente de Expensas
-          </label>
-          <p className="text-slate-900 font-bold text-sm mt-0.5">
-            {(unidad.coeficiente * 100).toFixed(2)}% ({unidad.coeficiente})
-          </p>
+    return (
+      <div className="w-full bg-white border border-slate-200 lg:rounded-2xl p-6 shadow-xs max-h-[calc(100vh-3rem)] overflow-y-auto">
+        <div className="border-b border-slate-100 pb-4 mb-4 flex justify-between items-start">
+          <div>
+            <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400">Detalle de Unidad</span>
+            <h3 className="text-xl lg:text-2xl font-black text-slate-900 mt-0.5">
+              {unidad.piso === "0" || unidad.piso.toLowerCase() === "pb"
+                ? `P. Baja "${unidad.departamento}"`
+                : `Piso ${unidad.piso}° "${unidad.departamento}"`}
+            </h3>
+          </div>
+          <button
+            onClick={onCerrar}
+            className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition cursor-pointer"
+          >
+            <HiX className="w-5 h-5" />
+          </button>
         </div>
 
-        <div className="h-px bg-slate-100" />
-
-        <div>
-          <label className="text-slate-400 text-[11px] font-bold uppercase tracking-wider flex items-center gap-1">
-            <HiOutlineUser className="w-3.5 h-3.5" /> Propietario
-          </label>
-          {unidad.propietario ? (
-            <div className="mt-1">
-              <p className="text-slate-900 font-bold text-sm">{unidad.propietario.name}</p>
-              <p className="text-slate-500 text-xs truncate">{unidad.propietario.email}</p>
-            </div>
-          ) : (
-            <p className="text-amber-600 font-medium text-xs mt-1 italic flex items-center gap-1">
-              <HiOutlineExclamationCircle className="w-3.5 h-3.5" /> Sin propietario asignado
+        <div className="space-y-4">
+          <div>
+            <label className="text-slate-400 text-[11px] font-bold uppercase tracking-wider flex items-center gap-1">
+              <HiOutlineTrendingUp className="w-3.5 h-3.5" /> Coeficiente de Expensas
+            </label>
+            <p className="text-slate-900 font-bold text-sm mt-0.5">
+              {(unidad.coeficiente * 100).toFixed(2)}% ({unidad.coeficiente})
             </p>
+          </div>
+
+          <div className="h-px bg-slate-100" />
+
+          <div>
+            <label className="text-slate-400 text-[11px] font-bold uppercase tracking-wider flex items-center gap-1">
+              <HiOutlineUser className="w-3.5 h-3.5" /> Propietario
+            </label>
+            {unidad.propietario ? (
+              <div className="mt-1">
+                <p className="text-slate-900 font-bold text-sm">{unidad.propietario.name}</p>
+                <p className="text-slate-500 text-xs truncate">{unidad.propietario.email}</p>
+              </div>
+            ) : (
+              <p className="text-amber-600 font-medium text-xs mt-1 italic flex items-center gap-1">
+                <HiOutlineExclamationCircle className="w-3.5 h-3.5" /> Sin propietario asignado
+              </p>
+            )}
+          </div>
+
+          {(unidad.estadoOcupacion === "inquilino" || !!unidad.inquilino) && (
+            <div>
+              <label className="text-slate-400 text-[11px] font-bold uppercase tracking-wider flex items-center gap-1">
+                <HiOutlineUser className="w-3.5 h-3.5 text-blue-500" /> Inquilino Ocupante
+              </label>
+              {unidad.inquilino ? (
+                <div className="mt-1">
+                  <p className="text-slate-900 font-bold text-sm">{unidad.inquilino.name}</p>
+                  <p className="text-slate-500 text-xs truncate">{unidad.inquilino.email}</p>
+                </div>
+              ) : (
+                <p className="text-slate-400 font-medium text-xs mt-1 italic">Cargando inquilino...</p>
+              )}
+            </div>
           )}
         </div>
 
-        {(unidad.estadoOcupacion === "inquilino" || !!unidad.inquilino) && (
-          <div>
-            <label className="text-slate-400 text-[11px] font-bold uppercase tracking-wider flex items-center gap-1">
-              <HiOutlineUser className="w-3.5 h-3.5 text-blue-500" /> Inquilino Ocupante
-            </label>
-            {unidad.inquilino ? (
-              <div className="mt-1">
-                <p className="text-slate-900 font-bold text-sm">{unidad.inquilino.name}</p>
-                <p className="text-slate-500 text-xs truncate">{unidad.inquilino.email}</p>
-              </div>
-            ) : (
-              <p className="text-slate-400 font-medium text-xs mt-1 italic">Cargando inquilino...</p>
-            )}
-          </div>
-        )}
-      </div>
-
-      <div className="mt-6 pt-4 border-t border-slate-100 space-y-2">
-        <button 
-          onClick={onGestionar}
-          className="w-full bg-[#0f172a] hover:bg-slate-800 text-white font-bold text-xs py-3.5 rounded-xl transition cursor-pointer active:scale-[0.98] shadow-lg shadow-slate-900/10"
-        >
-          Gestionar Habitantes
-        </button>
-
-        <button 
-          onClick={handleIntentarEliminar}
-          disabled={eliminando}
-          className={`w-full font-bold text-xs py-3 rounded-xl transition cursor-pointer active:scale-[0.98] flex items-center justify-center gap-1.5 border ${
-            confirmandoBorrado 
-              ? "bg-red-600 hover:bg-red-700 text-white border-transparent animate-pulse" 
-              : "bg-white hover:bg-red-50 text-red-600 border-red-200"
-          } disabled:opacity-50`}
-        >
-          <HiOutlineTrash className="w-4 h-4 shrink-0" />
-          <span>
-            {eliminando 
-              ? "Eliminando..." 
-              : confirmandoBorrado 
-                ? "¿Confirmar Eliminación?" 
-                : "Eliminar Unidad"}
-          </span>
-        </button>
-
-        {confirmandoBorrado && (
+        <div className="mt-6 pt-4 border-t border-slate-100 space-y-2">
           <button
-            onClick={() => setConfirmandoBorrado(false)}
-            className="w-full text-center text-[10px] font-bold text-slate-400 hover:text-slate-600 transition py-1 cursor-pointer"
+            onClick={onGestionar}
+            className="w-full bg-[#0f172a] hover:bg-slate-800 text-white font-bold text-xs py-3.5 rounded-xl transition cursor-pointer active:scale-[0.98] shadow-lg shadow-slate-900/10"
           >
-            Cancelar acción
+            Gestionar Habitantes
           </button>
-        )}
+
+          <button
+            onClick={handleIntentarEliminar}
+            disabled={eliminando}
+            className={`w-full font-bold text-xs py-3 rounded-xl transition cursor-pointer active:scale-[0.98] flex items-center justify-center gap-1.5 border ${
+              confirmandoBorrado
+                ? "bg-red-600 hover:bg-red-700 text-white border-transparent animate-pulse"
+                : "bg-white hover:bg-red-50 text-red-600 border-red-200"
+            } disabled:opacity-50`}
+          >
+            <HiOutlineTrash className="w-4 h-4 shrink-0" />
+            <span>
+              {eliminando
+                ? "Eliminando..."
+                : confirmandoBorrado
+                ? "¿Confirmar Eliminación?"
+                : "Eliminar Unidad"}
+            </span>
+          </button>
+
+          {confirmandoBorrado && (
+            <button
+              onClick={() => setConfirmandoBorrado(false)}
+              className="w-full text-center text-[10px] font-bold text-slate-400 hover:text-slate-600 transition py-1 cursor-pointer"
+            >
+              Cancelar acción
+            </button>
+          )}
+        </div>
       </div>
-    </div>
-  );
-});
+    );
+  }
+);
 
 DetalleUnidad.displayName = "DetalleUnidad";
 
 export default function MapaEdificio() {
-  const [unidades, setUnidades] = useState<UnidadFuncional[]>([]);
+  const [unidades, setUnidades] = useState<UnidadPopulada[]>([]);
   const [usuariosSistema, setUsuariosSistema] = useState<Persona[]>([]);
   const [cargando, setCargando] = useState<boolean>(true);
-  const [unidadSeleccionada, setUnidadSeleccionada] = useState<UnidadFuncional | null>(null);
+  const [unidadSeleccionada, setUnidadSeleccionada] = useState<UnidadPopulada | null>(null);
   const [eliminandoUnidad, setEliminandoUnidad] = useState<boolean>(false);
-  
+
   // Estados para el alta de nueva unidad
   const [mostrarFormAlta, setMostrarFormAlta] = useState<boolean>(false);
   const [nuevoPiso, setNuevoPiso] = useState<string>("");
@@ -191,7 +187,7 @@ export default function MapaEdificio() {
       try {
         const [resUnidades, resUsuarios] = await Promise.all([
           api.get("/unidades"),
-          api.get("/users")
+          api.get("/users"),
         ]);
 
         if (!activo) return;
@@ -206,7 +202,7 @@ export default function MapaEdificio() {
         } else if (dataUnidades && Array.isArray(dataUnidades.unidades)) {
           setUnidades(dataUnidades.unidades);
         }
-        
+
         if (dataUsuarios && dataUsuarios.success && dataUsuarios.users) {
           setUsuariosSistema(dataUsuarios.users);
         } else if (Array.isArray(dataUsuarios)) {
@@ -226,35 +222,38 @@ export default function MapaEdificio() {
     };
   }, []);
 
-  const handleCrearUnidad = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!nuevoPiso || !nuevoDepto) return;
-    setCreandoUnidad(true);
+  const handleCrearUnidad = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!nuevoPiso || !nuevoDepto) return;
+      setCreandoUnidad(true);
 
-    try {
-      const res = await api.post("/unidades", {
-        piso: nuevoPiso,
-        departamento: nuevoDepto,
-        coeficiente: parseFloat(nuevoCoeficiente) || 0,
-        estadoOcupacion: "vacio"
-      });
+      try {
+        const res = await api.post("/unidades", {
+          piso: nuevoPiso,
+          departamento: nuevoDepto,
+          coeficiente: parseFloat(nuevoCoeficiente) || 0,
+          estadoOcupacion: "vacio",
+        });
 
-      const data = res.data;
-      const unidadCreada = data.unidad || data;
+        const data = res.data;
+        const unidadCreada = data.unidad || data;
 
-      if (unidadCreada && unidadCreada._id) {
-        setUnidades((prev) => [...prev, unidadCreada]);
-        setNuevoPiso("");
-        setNuevoDepto("");
-        setNuevoCoeficiente("0.05");
-        setMostrarFormAlta(false);
+        if (unidadCreada && unidadCreada._id) {
+          setUnidades((prev) => [...prev, unidadCreada]);
+          setNuevoPiso("");
+          setNuevoDepto("");
+          setNuevoCoeficiente("0.05");
+          setMostrarFormAlta(false);
+        }
+      } catch (error) {
+        console.error("Error al crear la unidad funcional:", error);
+      } finally {
+        setCreandoUnidad(false);
       }
-    } catch (error) {
-      console.error("Error al crear la unidad funcional:", error);
-    } finally {
-      setCreandoUnidad(false);
-    }
-  }, [nuevoPiso, nuevoDepto, nuevoCoeficiente]);
+    },
+    [nuevoPiso, nuevoDepto, nuevoCoeficiente]
+  );
 
   const handleEliminarUnidad = useCallback(async (id: string) => {
     setEliminandoUnidad(true);
@@ -278,29 +277,32 @@ export default function MapaEdificio() {
     setDrawerAbierto(true);
   }, [unidadSeleccionada]);
 
-  const guardarHabitantes = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!unidadSeleccionada) return;
-    setGuardando(true);
+  const guardarHabitantes = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!unidadSeleccionada) return;
+      setGuardando(true);
 
-    try {
-      const res = await api.put(`/unidades/${unidadSeleccionada._id}/vincular`, {
-        propietarioId: nuevoPropietarioId || null,
-        inquilinoId: nuevoInquilinoId || null,
-      });
+      try {
+        const res = await api.put(`/unidades/${unidadSeleccionada._id}/vincular`, {
+          propietarioId: nuevoPropietarioId || null,
+          inquilinoId: nuevoInquilinoId || null,
+        });
 
-      const data = res.data;
-      if (data.ok && data.unidad) {
-        setUnidades((prev) => prev.map((u) => (u._id === data.unidad._id ? data.unidad : u)));
-        setUnidadSeleccionada(data.unidad);
-        setDrawerAbierto(false);
+        const data = res.data;
+        if (data.ok && data.unidad) {
+          setUnidades((prev) => prev.map((u) => (u._id === data.unidad._id ? data.unidad : u)));
+          setUnidadSeleccionada(data.unidad);
+          setDrawerAbierto(false);
+        }
+      } catch (error) {
+        console.error("Error al vincular habitantes:", error);
+      } finally {
+        setGuardando(false);
       }
-    } catch (error) {
-      console.error("Error al vincular habitantes:", error);
-    } finally {
-      setGuardando(false);
-    }
-  }, [unidadSeleccionada, nuevoPropietarioId, nuevoInquilinoId]);
+    },
+    [unidadSeleccionada, nuevoPropietarioId, nuevoInquilinoId]
+  );
 
   const handleCerrarDetalle = useCallback(() => {
     setUnidadSeleccionada(null);
@@ -311,7 +313,7 @@ export default function MapaEdificio() {
     const evaluarScroll = () => {
       const esPantallaPequeña = window.innerWidth < 1024;
       const interactivoAbierto = drawerAbierto || (unidadSeleccionada !== null && esPantallaPequeña);
-      
+
       if (interactivoAbierto) {
         document.documentElement.style.overflow = "hidden";
         document.body.style.overflow = "hidden";
@@ -331,7 +333,7 @@ export default function MapaEdificio() {
   }, [drawerAbierto, unidadSeleccionada]);
 
   const edificioEstructurado = useMemo(() => {
-    const grupos: Record<string, UnidadFuncional[]> = {};
+    const grupos: Record<string, UnidadPopulada[]> = {};
     unidades.forEach((u) => {
       if (!grupos[u.piso]) grupos[u.piso] = [];
       grupos[u.piso].push(u);
@@ -358,7 +360,6 @@ export default function MapaEdificio() {
 
   return (
     <div className="p-4 md:p-8 bg-slate-50/50 min-h-screen pb-28 lg:pb-6">
-      
       {/* 1. CABECERA */}
       <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4 mb-6">
         <div>
@@ -369,9 +370,9 @@ export default function MapaEdificio() {
             Visualizá, filtrá y controlá la distribución y habitabilidad de las unidades del consorcio.
           </p>
         </div>
-        
+
         <button
-          onClick={() => setMostrarFormAlta(prev => !prev)}
+          onClick={() => setMostrarFormAlta((prev) => !prev)}
           className="flex items-center justify-center gap-2 bg-[#0f172a] hover:bg-slate-800 text-white text-xs font-bold py-3 px-5 rounded-xl transition cursor-pointer active:scale-[0.99] shrink-0"
         >
           {mostrarFormAlta ? (
@@ -399,7 +400,10 @@ export default function MapaEdificio() {
 
       {/* Formulario rápido colapsable para crear U.F. */}
       {mostrarFormAlta && (
-        <form onSubmit={handleCrearUnidad} className="mb-8 bg-white border border-slate-200 p-5 rounded-2xl flex flex-wrap gap-4 items-end shadow-xs animate-in fade-in duration-200">
+        <form
+          onSubmit={handleCrearUnidad}
+          className="mb-8 bg-white border border-slate-200 p-5 rounded-2xl flex flex-wrap gap-4 items-end shadow-xs animate-in fade-in duration-200"
+        >
           <div className="w-24">
             <label className="block text-slate-600 font-bold text-[11px] uppercase mb-1">Piso</label>
             <input
@@ -446,7 +450,6 @@ export default function MapaEdificio() {
 
       {/* 3. GRID ASIMÉTRICO */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
         {/* MAPA */}
         <div className="lg:col-span-2 bg-white border border-slate-200 rounded-2xl p-4 md:p-6 shadow-xs flex flex-col justify-between">
           <div>
@@ -458,15 +461,15 @@ export default function MapaEdificio() {
             {/* Referencias */}
             <div className="flex flex-wrap gap-2 mb-6 md:mb-8">
               <div className="flex items-center gap-1.5 bg-[#ecfdf5] border border-[#a7f3d0] px-2.5 py-1 rounded-full text-[9px] md:text-[10px] font-extrabold text-[#047857] uppercase tracking-wider">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#10b981]" /> 
+                <span className="w-1.5 h-1.5 rounded-full bg-[#10b981]" />
                 Propietario
               </div>
               <div className="flex items-center gap-1.5 bg-[#eff6ff] border border-[#bfdbfe] px-2.5 py-1 rounded-full text-[9px] md:text-[10px] font-extrabold text-[#1d4ed8] uppercase tracking-wider">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#3b82f6]" /> 
+                <span className="w-1.5 h-1.5 rounded-full bg-[#3b82f6]" />
                 Inquilino
               </div>
               <div className="flex items-center gap-1.5 bg-[#f8fafc] border border-[#e2e8f0] px-2.5 py-1 rounded-full text-[9px] md:text-[10px] font-extrabold text-[#64748b] uppercase tracking-wider">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#cbd5e1]" /> 
+                <span className="w-1.5 h-1.5 rounded-full bg-[#cbd5e1]" />
                 Vacío
               </div>
             </div>
@@ -489,7 +492,7 @@ export default function MapaEdificio() {
                       {dptos.map((u) => {
                         const esSeleccionada = unidadSeleccionada?._id === u._id;
                         const estado = u.estadoOcupacion?.toLowerCase();
-                        
+
                         let clasesOcupacion: string;
                         if (estado === "inquilino" || !!u.inquilino) {
                           clasesOcupacion = "bg-[#eff6ff] border-[#bfdbfe] text-[#1d4ed8] hover:bg-[#dbeafe]/80";
@@ -525,11 +528,11 @@ export default function MapaEdificio() {
             <>
               {/* Desktop */}
               <div className="hidden lg:block lg:sticky lg:top-6 z-0 w-full shrink-0">
-                <DetalleUnidad 
+                <DetalleUnidad
                   key={unidadSeleccionada._id}
-                  unidad={unidadSeleccionada} 
-                  onCerrar={handleCerrarDetalle} 
-                  onGestionar={abrirGestionHabitantes} 
+                  unidad={unidadSeleccionada}
+                  onCerrar={handleCerrarDetalle}
+                  onGestionar={abrirGestionHabitantes}
                   onEliminar={handleEliminarUnidad}
                   eliminando={eliminandoUnidad}
                 />
@@ -538,20 +541,20 @@ export default function MapaEdificio() {
               {/* Mobile (Portal) */}
               {createPortal(
                 <div className="fixed inset-x-0 bottom-0 z-110 flex items-end justify-center lg:hidden w-screen h-screen pointer-events-none">
-                  <div 
+                  <div
                     className="absolute inset-0 bg-slate-950/60 backdrop-blur-xs transition-opacity pointer-events-auto"
                     onClick={handleCerrarDetalle}
                   />
                   <div className="relative w-full bg-white border-t border-slate-200 rounded-t-3xl shadow-2xl animate-in slide-in-from-bottom duration-300 ease-out z-10 max-h-[85vh] overflow-y-auto pointer-events-auto pb-12">
-                    <div 
-                      className="w-12 h-1 bg-slate-200 rounded-full mx-auto my-4 cursor-pointer" 
-                      onClick={handleCerrarDetalle} 
+                    <div
+                      className="w-12 h-1 bg-slate-200 rounded-full mx-auto my-4 cursor-pointer"
+                      onClick={handleCerrarDetalle}
                     />
-                    <DetalleUnidad 
+                    <DetalleUnidad
                       key={unidadSeleccionada._id}
-                      unidad={unidadSeleccionada} 
-                      onCerrar={handleCerrarDetalle} 
-                      onGestionar={abrirGestionHabitantes} 
+                      unidad={unidadSeleccionada}
+                      onCerrar={handleCerrarDetalle}
+                      onGestionar={abrirGestionHabitantes}
                       onEliminar={handleEliminarUnidad}
                       eliminando={eliminandoUnidad}
                     />
@@ -572,32 +575,41 @@ export default function MapaEdificio() {
       </div>
 
       {/* GESTIÓN DE HABITANTES (DRAWER / BOTTOM SHEET) */}
-      {drawerAbierto && unidadSeleccionada && (
+      {drawerAbierto &&
+        unidadSeleccionada &&
         createPortal(
-          <div className="fixed inset-0 z-120 overflow-hidden flex items-end lg:items-start lg:justify-end" role="dialog" aria-modal="true">
+          <div
+            className="fixed inset-0 z-120 overflow-hidden flex items-end lg:items-start lg:justify-end"
+            role="dialog"
+            aria-modal="true"
+          >
             {/* Fondo Oscuro / Backdrop */}
-            <div 
+            <div
               className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity duration-300 animate-in fade-in"
               onClick={() => setDrawerAbierto(false)}
             />
             {/* Contenedor del Formulario */}
-            <form 
+            <form
               onSubmit={guardarHabitantes}
               className="relative w-full lg:w-96 h-[85vh] lg:h-screen bg-white shadow-2xl rounded-t-3xl lg:rounded-none transition-all duration-300 ease-in-out animate-in slide-in-from-bottom lg:slide-in-from-bottom-0 lg:slide-in-from-right flex flex-col justify-between z-10"
             >
               <div>
-                <div 
-                  className="w-12 h-1 bg-slate-200 rounded-full mx-auto my-4 lg:hidden cursor-pointer" 
-                  onClick={() => setDrawerAbierto(false)} 
+                <div
+                  className="w-12 h-1 bg-slate-200 rounded-full mx-auto my-4 lg:hidden cursor-pointer"
+                  onClick={() => setDrawerAbierto(false)}
                 />
                 <div className="border-b border-slate-100 p-5 md:p-6">
                   <div className="flex items-center justify-between">
                     <h4 className="text-sm md:text-base font-black text-slate-900">
-                      Asignar Habitantes: {unidadSeleccionada.piso === "0" || unidadSeleccionada.piso.toLowerCase() === "pb" ? "" : `${unidadSeleccionada.piso}°`} "{unidadSeleccionada.departamento}"
+                      Asignar Habitantes:{" "}
+                      {unidadSeleccionada.piso === "0" || unidadSeleccionada.piso.toLowerCase() === "pb"
+                        ? ""
+                        : `${unidadSeleccionada.piso}°`}{" "}
+                      "{unidadSeleccionada.departamento}"
                     </h4>
-                    <button 
+                    <button
                       type="button"
-                      onClick={() => setDrawerAbierto(false)} 
+                      onClick={() => setDrawerAbierto(false)}
                       className="text-slate-400 hover:text-slate-600 transition p-1.5 cursor-pointer rounded-lg hover:bg-slate-50"
                     >
                       <HiX className="w-5 h-5" />
@@ -664,9 +676,7 @@ export default function MapaEdificio() {
             </form>
           </div>,
           document.body
-        )
-      )}
-
+        )}
     </div>
   );
 }
