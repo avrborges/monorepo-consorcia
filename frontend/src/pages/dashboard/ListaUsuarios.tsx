@@ -14,6 +14,9 @@ import {
 // 🎯 Capa de servicios (Fase 3)
 import { userService } from "../../services";
 
+// 🎯 Hook de sesión centralizado (Fase 4)
+import { useAuth } from "../../hooks/useAuth";
+
 // 🎯 Tipos de dominio compartidos entre backend y frontend
 import type { Persona, Rol, EstadoUsuario } from "@shared/types";
 
@@ -62,17 +65,6 @@ const OPCIONES_ESTADO: { value: EstadoUsuario | "todos"; label: string }[] = [
 /* ============================================================
  * HELPERS
  * ============================================================ */
-const verificarAcceso = (): boolean => {
-  try {
-    const userString = localStorage.getItem("user");
-    if (!userString) return false;
-    const currentUser = JSON.parse(userString);
-    return currentUser?.role === "admin" || currentUser?.role === "superadmin";
-  } catch {
-    return false;
-  }
-};
-
 function useDebounce<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState(value);
   useEffect(() => {
@@ -86,22 +78,12 @@ function useDebounce<T>(value: T, delay: number): T {
  * COMPONENTE PRINCIPAL
  * ============================================================ */
 export default function ListaUsuarios() {
-  const [tieneAcceso] = useState<boolean>(verificarAcceso);
-  const [loading, setLoading] = useState<boolean>(verificarAcceso);
+  // 🎯 Sesión centralizada via useAuth
+  const { esAdmin, esSuperAdmin } = useAuth();
 
+  const [loading, setLoading] = useState<boolean>(esAdmin);
   const [usuarios, setUsuarios] = useState<Persona[]>([]);
   const [error, setError] = useState<string | null>(null);
-
-  // 🔑 Extraemos el rol de la sesión de manera segura para el renderizado de la Tab
-  const [rolUsuario] = useState<Rol | null>(() => {
-    try {
-      const userString = localStorage.getItem("user");
-      if (!userString) return null;
-      return JSON.parse(userString)?.role || null;
-    } catch {
-      return null;
-    }
-  });
 
   // 📝 Gestión de pestañas activas para el Admin
   const [pestanaActiva, setPestanaActiva] = useState<"lista" | "auditoria">("lista");
@@ -127,7 +109,7 @@ export default function ListaUsuarios() {
    * Carga inicial (usando userService con AbortController)
    * ------------------------------------------------------------ */
   useEffect(() => {
-    if (!tieneAcceso) return;
+    if (!esAdmin) return;
 
     const controller = new AbortController();
 
@@ -153,7 +135,7 @@ export default function ListaUsuarios() {
     void cargar();
 
     return () => controller.abort();
-  }, [tieneAcceso]);
+  }, [esAdmin]);
 
   /* ------------------------------------------------------------
    * Recarga manual
@@ -343,7 +325,7 @@ export default function ListaUsuarios() {
     }));
   }, []);
 
-  if (!tieneAcceso) {
+  if (!esAdmin) {
     return (
       <div className="min-h-[60vh] flex flex-col items-center justify-center p-6 bg-white border border-slate-100 rounded-2xl shadow-sm text-center">
         <div className="p-4 bg-red-50 text-red-500 rounded-full mb-4">
@@ -422,7 +404,7 @@ export default function ListaUsuarios() {
         </button>
 
         {/* 🔐 RENDERIZADO CONDICIONAL: Solo visible para superadmin */}
-        {rolUsuario === "superadmin" && (
+        {esSuperAdmin && (
           <button
             type="button"
             onClick={() => setPestanaActiva("auditoria")}

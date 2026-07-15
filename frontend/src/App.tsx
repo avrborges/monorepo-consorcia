@@ -11,7 +11,10 @@ import DashboardLayout from "./components/layout/DashboardLayout";
 import ProtectedRoute from "./components/layout/ProtectedRoute";
 import Overview from "./pages/dashboard/Overview";
 import ListaUsuarios from "./pages/dashboard/ListaUsuarios";
-import MapaEdificio from "./pages/dashboard/MapaEdificio"; // 🆕 Importamos tu nueva pantalla
+import MapaEdificio from "./pages/dashboard/MapaEdificio";
+
+// 🎯 Helper de sesión centralizado (Fase 4)
+import { estaAutenticado } from "./lib/session";
 
 /* ============================================================
  * CONSTANTES
@@ -35,13 +38,6 @@ function useIsMobile(breakpoint = MOBILE_BREAKPOINT): boolean {
   }, [breakpoint]);
 
   return isMobile;
-}
-
-/* ============================================================
- * HELPER: chequeo rápido de sesión
- * ============================================================ */
-function estaAutenticado(): boolean {
-  return Boolean(localStorage.getItem("token"));
 }
 
 /* ============================================================
@@ -91,7 +87,7 @@ function App() {
               }
             >
               <Route path="usuarios" element={<ListaUsuarios />} />
-              <Route path="unidades" element={<MapaEdificio />} /> {/* 🆕 Registrada bajo /dashboard/unidades */}
+              <Route path="unidades" element={<MapaEdificio />} />
             </Route>
           </Route>
         </Route>

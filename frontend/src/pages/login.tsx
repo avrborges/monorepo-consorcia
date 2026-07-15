@@ -1,4 +1,5 @@
 // src/pages/login.tsx
+import { guardarSesion } from "../lib/session";
 import { useEffect, useRef, useState } from "react";
 import type { SyntheticEvent } from "react";
 import { useNavigate } from "react-router-dom";
@@ -51,8 +52,7 @@ export default function Login() {
 
       setSuccessMsg(result.message);
 
-      localStorage.setItem("token", result.token);
-      localStorage.setItem("user", JSON.stringify(result.user));
+      guardarSesion(result.token, result.user);
 
       redirectTimeoutRef.current = window.setTimeout(() => {
         navigate("/dashboard");

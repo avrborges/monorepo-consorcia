@@ -1,6 +1,8 @@
 // src/api.ts
 import axios, { AxiosError } from "axios";
 
+import { limpiarSesion } from "./lib/session";
+
 /* ============================================================
  * CONFIGURACIÓN DE BASE URL
  * ============================================================ */
@@ -71,8 +73,7 @@ api.interceptors.response.use(
       const rutaActual = window.location.pathname;
 
       if (!rutaActual.startsWith("/login") && !rutaActual.startsWith("/activar-cuenta")) {
-        localStorage.removeItem("token");
-        localStorage.removeItem("user");
+        limpiarSesion();
         window.location.href = "/login";
       }
     }
