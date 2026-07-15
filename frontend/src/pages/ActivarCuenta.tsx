@@ -5,10 +5,10 @@ import { AxiosError } from "axios";
 import { HiCheckCircle } from "react-icons/hi";
 import { HiOutlineEye, HiOutlineEyeOff } from "react-icons/hi";
 
-import AuthLayout from "../components/layout/AuthLayout";
+import AuthLayout from "@/components/layout/AuthLayout";
 
 // 🎯 Capa de servicios (Fase 3)
-import { userService } from "../services";
+import { userService } from "@/services";
 
 // 🎯 Tipos de respuesta compartidos entre backend y frontend
 import type { ErrorResponse } from "@shared/types";

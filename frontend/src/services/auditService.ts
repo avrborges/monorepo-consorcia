@@ -1,5 +1,5 @@
 // src/services/auditService.ts
-import api from "../api";
+import api from "@/api";
 
 import type {
   AuditLog,

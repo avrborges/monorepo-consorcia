@@ -12,7 +12,7 @@ import {
 } from "react-icons/hi";
 
 // 🎯 Capa de servicios (Fase 3)
-import { userService, unidadService } from "../../services";
+import { userService, unidadService } from "@/services";
 
 // 🎯 Tipos de dominio compartidos entre backend y frontend
 import type { Persona, UnidadFuncional } from "@shared/types";

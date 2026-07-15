@@ -5,16 +5,16 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Landing from "./pages/landing";
 import Login from "./pages/login";
 import ActivarCuenta from "./pages/ActivarCuenta";
-import SplashScreen from "./components/SplashScreen";
+import SplashScreen from "@/components/SplashScreen";
 
-import DashboardLayout from "./components/layout/DashboardLayout";
-import ProtectedRoute from "./components/layout/ProtectedRoute";
+import DashboardLayout from "@/components/layout/DashboardLayout";
+import ProtectedRoute from "@/components/layout/ProtectedRoute";
 import Overview from "./pages/dashboard/Overview";
 import ListaUsuarios from "./pages/dashboard/ListaUsuarios";
 import MapaEdificio from "./pages/dashboard/MapaEdificio";
 
 // 🎯 Helper de sesión centralizado (Fase 4)
-import { estaAutenticado } from "./lib/session";
+import { estaAutenticado } from "@/lib/session";
 
 /* ============================================================
  * CONSTANTES

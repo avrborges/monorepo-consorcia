@@ -11,7 +11,7 @@ import {
 } from "react-icons/hi";
 
 // 🎯 Capa de servicios (Fase 3)
-import { auditService } from "../../services";
+import { auditService } from "@/services";
 
 // 🎯 Tipos de dominio compartidos entre backend y frontend
 import type { AuditLog, AccionAuditoria } from "@shared/types";

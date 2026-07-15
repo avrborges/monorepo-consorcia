@@ -9,11 +9,11 @@ import {
 } from "react-icons/hi";
 
 // 🎯 Capa de servicios (Fase 3)
-import { userService } from "../../services";
+import { userService } from "@/services";
 import type {
   CrearUsuarioPayload,
   ActualizarUsuarioPayload,
-} from "../../services";
+} from "@/services";
 
 // 🎯 Tipos de dominio compartidos entre backend y frontend
 import type { Persona, Rol } from "@shared/types";

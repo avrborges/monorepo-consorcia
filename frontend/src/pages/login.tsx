@@ -1,5 +1,5 @@
 // src/pages/login.tsx
-import { guardarSesion } from "../lib/session";
+import { guardarSesion } from "@/lib/session";
 import { useEffect, useRef, useState } from "react";
 import type { SyntheticEvent } from "react";
 import { useNavigate } from "react-router-dom";
@@ -8,10 +8,10 @@ import { MdErrorOutline } from "react-icons/md";
 import { CiCircleCheck } from "react-icons/ci";
 import { HiOutlineEye, HiOutlineEyeOff, HiOutlineMail, HiOutlineLockClosed } from "react-icons/hi";
 
-import AuthLayout from "../components/layout/AuthLayout";
+import AuthLayout from "@/components/layout/AuthLayout";
 
 // 🎯 Capa de servicios (Fase 3)
-import { userService } from "../services";
+import { userService } from "@/services";
 
 // 🎯 Tipos de respuesta compartidos entre backend y frontend
 import type { ErrorResponse } from "@shared/types";

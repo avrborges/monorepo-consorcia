@@ -1,7 +1,7 @@
 // src/api.ts
 import axios, { AxiosError } from "axios";
 
-import { limpiarSesion } from "./lib/session";
+import { limpiarSesion } from "@/lib/session";
 
 /* ============================================================
  * CONFIGURACIÓN DE BASE URL

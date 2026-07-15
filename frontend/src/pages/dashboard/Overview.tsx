@@ -1,6 +1,6 @@
 // src/pages/dashboard/Overview.tsx
-import { useAuth } from "../../hooks/useAuth";
-import { formatearRol } from "../../lib/session";
+import { useAuth } from "@/hooks/useAuth";
+import { formatearRol } from "@/lib/session";
 
 export default function Overview() {
   const { usuario, rol } = useAuth();

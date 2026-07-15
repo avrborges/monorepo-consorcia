@@ -5,7 +5,7 @@ import {
   getUsuarioSesion,
   getToken,
   limpiarSesion,
-} from "../lib/session";
+} from "@/lib/session";
 
 import type { Persona, Rol } from "@shared/types";
 

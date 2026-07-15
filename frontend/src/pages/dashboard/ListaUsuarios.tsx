@@ -12,17 +12,17 @@ import {
 } from "react-icons/hi";
 
 // 🎯 Capa de servicios (Fase 3)
-import { userService } from "../../services";
+import { userService } from "@/services";
 
 // 🎯 Hook de sesión centralizado (Fase 4)
-import { useAuth } from "../../hooks/useAuth";
+import { useAuth } from "@/hooks/useAuth";
 
 // 🎯 Tipos de dominio compartidos entre backend y frontend
 import type { Persona, Rol, EstadoUsuario } from "@shared/types";
 
 // Componentes reutilizables
-import Paginador from "../../components/common/Paginador";
-import ModalConfirmacion from "../../components/common/ModalConfirmacion";
+import Paginador from "@/components/common/Paginador";
+import ModalConfirmacion from "@/components/common/ModalConfirmacion";
 
 // Componentes de la vista
 import FormAltaUsuario from "./FormAltaUsuario";
