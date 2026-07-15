@@ -1,4 +1,4 @@
-import logo from "../assets/img/consorcia.png";
+import logo from "../../assets/img/consorcia.png";
 import { Link } from "react-router-dom";
 import { FiArrowLeft } from "react-icons/fi";
 
