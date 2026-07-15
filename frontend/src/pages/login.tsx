@@ -5,7 +5,7 @@ import { MdErrorOutline } from "react-icons/md";
 import { CiCircleCheck } from "react-icons/ci";
 import { HiOutlineEye, HiOutlineEyeOff, HiOutlineMail, HiOutlineLockClosed } from "react-icons/hi";
 
-import AuthLayout from "../components/AuthLayout";
+import AuthLayout from "../components/layout/AuthLayout";
 import { loginRequest } from "../api";
 
 export default function Login() {

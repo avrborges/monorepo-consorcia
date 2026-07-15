@@ -5,7 +5,7 @@ import { AxiosError } from "axios";
 import { HiCheckCircle } from "react-icons/hi";
 import { HiOutlineEye, HiOutlineEyeOff } from "react-icons/hi";
 
-import AuthLayout from "../components/AuthLayout";
+import AuthLayout from "../components/layout/AuthLayout";
 import api from "../api";
 
 // 🎯 Tipos de respuesta compartidos entre backend y frontend

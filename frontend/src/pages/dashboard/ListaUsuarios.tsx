@@ -25,8 +25,8 @@ import type {
 // Componentes separados
 import FormAltaUsuario from "./FormAltaUsuario";
 import UsuariosTable from "./UsuariosTable";
-import Paginador from "./Paginador";
-import ModalConfirmacion from "./ModalConfirmacion";
+import Paginador from "../../components/common/Paginador";
+import ModalConfirmacion from "../../components/common/ModalConfirmacion";
 import HistorialAuditoria from "./HistorialAuditoria";
 
 /* ============================================================
