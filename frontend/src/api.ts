@@ -1,9 +1,6 @@
 // src/api.ts
 import axios, { AxiosError } from "axios";
 
-// 🎯 Tipos de respuesta compartidos entre backend y frontend
-import type { LoginResponse, ErrorResponse } from "@shared/types";
-
 /* ============================================================
  * CONFIGURACIÓN DE BASE URL
  * ============================================================ */
@@ -23,6 +20,18 @@ const obtenerBaseUrl = (): string => {
  * INSTANCIA DE AXIOS
  * ============================================================ */
 
+/**
+ * Cliente HTTP compartido por toda la aplicación.
+ *
+ * ⚠️ NO usar directamente desde componentes.
+ * Toda la lógica de dominio debe pasar por la capa `src/services/*`.
+ *
+ * Este archivo es puramente infraestructura de transporte:
+ *  - Base URL
+ *  - Headers por defecto
+ *  - Interceptor de request (JWT auto-inject)
+ *  - Interceptor de response (manejo global de 401)
+ */
 const api = axios.create({
   baseURL: obtenerBaseUrl(),
   headers: {
@@ -50,8 +59,10 @@ api.interceptors.request.use(
 
 /**
  * RESPONSE: maneja globalmente los errores 401 (token expirado o inválido).
- * Limpia la sesión y redirige al login preservando la ruta destino
- * para retomar navegación después del re-login.
+ * Limpia la sesión y redirige al login.
+ *
+ * Excluye las rutas /login y /activar-cuenta para evitar loops
+ * (esos endpoints legítimamente pueden devolver 401 con credenciales inválidas).
  */
 api.interceptors.response.use(
   (response) => response,
@@ -59,7 +70,6 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       const rutaActual = window.location.pathname;
 
-      // Evitamos loops de redirección si ya estamos en el login
       if (!rutaActual.startsWith("/login") && !rutaActual.startsWith("/activar-cuenta")) {
         localStorage.removeItem("token");
         localStorage.removeItem("user");
@@ -71,41 +81,3 @@ api.interceptors.response.use(
 );
 
 export default api;
-
-/* ============================================================
- * SERVICIO: LOGIN
- * ============================================================ */
-
-/**
- * Realiza el request de login y retorna el resultado tipado.
- * En caso de error del backend, retorna el shape { success: false, message }
- * para que el componente pueda mostrar el mensaje sin manejar excepciones.
- *
- * Gracias al discriminated union (success: true | false), el consumidor
- * puede hacer narrowing sin casts:
- *
- *   if (result.success) {
- *     // TS sabe que aquí result es LoginResponse
- *     result.token  // ✅ autocompletado
- *     result.user   // ✅ autocompletado
- *   } else {
- *     // TS sabe que aquí result es ErrorResponse
- *     result.message  // ✅ autocompletado
- *   }
- */
-export const loginRequest = async (
-  email: string,
-  password: string
-): Promise<LoginResponse | ErrorResponse> => {
-  try {
-    const response = await api.post<LoginResponse>("/users/login", { email, password });
-    return response.data;
-  } catch (error: unknown) {
-    // Si es un error de axios con response, devolvemos el shape del backend
-    if (error instanceof AxiosError && error.response) {
-      return error.response.data as ErrorResponse;
-    }
-    // Fallback genérico (network error, timeout, etc.)
-    return { success: false, message: "Error al conectar con el servidor" };
-  }
-};

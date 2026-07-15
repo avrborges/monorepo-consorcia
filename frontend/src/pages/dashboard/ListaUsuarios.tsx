@@ -11,22 +11,19 @@ import {
   HiRefresh,
 } from "react-icons/hi";
 
-// 🎯 Cliente HTTP con interceptors JWT + manejo global de 401
-import api from "../../api";
+// 🎯 Capa de servicios (Fase 3)
+import { userService } from "../../services";
 
 // 🎯 Tipos de dominio compartidos entre backend y frontend
-import type {
-  Persona,
-  Rol,
-  EstadoUsuario,
-  UsuariosListResponse,
-} from "@shared/types";
+import type { Persona, Rol, EstadoUsuario } from "@shared/types";
 
-// Componentes separados
-import FormAltaUsuario from "./FormAltaUsuario";
-import UsuariosTable from "./UsuariosTable";
+// Componentes reutilizables
 import Paginador from "../../components/common/Paginador";
 import ModalConfirmacion from "../../components/common/ModalConfirmacion";
+
+// Componentes de la vista
+import FormAltaUsuario from "./FormAltaUsuario";
+import UsuariosTable from "./UsuariosTable";
 import HistorialAuditoria from "./HistorialAuditoria";
 
 /* ============================================================
@@ -127,7 +124,7 @@ export default function ListaUsuarios() {
   const [paginaActual, setPaginaActual] = useState(1);
 
   /* ------------------------------------------------------------
-   * Carga inicial (usando api con AbortController)
+   * Carga inicial (usando userService con AbortController)
    * ------------------------------------------------------------ */
   useEffect(() => {
     if (!tieneAcceso) return;
@@ -136,9 +133,7 @@ export default function ListaUsuarios() {
 
     const cargar = async () => {
       try {
-        const { data } = await api.get<UsuariosListResponse>("/users", {
-          signal: controller.signal,
-        });
+        const data = await userService.getAll(controller.signal);
 
         if (data.success && data.users) {
           setUsuarios(data.users);
@@ -147,7 +142,6 @@ export default function ListaUsuarios() {
           setError("Error al recuperar las cuentas.");
         }
       } catch (err) {
-        // axios cancela con code === "ERR_CANCELED"
         if ((err as { code?: string })?.code === "ERR_CANCELED") return;
         console.error("Error en fetch de usuarios:", err);
         setError("No se pudo establecer conexión con el servidor backend.");
@@ -168,7 +162,7 @@ export default function ListaUsuarios() {
     setLoading(true);
     setError(null);
     try {
-      const { data } = await api.get<UsuariosListResponse>("/users");
+      const data = await userService.getAll();
 
       if (data.success && data.users) {
         setUsuarios(data.users);
@@ -248,17 +242,13 @@ export default function ListaUsuarios() {
   );
 
   /* ------------------------------------------------------------
-   * Handlers usando api (JWT automático via interceptor)
+   * Handlers usando userService
    * ------------------------------------------------------------ */
   const toggleEstadoUsuario = useCallback(async (id: string) => {
     setLoading(true);
     setError(null);
     try {
-      const { data } = await api.patch<{
-        success: boolean;
-        estado?: EstadoUsuario;
-        message?: string;
-      }>(`/users/${id}/status`);
+      const data = await userService.toggleStatus(id);
 
       if (data.success && data.estado) {
         const nuevoEstado = data.estado;
@@ -266,7 +256,7 @@ export default function ListaUsuarios() {
           prev.map((u) => (u._id === id ? { ...u, estado: nuevoEstado } : u))
         );
       } else {
-        setError(data.message || "No se pudo cambiar el estado de la cuenta.");
+        setError("No se pudo cambiar el estado de la cuenta.");
       }
     } catch (err) {
       console.error("Error al mutar el estado del usuario:", err);
@@ -280,17 +270,15 @@ export default function ListaUsuarios() {
     setLoading(true);
     setError(null);
     try {
-      const { data } = await api.post<{ success: boolean; message?: string }>(
-        `/users/${id}/reenviar-invitacion`
-      );
+      const data = await userService.reenviarInvitacion(id);
 
       if (data.success) {
-        const { data: refresco } = await api.get<UsuariosListResponse>("/users");
+        const refresco = await userService.getAll();
         if (refresco.success && refresco.users) {
           setUsuarios(refresco.users);
         }
       } else {
-        setError(data.message || "No se pudo reenviar el correo de invitación.");
+        setError("No se pudo reenviar el correo de invitación.");
       }
     } catch (err) {
       console.error("Error al reenviar la invitación:", err);
@@ -316,15 +304,13 @@ export default function ListaUsuarios() {
     const idAEliminar = usuarioParaEliminar._id;
 
     try {
-      const { data } = await api.delete<{ success: boolean; message?: string }>(
-        `/users/${idAEliminar}`
-      );
+      const data = await userService.delete(idAEliminar);
 
       if (data.success) {
         setUsuarios((prev) => prev.filter((u) => u._id !== idAEliminar));
         setUsuarioParaEliminar(null);
       } else {
-        setError(data.message || "No se pudo eliminar al usuario.");
+        setError("No se pudo eliminar al usuario.");
       }
     } catch (err) {
       console.error("Error al eliminar el usuario de Atlas:", err);

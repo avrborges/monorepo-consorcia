@@ -1,4 +1,4 @@
-// frontend/src/pages/dashboard/MapaEdificio.tsx
+// src/pages/dashboard/MapaEdificio.tsx
 import { useState, useEffect, useMemo, useCallback, memo } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -10,17 +10,17 @@ import {
   HiCheck,
   HiOutlineTrash,
 } from "react-icons/hi";
-import api from "../../api";
 
-// 🎯 Tipos de dominio compartidos entre backend y frontend (fuente única de verdad)
+// 🎯 Capa de servicios (Fase 3)
+import { userService, unidadService } from "../../services";
+
+// 🎯 Tipos de dominio compartidos entre backend y frontend
 import type { Persona, UnidadFuncional } from "@shared/types";
 
 /**
  * En este contexto SIEMPRE recibimos unidades populadas desde el backend
  * (con `.populate("propietario")` y `.populate("inquilino")`), así que
  * refinamos el tipo para tratar propietario/inquilino como Persona directa.
- *
- * Esto evita hacer type-narrowing en cada acceso a `.name`, `.email`, `._id`.
  */
 type UnidadPopulada = Omit<UnidadFuncional, "propietario" | "inquilino"> & {
   propietario?: Persona | null;
@@ -181,44 +181,38 @@ export default function MapaEdificio() {
 
   // Carga de datos
   useEffect(() => {
+    const controller = new AbortController();
     let activo = true;
 
     const inicializarMapa = async () => {
       try {
-        const [resUnidades, resUsuarios] = await Promise.all([
-          api.get("/unidades"),
-          api.get("/users"),
+        const [dataUnidades, dataUsuarios] = await Promise.all([
+          unidadService.getAll(controller.signal),
+          userService.getAll(controller.signal),
         ]);
 
         if (!activo) return;
 
-        const dataUnidades = resUnidades.data;
-        const dataUsuarios = resUsuarios.data;
-
-        if (dataUnidades && dataUnidades.ok && dataUnidades.unidades) {
-          setUnidades(dataUnidades.unidades);
-        } else if (Array.isArray(dataUnidades)) {
-          setUnidades(dataUnidades);
-        } else if (dataUnidades && Array.isArray(dataUnidades.unidades)) {
-          setUnidades(dataUnidades.unidades);
+        if (dataUnidades.ok && dataUnidades.unidades) {
+          setUnidades(dataUnidades.unidades as UnidadPopulada[]);
         }
 
-        if (dataUsuarios && dataUsuarios.success && dataUsuarios.users) {
+        if (dataUsuarios.success && dataUsuarios.users) {
           setUsuariosSistema(dataUsuarios.users);
-        } else if (Array.isArray(dataUsuarios)) {
-          setUsuariosSistema(dataUsuarios);
         }
       } catch (error) {
+        if ((error as { code?: string })?.code === "ERR_CANCELED") return;
         console.error("Error al cargar los datos del edificio:", error);
       } finally {
         if (activo) setCargando(false);
       }
     };
 
-    inicializarMapa();
+    void inicializarMapa();
 
     return () => {
       activo = false;
+      controller.abort();
     };
   }, []);
 
@@ -229,18 +223,15 @@ export default function MapaEdificio() {
       setCreandoUnidad(true);
 
       try {
-        const res = await api.post("/unidades", {
+        const data = await unidadService.create({
           piso: nuevoPiso,
           departamento: nuevoDepto,
           coeficiente: parseFloat(nuevoCoeficiente) || 0,
           estadoOcupacion: "vacio",
         });
 
-        const data = res.data;
-        const unidadCreada = data.unidad || data;
-
-        if (unidadCreada && unidadCreada._id) {
-          setUnidades((prev) => [...prev, unidadCreada]);
+        if (data.ok && data.unidad) {
+          setUnidades((prev) => [...prev, data.unidad as UnidadPopulada]);
           setNuevoPiso("");
           setNuevoDepto("");
           setNuevoCoeficiente("0.05");
@@ -258,8 +249,8 @@ export default function MapaEdificio() {
   const handleEliminarUnidad = useCallback(async (id: string) => {
     setEliminandoUnidad(true);
     try {
-      const res = await api.delete(`/unidades/${id}`);
-      if (res.data && res.data.ok) {
+      const data = await unidadService.delete(id);
+      if (data.ok) {
         setUnidades((prev) => prev.filter((u) => u._id !== id));
         setUnidadSeleccionada(null);
       }
@@ -284,15 +275,17 @@ export default function MapaEdificio() {
       setGuardando(true);
 
       try {
-        const res = await api.put(`/unidades/${unidadSeleccionada._id}/vincular`, {
+        const data = await unidadService.vincularHabitantes(unidadSeleccionada._id, {
           propietarioId: nuevoPropietarioId || null,
           inquilinoId: nuevoInquilinoId || null,
         });
 
-        const data = res.data;
         if (data.ok && data.unidad) {
-          setUnidades((prev) => prev.map((u) => (u._id === data.unidad._id ? data.unidad : u)));
-          setUnidadSeleccionada(data.unidad);
+          const unidadActualizada = data.unidad as UnidadPopulada;
+          setUnidades((prev) =>
+            prev.map((u) => (u._id === unidadActualizada._id ? unidadActualizada : u))
+          );
+          setUnidadSeleccionada(unidadActualizada);
           setDrawerAbierto(false);
         }
       } catch (error) {
@@ -400,48 +393,20 @@ export default function MapaEdificio() {
 
       {/* Formulario rápido colapsable para crear U.F. */}
       {mostrarFormAlta && (
-        <form
-          onSubmit={handleCrearUnidad}
-          className="mb-8 bg-white border border-slate-200 p-5 rounded-2xl flex flex-wrap gap-4 items-end shadow-xs animate-in fade-in duration-200"
-        >
+        <form onSubmit={handleCrearUnidad} className="mb-8 bg-white border border-slate-200 p-5 rounded-2xl flex flex-wrap gap-4 items-end shadow-xs animate-in fade-in duration-200">
           <div className="w-24">
             <label className="block text-slate-600 font-bold text-[11px] uppercase mb-1">Piso</label>
-            <input
-              type="text"
-              required
-              placeholder="Ej: 1"
-              value={nuevoPiso}
-              onChange={(e) => setNuevoPiso(e.target.value)}
-              className="w-full text-sm px-3 py-2 rounded-lg border border-slate-200 bg-white outline-none focus:border-slate-900"
-            />
+            <input type="text" required placeholder="Ej: 1" value={nuevoPiso} onChange={(e) => setNuevoPiso(e.target.value)} className="w-full text-sm px-3 py-2 rounded-lg border border-slate-200 bg-white outline-none focus:border-slate-900" />
           </div>
           <div className="w-28">
             <label className="block text-slate-600 font-bold text-[11px] uppercase mb-1">Dpto / Nro</label>
-            <input
-              type="text"
-              required
-              placeholder="Ej: A"
-              value={nuevoDepto}
-              onChange={(e) => setNuevoDepto(e.target.value)}
-              className="w-full text-sm px-3 py-2 rounded-lg border border-slate-200 bg-white outline-none focus:border-slate-900"
-            />
+            <input type="text" required placeholder="Ej: A" value={nuevoDepto} onChange={(e) => setNuevoDepto(e.target.value)} className="w-full text-sm px-3 py-2 rounded-lg border border-slate-200 bg-white outline-none focus:border-slate-900" />
           </div>
           <div className="w-32">
             <label className="block text-slate-600 font-bold text-[11px] uppercase mb-1">Coeficiente</label>
-            <input
-              type="number"
-              step="0.00001"
-              required
-              value={nuevoCoeficiente}
-              onChange={(e) => setNuevoCoeficiente(e.target.value)}
-              className="w-full text-sm px-3 py-2 rounded-lg border border-slate-200 bg-white outline-none focus:border-slate-900"
-            />
+            <input type="number" step="0.00001" required value={nuevoCoeficiente} onChange={(e) => setNuevoCoeficiente(e.target.value)} className="w-full text-sm px-3 py-2 rounded-lg border border-slate-200 bg-white outline-none focus:border-slate-900" />
           </div>
-          <button
-            type="submit"
-            disabled={creandoUnidad}
-            className="bg-[#0f172a] hover:bg-slate-800 disabled:opacity-50 text-white font-bold text-xs h-9.5 px-4 rounded-lg transition flex items-center gap-1.5 cursor-pointer"
-          >
+          <button type="submit" disabled={creandoUnidad} className="bg-[#0f172a] hover:bg-slate-800 disabled:opacity-50 text-white font-bold text-xs h-9.5 px-4 rounded-lg transition flex items-center gap-1.5 cursor-pointer">
             <HiCheck className="w-4 h-4" />
             <span>{creandoUnidad ? "Creando..." : "Guardar"}</span>
           </button>
@@ -583,12 +548,10 @@ export default function MapaEdificio() {
             role="dialog"
             aria-modal="true"
           >
-            {/* Fondo Oscuro / Backdrop */}
             <div
               className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity duration-300 animate-in fade-in"
               onClick={() => setDrawerAbierto(false)}
             />
-            {/* Contenedor del Formulario */}
             <form
               onSubmit={guardarHabitantes}
               className="relative w-full lg:w-96 h-[85vh] lg:h-screen bg-white shadow-2xl rounded-t-3xl lg:rounded-none transition-all duration-300 ease-in-out animate-in slide-in-from-bottom lg:slide-in-from-bottom-0 lg:slide-in-from-right flex flex-col justify-between z-10"

@@ -1,12 +1,19 @@
+// src/pages/login.tsx
 import { useEffect, useRef, useState } from "react";
 import type { SyntheticEvent } from "react";
 import { useNavigate } from "react-router-dom";
+import { AxiosError } from "axios";
 import { MdErrorOutline } from "react-icons/md";
 import { CiCircleCheck } from "react-icons/ci";
 import { HiOutlineEye, HiOutlineEyeOff, HiOutlineMail, HiOutlineLockClosed } from "react-icons/hi";
 
 import AuthLayout from "../components/layout/AuthLayout";
-import { loginRequest } from "../api";
+
+// 🎯 Capa de servicios (Fase 3)
+import { userService } from "../services";
+
+// 🎯 Tipos de respuesta compartidos entre backend y frontend
+import type { ErrorResponse } from "@shared/types";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -40,27 +47,29 @@ export default function Login() {
     setSuccessMsg("");
 
     try {
-      const result = await loginRequest(email.trim(), password);
+      const result = await userService.login(email.trim(), password);
 
-      if (result.success) {
-        setSuccessMsg(result.message);
+      setSuccessMsg(result.message);
 
-        localStorage.setItem("token", result.token);
-        localStorage.setItem("user", JSON.stringify(result.user));
+      localStorage.setItem("token", result.token);
+      localStorage.setItem("user", JSON.stringify(result.user));
 
-        redirectTimeoutRef.current = window.setTimeout(() => {
-          navigate("/dashboard");
-        }, 1500);
-
-        return;
-      }
-
-      setErrorMsg(result.message);
-    } catch (error) {
+      redirectTimeoutRef.current = window.setTimeout(() => {
+        navigate("/dashboard");
+      }, 1500);
+    } catch (error: unknown) {
       console.error("Error durante el inicio de sesión:", error);
-      setErrorMsg(
-        "No fue posible conectarse con el servidor. Intente nuevamente."
-      );
+
+      if (error instanceof AxiosError && error.response?.data) {
+        // Error del backend con shape { success: false, message: string }
+        const errorData = error.response.data as ErrorResponse;
+        setErrorMsg(errorData.message || "Credenciales inválidas.");
+      } else {
+        // Network error / timeout / desconexión
+        setErrorMsg(
+          "No fue posible conectarse con el servidor. Intente nuevamente."
+        );
+      }
     } finally {
       setIsLoading(false);
     }
@@ -83,7 +92,7 @@ export default function Login() {
     >
       {/* Contenedor tipo Card para Mobile: Agrupa y rompe el fondo plano */}
       <div className="bg-white rounded-2xl border border-slate-100 p-5 sm:p-6 shadow-xl shadow-slate-200/50">
-        
+
         {/* Mensajes de feedback */}
         {errorMsg && (
           <div className="mb-5 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-medium text-red-600 animate-in fade-in zoom-in-95 duration-200">
@@ -165,7 +174,7 @@ export default function Login() {
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full rounded-xl border border-slate-200 bg-white pl-11 pr-12 py-3 font-mono text-sm text-slate-800 shadow-sm transition-all focus:border-teal-600 focus:ring-4 focus:ring-teal-600/10 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed placeholder:text-slate-200"
               />
-              
+
               <button
                 type="button"
                 disabled={isLoading}
@@ -189,10 +198,10 @@ export default function Login() {
           >
             {isLoading ? (
               <>
-                <svg 
-                  className="animate-spin h-5 w-5 text-white" 
-                  xmlns="http://www.w3.org/2000/svg" 
-                  fill="none" 
+                <svg
+                  className="animate-spin h-5 w-5 text-white"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
                   viewBox="0 0 24 24"
                 >
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>

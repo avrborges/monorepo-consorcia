@@ -10,15 +10,11 @@ import {
   HiX,
 } from "react-icons/hi";
 
-// 🎯 Cliente HTTP con interceptors JWT + manejo global de 401
-import api from "../../api";
+// 🎯 Capa de servicios (Fase 3)
+import { auditService } from "../../services";
 
 // 🎯 Tipos de dominio compartidos entre backend y frontend
-import type {
-  AuditLog,
-  AccionAuditoria,
-  AuditLogsResponse,
-} from "@shared/types";
+import type { AuditLog, AccionAuditoria } from "@shared/types";
 
 export default function HistorialAuditoria() {
   const [logs, setLogs] = useState<AuditLog[]>([]);
@@ -35,7 +31,7 @@ export default function HistorialAuditoria() {
     if (isRefresh) setLoading(true);
     setError(null);
     try {
-      const { data } = await api.get<AuditLogsResponse>("/users/audit-logs");
+      const data = await auditService.getLogs();
 
       if (data.success) {
         setLogs(data.logs);

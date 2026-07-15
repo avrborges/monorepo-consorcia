@@ -6,10 +6,12 @@ import { HiCheckCircle } from "react-icons/hi";
 import { HiOutlineEye, HiOutlineEyeOff } from "react-icons/hi";
 
 import AuthLayout from "../components/layout/AuthLayout";
-import api from "../api";
+
+// 🎯 Capa de servicios (Fase 3)
+import { userService } from "../services";
 
 // 🎯 Tipos de respuesta compartidos entre backend y frontend
-import type { SuccessResponse } from "@shared/types";
+import type { ErrorResponse } from "@shared/types";
 
 export default function ActivarCuenta() {
   const [searchParams] = useSearchParams();
@@ -50,19 +52,19 @@ export default function ActivarCuenta() {
     e.preventDefault();
     setError(null);
 
-    if (!esFormularioValido || loading) return;
+    if (!esFormularioValido || loading || !token) return;
 
     setLoading(true);
 
     try {
-      await api.post<SuccessResponse>("/users/activar", { token, password });
+      await userService.activarCuenta({ token, password });
       setSuccess(true);
 
       redirectTimeoutRef.current = window.setTimeout(() => {
         navigate("/login");
       }, 3000);
     } catch (err: unknown) {
-      const axiosError = err as AxiosError<SuccessResponse>;
+      const axiosError = err as AxiosError<ErrorResponse>;
       setError(
         axiosError.response?.data?.message || "Error al activar la cuenta."
       );

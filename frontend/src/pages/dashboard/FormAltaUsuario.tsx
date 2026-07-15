@@ -8,8 +8,12 @@ import {
   HiOutlineOfficeBuilding,
 } from "react-icons/hi";
 
-// 🎯 Cliente HTTP con interceptors JWT + manejo global de 401
-import api from "../../api";
+// 🎯 Capa de servicios (Fase 3)
+import { userService } from "../../services";
+import type {
+  CrearUsuarioPayload,
+  ActualizarUsuarioPayload,
+} from "../../services";
 
 // 🎯 Tipos de dominio compartidos entre backend y frontend
 import type { Persona, Rol } from "@shared/types";
@@ -19,15 +23,6 @@ interface FormAltaUsuarioProps {
   onCerrar: () => void;
   onUsuarioCreado: () => void;
   usuarioEditando?: Persona | null;
-}
-
-/**
- * Respuesta esperada del backend al crear o editar un usuario.
- */
-interface CrearOEditarUsuarioResponse {
-  success: boolean;
-  message?: string;
-  user?: Persona;
 }
 
 export default function FormAltaUsuario({
@@ -157,24 +152,39 @@ export default function FormAltaUsuario({
       telUnificado = prefix ? `${prefix} ${telLocalLimpio}` : telLocalLimpio;
     }
 
-    const payload = {
-      name: nombreLimpio,
-      email: emailLimpio,
-      role,
-      unidadFuncional: ufCompuesta,
-      telefono: telUnificado,
-    };
-
     try {
-      const { data } = esEdicion
-        ? await api.put<CrearOEditarUsuarioResponse>(`/users/${usuarioEditando?._id}`, payload)
-        : await api.post<CrearOEditarUsuarioResponse>("/users", payload);
+      if (esEdicion && usuarioEditando) {
+        const payload: ActualizarUsuarioPayload = {
+          name: nombreLimpio,
+          email: emailLimpio,
+          role,
+          unidadFuncional: ufCompuesta,
+          telefono: telUnificado,
+        };
+        const data = await userService.update(usuarioEditando._id, payload);
 
-      if (data.success) {
-        onUsuarioCreado();
-        onCerrar();
+        if (data.success) {
+          onUsuarioCreado();
+          onCerrar();
+        } else {
+          setErrorForm("Ocurrió un error en la solicitud.");
+        }
       } else {
-        setErrorForm(data.message || "Ocurrió un error en la solicitud.");
+        const payload: CrearUsuarioPayload = {
+          name: nombreLimpio,
+          email: emailLimpio,
+          role,
+          unidadFuncional: ufCompuesta,
+          telefono: telUnificado,
+        };
+        const data = await userService.create(payload);
+
+        if (data.success) {
+          onUsuarioCreado();
+          onCerrar();
+        } else {
+          setErrorForm("Ocurrió un error en la solicitud.");
+        }
       }
     } catch (err) {
       console.error("Error en submit de usuario:", err);
