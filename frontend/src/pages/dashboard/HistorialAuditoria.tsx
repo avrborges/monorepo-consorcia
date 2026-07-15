@@ -1,26 +1,33 @@
 // src/pages/dashboard/HistorialAuditoria.tsx
 import { useEffect, useState } from "react";
-import { HiOutlineChip, HiOutlineUserAdd, HiOutlinePencilAlt, HiOutlineTrash, HiOutlineRefresh, HiSearch, HiX } from "react-icons/hi";
+import {
+  HiOutlineChip,
+  HiOutlineUserAdd,
+  HiOutlinePencilAlt,
+  HiOutlineTrash,
+  HiOutlineRefresh,
+  HiSearch,
+  HiX,
+} from "react-icons/hi";
 
-interface LogItem {
-  _id: string;
-  adminName: string;
-  accion: "USUARIO_CREADO" | "USUARIO_EDITADO" | "USUARIO_ELIMINADO";
-  detalles: {
-    nombreUsuario: string;
-    cambios?: Record<string, unknown>;
-  };
-  timestamp: string;
-}
+// 🎯 Cliente HTTP con interceptors JWT + manejo global de 401
+import api from "../../api";
+
+// 🎯 Tipos de dominio compartidos entre backend y frontend
+import type {
+  AuditLog,
+  AccionAuditoria,
+  AuditLogsResponse,
+} from "@shared/types";
 
 export default function HistorialAuditoria() {
-  const [logs, setLogs] = useState<LogItem[]>([]);
+  const [logs, setLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
   // 🛠️ Estados para Filtros
   const [busqueda, setBusqueda] = useState<string>("");
-  const [filtroAccion, setFiltroAccion] = useState<string>("TODOS");
+  const [filtroAccion, setFiltroAccion] = useState<AccionAuditoria | "TODOS">("TODOS");
   const [fechaDesde, setFechaDesde] = useState<string>("");
   const [fechaHasta, setFechaHasta] = useState<string>("");
 
@@ -28,26 +35,17 @@ export default function HistorialAuditoria() {
     if (isRefresh) setLoading(true);
     setError(null);
     try {
-      const baseUrl = (import.meta.env?.VITE_API_URL as string) || `http://${window.location.hostname}:5000`;
-      const token = localStorage.getItem("token"); 
+      const { data } = await api.get<AuditLogsResponse>("/users/audit-logs");
 
-      const res = await fetch(`${baseUrl}/api/users/audit-logs`, {
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
-        }
-      });
-      
-      const data = await res.json();
       if (data.success) {
         setLogs(data.logs);
       } else {
-        setError(data.message || "No se pudo cargar el historial.");
+        setError("No se pudo cargar el historial.");
       }
     } catch (err) {
       console.error("Error al cargar logs:", err);
       setError("Error de conexión con el servidor.");
-    } finally { 
+    } finally {
       setLoading(false);
     }
   };
@@ -65,47 +63,59 @@ export default function HistorialAuditoria() {
     };
   }, []);
 
-  const getIconoAccion = (accion: string) => {
+  const getIconoAccion = (accion: AccionAuditoria) => {
     switch (accion) {
-      case "USUARIO_CREADO": return <HiOutlineUserAdd className="w-4 h-4 text-emerald-600 shrink-0" />;
-      case "USUARIO_EDITADO": return <HiOutlinePencilAlt className="w-4 h-4 text-amber-600 shrink-0" />;
-      case "USUARIO_ELIMINADO": return <HiOutlineTrash className="w-4 h-4 text-red-600 shrink-0" />;
-      default: return <HiOutlineChip className="w-4 h-4 text-slate-600 shrink-0" />;
+      case "USUARIO_CREADO":
+        return <HiOutlineUserAdd className="w-4 h-4 text-emerald-600 shrink-0" />;
+      case "USUARIO_EDITADO":
+        return <HiOutlinePencilAlt className="w-4 h-4 text-amber-600 shrink-0" />;
+      case "USUARIO_ELIMINADO":
+        return <HiOutlineTrash className="w-4 h-4 text-red-600 shrink-0" />;
+      default:
+        return <HiOutlineChip className="w-4 h-4 text-slate-600 shrink-0" />;
     }
   };
 
-  const getEstilosCirculo = (accion: string) => {
+  const getEstilosCirculo = (accion: AccionAuditoria) => {
     switch (accion) {
-      case "USUARIO_CREADO": return "bg-emerald-50 border-emerald-200 text-emerald-600";
-      case "USUARIO_EDITADO": return "bg-amber-50 border-amber-200 text-amber-600";
-      case "USUARIO_ELIMINADO": return "bg-red-50 border-red-200 text-red-600";
-      default: return "bg-slate-50 border-slate-200 text-slate-600";
+      case "USUARIO_CREADO":
+        return "bg-emerald-50 border-emerald-200 text-emerald-600";
+      case "USUARIO_EDITADO":
+        return "bg-amber-50 border-amber-200 text-amber-600";
+      case "USUARIO_ELIMINADO":
+        return "bg-red-50 border-red-200 text-red-600";
+      default:
+        return "bg-slate-50 border-slate-200 text-slate-600";
     }
   };
 
   const traducirCambios = (cambios?: Record<string, unknown>) => {
     if (!cambios) return null;
     const labels: Record<string, string> = {
-      name: "Nombre", email: "Email", role: "Rol", 
-      unidadFuncional: "UF", telefono: "Teléfono", estado: "Estado"
+      name: "Nombre",
+      email: "Email",
+      role: "Rol",
+      unidadFuncional: "UF",
+      telefono: "Teléfono",
+      estado: "Estado",
     };
     return Object.entries(cambios)
-        .map(([key, val]) => `${labels[key] || key}: "${String(val)}"`)
-        .join(" | ");
+      .map(([key, val]) => `${labels[key] || key}: "${String(val)}"`)
+      .join(" | ");
   };
 
   // 🎯 Filtrado Multi-Criterio
   const logsFiltrados = logs.filter((log) => {
     const cumpleAccion = filtroAccion === "TODOS" || log.accion === filtroAccion;
-    
+
     const texto = busqueda.toLowerCase().trim();
-    const cumpleBusqueda = 
-      !texto || 
-      log.adminName.toLowerCase().includes(texto) || 
+    const cumpleBusqueda =
+      !texto ||
+      log.adminName.toLowerCase().includes(texto) ||
       log.detalles.nombreUsuario.toLowerCase().includes(texto);
 
     const logFecha = new Date(log.timestamp);
-    
+
     let cumpleDesde = true;
     if (fechaDesde) {
       const desde = new Date(fechaDesde);
@@ -130,7 +140,8 @@ export default function HistorialAuditoria() {
     setFechaHasta("");
   };
 
-  const tieneFiltrosActivos = busqueda || filtroAccion !== "TODOS" || fechaDesde || fechaHasta;
+  const tieneFiltrosActivos =
+    busqueda || filtroAccion !== "TODOS" || fechaDesde || fechaHasta;
 
   return (
     <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm w-full animate-in fade-in duration-200">
@@ -142,7 +153,7 @@ export default function HistorialAuditoria() {
         </div>
         <button
           type="button"
-          onClick={() => cargarLogs(true)} 
+          onClick={() => cargarLogs(true)}
           disabled={loading}
           className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-50 border border-slate-200 rounded-xl transition cursor-pointer disabled:opacity-50"
         >
@@ -152,7 +163,6 @@ export default function HistorialAuditoria() {
 
       {/* 🛠️ BARRA DE FILTROS EN UN SOLO RENGLÓN */}
       <div className="flex flex-wrap md:flex-nowrap items-center gap-3 mb-6 p-3.5 bg-slate-50/60 rounded-xl border border-slate-100">
-        
         {/* Buscador principal (ocupa el resto de la línea) */}
         <div className="relative flex-1 min-w-50">
           <HiSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -169,7 +179,7 @@ export default function HistorialAuditoria() {
         <div className="w-full sm:w-auto md:w-44 shrink-0">
           <select
             value={filtroAccion}
-            onChange={(e) => setFiltroAccion(e.target.value)}
+            onChange={(e) => setFiltroAccion(e.target.value as AccionAuditoria | "TODOS")}
             className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 focus:outline-none focus:border-slate-300 transition cursor-pointer"
           >
             <option value="TODOS">Todas las acciones</option>
@@ -229,7 +239,6 @@ export default function HistorialAuditoria() {
       <div className="relative space-y-4 max-h-150 overflow-y-auto pr-3 scrollbar-thin">
         {logsFiltrados.map((log) => (
           <div key={log._id} className="flex items-start gap-4 group animate-in fade-in slide-in-from-bottom-2 duration-150">
-            
             {/* ÍCONO DE ACCIÓN */}
             <div className={`mt-2 w-7 h-7 rounded-full border-2 flex items-center justify-center bg-white shadow-sm transition duration-200 shrink-0 ${getEstilosCirculo(log.accion)}`}>
               {getIconoAccion(log.accion)}
@@ -241,7 +250,7 @@ export default function HistorialAuditoria() {
                 <span className="text-xs font-bold text-slate-800">{log.adminName}</span>
                 <span className="text-[10px] font-bold text-slate-400">{new Date(log.timestamp).toLocaleString("es-AR")}</span>
               </div>
-              
+
               <p className="text-xs text-slate-600 font-medium mt-1">
                 {log.accion === "USUARIO_CREADO" && "Dio de alta a: "}
                 {log.accion === "USUARIO_EDITADO" && "Modificó a: "}
@@ -255,7 +264,6 @@ export default function HistorialAuditoria() {
                 </div>
               )}
             </div>
-
           </div>
         ))}
       </div>

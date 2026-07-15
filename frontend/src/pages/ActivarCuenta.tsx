@@ -1,10 +1,15 @@
+// src/pages/ActivarCuenta.tsx
 import { useState, useEffect, useRef } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { AxiosError } from "axios";
 import { HiCheckCircle } from "react-icons/hi";
-import { HiOutlineEye, HiOutlineEyeOff } from "react-icons/hi"; // Íconos para la visibilidad
+import { HiOutlineEye, HiOutlineEyeOff } from "react-icons/hi";
+
 import AuthLayout from "../components/AuthLayout";
 import api from "../api";
+
+// 🎯 Tipos de respuesta compartidos entre backend y frontend
+import type { SuccessResponse } from "@shared/types";
 
 export default function ActivarCuenta() {
   const [searchParams] = useSearchParams();
@@ -35,10 +40,10 @@ export default function ActivarCuenta() {
   const tieneNumeroOEspecial = /[\d\W]/.test(password);
   const coincidenContrasenas = password.length > 0 && password === confirmPassword;
 
-  const esFormularioValido = 
-    tieneMinimoCaracteres && 
-    tieneMayuscula && 
-    tieneNumeroOEspecial && 
+  const esFormularioValido =
+    tieneMinimoCaracteres &&
+    tieneMayuscula &&
+    tieneNumeroOEspecial &&
     coincidenContrasenas;
 
   const handleActivar = async (e: React.SyntheticEvent) => {
@@ -50,14 +55,14 @@ export default function ActivarCuenta() {
     setLoading(true);
 
     try {
-      await api.post("/users/activar", { token, password });
+      await api.post<SuccessResponse>("/users/activar", { token, password });
       setSuccess(true);
-      
+
       redirectTimeoutRef.current = window.setTimeout(() => {
         navigate("/login");
       }, 3000);
     } catch (err: unknown) {
-      const axiosError = err as AxiosError<{ message?: string }>;
+      const axiosError = err as AxiosError<SuccessResponse>;
       setError(
         axiosError.response?.data?.message || "Error al activar la cuenta."
       );
@@ -75,8 +80,8 @@ export default function ActivarCuenta() {
   }
 
   return (
-    <AuthLayout 
-      title="Activar tu cuenta" 
+    <AuthLayout
+      title="Activar tu cuenta"
       subtitle="Por favor, define tu contraseña para ingresar a Consorcia."
     >
       {success ? (
@@ -91,16 +96,16 @@ export default function ActivarCuenta() {
               {error}
             </div>
           )}
-          
+
           <div>
             <label htmlFor="password" className="block text-xs font-bold text-slate-500 uppercase mb-2">
               Nueva contraseña
             </label>
             <div className="relative">
-              <input 
+              <input
                 id="password"
-                type={showPassword ? "text" : "password"} 
-                required 
+                type={showPassword ? "text" : "password"}
+                required
                 autoFocus
                 disabled={loading}
                 autoComplete="new-password"
@@ -118,16 +123,16 @@ export default function ActivarCuenta() {
               </button>
             </div>
           </div>
-          
+
           <div>
             <label htmlFor="confirmPassword" className="block text-xs font-bold text-slate-500 uppercase mb-2">
               Confirmar contraseña
             </label>
             <div className="relative">
-              <input 
+              <input
                 id="confirmPassword"
-                type={showConfirmPassword ? "text" : "password"} 
-                required 
+                type={showConfirmPassword ? "text" : "password"}
+                required
                 disabled={loading}
                 autoComplete="new-password"
                 value={confirmPassword}
@@ -148,7 +153,7 @@ export default function ActivarCuenta() {
           {/* Checklist constructivo y sutil */}
           <div className="p-3.5 bg-slate-50/80 border border-slate-100 rounded-xl space-y-2.5 text-xs font-semibold">
             <p className="text-slate-400 uppercase tracking-wider text-[10px] font-bold mb-1">Requerimientos de seguridad:</p>
-            
+
             <div className={`flex items-center gap-2 transition-colors duration-200 ${tieneMinimoCaracteres ? "text-emerald-600" : "text-slate-400"}`}>
               {tieneMinimoCaracteres ? <HiCheckCircle className="w-4 h-4 shrink-0" /> : <div className="w-4 h-4 rounded-full border-2 border-slate-300 shrink-0" />}
               <span>Mínimo de 6 caracteres</span>
@@ -170,8 +175,8 @@ export default function ActivarCuenta() {
             </div>
           </div>
 
-          <button 
-            type="submit" 
+          <button
+            type="submit"
             disabled={!esFormularioValido || loading}
             className="w-full py-3 bg-[#1e6f65] text-white font-bold rounded-xl hover:bg-[#16524b] transition shadow-lg shadow-teal-900/20 disabled:opacity-40 disabled:hover:bg-[#1e6f65] disabled:cursor-not-allowed cursor-pointer flex items-center justify-center gap-2"
           >

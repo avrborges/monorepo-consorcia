@@ -33,6 +33,7 @@ export interface Persona {
   unidadFuncional?: string;
   telefono?: string;
   debeCambiarPassword?: boolean;
+  tokenExpiracion?: string;
   createdAt?: string;
   updatedAt?: string;
 }

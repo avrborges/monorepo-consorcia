@@ -16,13 +16,11 @@ import {
   HiOutlinePaperAirplane,
 } from "react-icons/hi";
 
-import type {
-  Usuario,
-  Rol,
-  EstadoUsuario,
-  ConfiguracionOrden,
-  ColumnaOrdenable,
-} from "./ListaUsuarios";
+// 🎯 Tipos de dominio compartidos entre backend y frontend
+import type { Persona, Rol, EstadoUsuario } from "@shared/types";
+
+// 🎨 Tipos de UI específicos del ordenamiento de la tabla (viven en ListaUsuarios)
+import type { ConfiguracionOrden, ColumnaOrdenable } from "./ListaUsuarios";
 
 /* ============================================================
  * ESTILOS DE BADGE POR ROL
@@ -79,12 +77,12 @@ CeldaEstado.displayName = "CeldaEstado";
  * PROPS DEL COMPONENTE
  * ============================================================ */
 interface UsuariosTableProps {
-  usuarios: Usuario[];
+  usuarios: Persona[];
   orden: ConfiguracionOrden;
   onClickOrden: (columna: ColumnaOrdenable) => void;
-  onEditar: (usuario: Usuario) => void;
+  onEditar: (usuario: Persona) => void;
   onToggleEstado: (id: string) => void;
-  onEliminar: (usuario: Usuario) => void;
+  onEliminar: (usuario: Persona) => void;
   onReenviarInvitacion: (id: string) => Promise<void>;
 }
 
@@ -152,8 +150,8 @@ export default function UsuariosTable({
             <th className="px-4 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">
               Rol Asignado
             </th>
-            
-            <th 
+
+            <th
               className="hidden xl:table-cell px-4 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider cursor-pointer group hover:text-slate-900"
               onClick={() => onClickOrden("unidadFuncional")}
             >
@@ -162,15 +160,15 @@ export default function UsuariosTable({
                 {renderIconoOrden("unidadFuncional")}
               </div>
             </th>
-            
+
             <th className="hidden lg:table-cell px-4 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">
               Teléfono
             </th>
-            
+
             <th className="px-4 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">
               Estado
             </th>
-            
+
             <th className="px-4 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right w-20 min-w-20">
               Acciones
             </th>
@@ -182,14 +180,14 @@ export default function UsuariosTable({
               const esInactivo = u.estado === "inactivo";
               const esPendiente = u.estado === "pendiente";
               const elMenuEstaAbierto = menuAbiertoId === u._id;
-              
+
               const esUltimaFila = usuarios.length > 2 && indice >= usuarios.length - 2;
 
               const fechaExpiracion = u.tokenExpiracion ? new Date(u.tokenExpiracion).getTime() : 0;
-              const estaExpirado = esPendiente && (ahoraMs > fechaExpiracion);
+              const estaExpirado = esPendiente && ahoraMs > fechaExpiracion;
 
               const filaAtenuada = esInactivo || estaExpirado;
-              
+
               // Variable de control para atenuar las celdas de texto individuales sin afectar las acciones
               const claseOpacidad = filaAtenuada ? "opacity-40" : "";
 
@@ -214,7 +212,7 @@ export default function UsuariosTable({
                   <td className={`px-4 py-4 ${claseOpacidad}`}>
                     <BadgeRol role={u.role} />
                   </td>
-                  
+
                   <td className={`hidden xl:table-cell px-4 py-4 text-slate-600 font-bold ${claseOpacidad}`}>
                     {u.unidadFuncional ? (
                       <div className="flex items-center gap-1.5">
@@ -227,7 +225,7 @@ export default function UsuariosTable({
                       <span className="text-slate-300 font-normal select-none">-</span>
                     )}
                   </td>
-                  
+
                   <td className={`hidden lg:table-cell px-4 py-4 text-slate-500 ${claseOpacidad}`}>
                     {u.telefono ? (
                       <div className="flex items-center gap-1.5">
@@ -240,11 +238,11 @@ export default function UsuariosTable({
                       <span className="text-slate-300 font-normal select-none">-</span>
                     )}
                   </td>
-                  
+
                   <td className={`px-4 py-4 ${claseOpacidad}`}>
                     {estaExpirado ? (
-                      <div 
-                        className="flex items-center gap-1.5 text-rose-500/90 font-bold text-xs shrink-0 cursor-help" 
+                      <div
+                        className="flex items-center gap-1.5 text-rose-500/90 font-bold text-xs shrink-0 cursor-help"
                         title="El enlace de invitación enviado por correo caducó (límite de 24 hs)."
                       >
                         <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse" />
@@ -254,11 +252,11 @@ export default function UsuariosTable({
                       <CeldaEstado estado={u.estado} />
                     )}
                   </td>
-                  
+
                   {/* Esta celda de acciones se mantiene sin claseOpacidad para que el menú flote al 100% */}
                   <td className="px-4 py-4 text-right relative">
                     <div className="flex items-center justify-end relative">
-                      
+
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -266,8 +264,8 @@ export default function UsuariosTable({
                         }}
                         title="Ver acciones"
                         className={`p-2 rounded-xl transition cursor-pointer ${
-                          elMenuEstaAbierto 
-                            ? "bg-slate-900 text-white shadow-sm" 
+                          elMenuEstaAbierto
+                            ? "bg-slate-900 text-white shadow-sm"
                             : "text-slate-400 hover:text-slate-900 hover:bg-slate-100"
                         }`}
                       >
@@ -275,10 +273,10 @@ export default function UsuariosTable({
                       </button>
 
                       {elMenuEstaAbierto && (
-                        <div 
+                        <div
                           className={`absolute right-0 w-52 bg-white border border-slate-200/80 rounded-xl shadow-lg py-1.5 z-50 animate-in fade-in duration-150 ${
-                            esUltimaFila 
-                              ? "bottom-full mb-1 origin-bottom-right slide-in-from-bottom-2" 
+                            esUltimaFila
+                              ? "bottom-full mb-1 origin-bottom-right slide-in-from-bottom-2"
                               : "top-full mt-1 origin-top-right slide-in-from-top-2"
                           }`}
                         >

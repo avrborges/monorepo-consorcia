@@ -11,6 +11,17 @@ import {
   HiRefresh,
 } from "react-icons/hi";
 
+// 🎯 Cliente HTTP con interceptors JWT + manejo global de 401
+import api from "../../api";
+
+// 🎯 Tipos de dominio compartidos entre backend y frontend
+import type {
+  Persona,
+  Rol,
+  EstadoUsuario,
+  UsuariosListResponse,
+} from "@shared/types";
+
 // Componentes separados
 import FormAltaUsuario from "./FormAltaUsuario";
 import UsuariosTable from "./UsuariosTable";
@@ -19,40 +30,14 @@ import ModalConfirmacion from "./ModalConfirmacion";
 import HistorialAuditoria from "./HistorialAuditoria";
 
 /* ============================================================
- * TIPOS
+ * TIPOS LOCALES (específicos del componente)
  * ============================================================ */
-export type Rol =
-  | "superadmin"
-  | "admin"
-  | "consejo"
-  | "propietario"
-  | "inquilino";
-
-export type EstadoUsuario = "activo" | "pendiente" | "inactivo";
-
-export interface Usuario {
-  _id: string;
-  name: string;
-  email: string;
-  role: Rol;
-  estado: EstadoUsuario;
-  unidadFuncional?: string;
-  telefono?: string;
-  tokenExpiracion?: string; 
-}
-
 export type ColumnaOrdenable = "name" | "unidadFuncional";
 export type DireccionOrden = "asc" | "desc";
 
 export interface ConfiguracionOrden {
   columna: ColumnaOrdenable | null;
   direccion: DireccionOrden;
-}
-
-interface UsuariosResponse {
-  success: boolean;
-  users?: Usuario[];
-  message?: string;
 }
 
 /* ============================================================
@@ -80,12 +65,6 @@ const OPCIONES_ESTADO: { value: EstadoUsuario | "todos"; label: string }[] = [
 /* ============================================================
  * HELPERS
  * ============================================================ */
-const getBaseUrl = (): string => {
-  const fromEnv = import.meta.env?.VITE_API_URL as string | undefined;
-  if (fromEnv) return fromEnv;
-  return `http://${window.location.hostname}:5000`;
-};
-
 const verificarAcceso = (): boolean => {
   try {
     const userString = localStorage.getItem("user");
@@ -96,22 +75,6 @@ const verificarAcceso = (): boolean => {
     return false;
   }
 };
-
-// 🛡️ Inyectamos correctamente el token JWT para evitar errores 401
-async function fetchUsuariosRequest(
-  signal?: AbortSignal
-): Promise<UsuariosResponse> {
-  const token = localStorage.getItem("token");
-  
-  const respuesta = await fetch(`${getBaseUrl()}/api/users`, { 
-    signal,
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${token}`
-    }
-  });
-  return (await respuesta.json()) as UsuariosResponse;
-}
 
 function useDebounce<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState(value);
@@ -129,7 +92,7 @@ export default function ListaUsuarios() {
   const [tieneAcceso] = useState<boolean>(verificarAcceso);
   const [loading, setLoading] = useState<boolean>(verificarAcceso);
 
-  const [usuarios, setUsuarios] = useState<Usuario[]>([]);
+  const [usuarios, setUsuarios] = useState<Persona[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   // 🔑 Extraemos el rol de la sesión de manera segura para el renderizado de la Tab
@@ -147,8 +110,8 @@ export default function ListaUsuarios() {
   const [pestanaActiva, setPestanaActiva] = useState<"lista" | "auditoria">("lista");
 
   const [modalAbierto, setModalAbierto] = useState<boolean>(false);
-  const [usuarioParaEliminar, setUsuarioParaEliminar] = useState<Usuario | null>(null);
-  const [usuarioEditando, setUsuarioEditando] = useState<Usuario | null>(null);
+  const [usuarioParaEliminar, setUsuarioParaEliminar] = useState<Persona | null>(null);
+  const [usuarioEditando, setUsuarioEditando] = useState<Persona | null>(null);
 
   const [busqueda, setBusqueda] = useState("");
   const busquedaDebounced = useDebounce(busqueda, DEBOUNCE_MS);
@@ -164,7 +127,7 @@ export default function ListaUsuarios() {
   const [paginaActual, setPaginaActual] = useState(1);
 
   /* ------------------------------------------------------------
-   * Carga inicial
+   * Carga inicial (usando api con AbortController)
    * ------------------------------------------------------------ */
   useEffect(() => {
     if (!tieneAcceso) return;
@@ -173,16 +136,19 @@ export default function ListaUsuarios() {
 
     const cargar = async () => {
       try {
-        const resultado = await fetchUsuariosRequest(controller.signal);
+        const { data } = await api.get<UsuariosListResponse>("/users", {
+          signal: controller.signal,
+        });
 
-        if (resultado.success && resultado.users) {
-          setUsuarios(resultado.users);
+        if (data.success && data.users) {
+          setUsuarios(data.users);
           setError(null);
         } else {
-          setError(resultado.message || "Error al recuperar las cuentas.");
+          setError("Error al recuperar las cuentas.");
         }
       } catch (err) {
-        if ((err as Error).name === "AbortError") return;
+        // axios cancela con code === "ERR_CANCELED"
+        if ((err as { code?: string })?.code === "ERR_CANCELED") return;
         console.error("Error en fetch de usuarios:", err);
         setError("No se pudo establecer conexión con el servidor backend.");
       } finally {
@@ -202,12 +168,12 @@ export default function ListaUsuarios() {
     setLoading(true);
     setError(null);
     try {
-      const resultado = await fetchUsuariosRequest();
+      const { data } = await api.get<UsuariosListResponse>("/users");
 
-      if (resultado.success && resultado.users) {
-        setUsuarios(resultado.users);
+      if (data.success && data.users) {
+        setUsuarios(data.users);
       } else {
-        setError(resultado.message || "Error al recuperar las cuentas.");
+        setError("Error al recuperar las cuentas.");
       }
     } catch (err) {
       console.error("Error en fetch de usuarios:", err);
@@ -249,7 +215,11 @@ export default function ListaUsuarios() {
   }, [usuarios, busquedaDebounced, filtroRol, filtroEstado, orden]);
 
   // 🛠️ Optimización: Reseteo controlado de paginación basado en mutaciones de filtros
-  const [filtrosPrevios, setFiltrosPrevios] = useState({ busquedaDebounced, filtroRol, filtroEstado });
+  const [filtrosPrevios, setFiltrosPrevios] = useState({
+    busquedaDebounced,
+    filtroRol,
+    filtroEstado,
+  });
 
   if (
     filtrosPrevios.busquedaDebounced !== busquedaDebounced ||
@@ -278,32 +248,25 @@ export default function ListaUsuarios() {
   );
 
   /* ------------------------------------------------------------
-   * Handlers protegidos con JWT
+   * Handlers usando api (JWT automático via interceptor)
    * ------------------------------------------------------------ */
   const toggleEstadoUsuario = useCallback(async (id: string) => {
     setLoading(true);
     setError(null);
     try {
-      const token = localStorage.getItem("token");
+      const { data } = await api.patch<{
+        success: boolean;
+        estado?: EstadoUsuario;
+        message?: string;
+      }>(`/users/${id}/status`);
 
-      const respuesta = await fetch(`${getBaseUrl()}/api/users/${id}/status`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
-        },
-      });
-
-      const resultado = await respuesta.json();
-
-      if (resultado.success) {
+      if (data.success && data.estado) {
+        const nuevoEstado = data.estado;
         setUsuarios((prev) =>
-          prev.map((u) =>
-            u._id === id ? { ...u, estado: resultado.estado } : u
-          )
+          prev.map((u) => (u._id === id ? { ...u, estado: nuevoEstado } : u))
         );
       } else {
-        setError(resultado.message || "No se pudo cambiar el estado de la cuenta.");
+        setError(data.message || "No se pudo cambiar el estado de la cuenta.");
       }
     } catch (err) {
       console.error("Error al mutar el estado del usuario:", err);
@@ -317,25 +280,17 @@ export default function ListaUsuarios() {
     setLoading(true);
     setError(null);
     try {
-      const token = localStorage.getItem("token");
+      const { data } = await api.post<{ success: boolean; message?: string }>(
+        `/users/${id}/reenviar-invitacion`
+      );
 
-      const respuesta = await fetch(`${getBaseUrl()}/api/users/${id}/reenviar-invitacion`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
-        },
-      });
-
-      const resultado = await respuesta.json();
-
-      if (resultado.success) {
-        const refresco = await fetchUsuariosRequest();
+      if (data.success) {
+        const { data: refresco } = await api.get<UsuariosListResponse>("/users");
         if (refresco.success && refresco.users) {
           setUsuarios(refresco.users);
         }
       } else {
-        setError(resultado.message || "No se pudo reenviar el correo de invitación.");
+        setError(data.message || "No se pudo reenviar el correo de invitación.");
       }
     } catch (err) {
       console.error("Error al reenviar la invitación:", err);
@@ -345,7 +300,7 @@ export default function ListaUsuarios() {
     }
   }, []);
 
-  const manejarAperturaBorrado = useCallback((usuario: Usuario) => {
+  const manejarAperturaBorrado = useCallback((usuario: Persona) => {
     setUsuarioParaEliminar(usuario);
   }, []);
 
@@ -361,22 +316,15 @@ export default function ListaUsuarios() {
     const idAEliminar = usuarioParaEliminar._id;
 
     try {
-      const token = localStorage.getItem("token");
+      const { data } = await api.delete<{ success: boolean; message?: string }>(
+        `/users/${idAEliminar}`
+      );
 
-      const respuesta = await fetch(`${getBaseUrl()}/api/users/${idAEliminar}`, {
-        method: "DELETE",
-        headers: {
-          "Authorization": `Bearer ${token}`
-        }
-      });
-
-      const resultado = await respuesta.json();
-
-      if (resultado.success) {
+      if (data.success) {
         setUsuarios((prev) => prev.filter((u) => u._id !== idAEliminar));
         setUsuarioParaEliminar(null);
       } else {
-        setError(resultado.message || "No se pudo eliminar al usuario.");
+        setError(data.message || "No se pudo eliminar al usuario.");
       }
     } catch (err) {
       console.error("Error al eliminar el usuario de Atlas:", err);
@@ -386,19 +334,19 @@ export default function ListaUsuarios() {
     }
   }, [usuarioParaEliminar]);
 
-  const manejarEditar = useCallback((usuario: Usuario) => {
+  const manejarEditar = useCallback((usuario: Persona) => {
     setUsuarioEditando(usuario);
     setModalAbierto(true);
   }, []);
 
   const manejarAltaUsuario = useCallback(() => {
-    setUsuarioEditando(null); 
+    setUsuarioEditando(null);
     setModalAbierto(true);
   }, []);
 
   const manejarCerrarModal = useCallback(() => {
     setModalAbierto(false);
-    setUsuarioEditando(null); 
+    setUsuarioEditando(null);
   }, []);
 
   const manejarClickOrden = useCallback((columna: ColumnaOrdenable) => {
@@ -626,22 +574,22 @@ export default function ListaUsuarios() {
       )}
 
       {/* Modales correspondientes */}
-      <FormAltaUsuario 
+      <FormAltaUsuario
         key={modalAbierto ? `abierto-${usuarioEditando?._id || "alta"}` : "cerrado"}
-        modalAbierto={modalAbierto} 
-        onCerrar={manejarCerrarModal} 
-        onUsuarioCreado={recargarUsuarios} 
-        usuarioEditando={usuarioEditando}  
+        modalAbierto={modalAbierto}
+        onCerrar={manejarCerrarModal}
+        onUsuarioCreado={recargarUsuarios}
+        usuarioEditando={usuarioEditando}
       />
-      
-      <ModalConfirmacion 
-        abierto={usuarioParaEliminar !== null} 
-        titulo="¿Eliminar usuario definitivamente?" 
-        mensaje="¿Estás completamente seguro de que querés eliminar permanentemente a" 
-        nombreUsuario={usuarioParaEliminar?.name || ""} 
-        onCerrar={manejarCerrarBorrado} 
-        onConfirmar={ejecutarEliminacionDefinitiva} 
-        loading={loading && usuarios.length > 0} 
+
+      <ModalConfirmacion
+        abierto={usuarioParaEliminar !== null}
+        titulo="¿Eliminar usuario definitivamente?"
+        mensaje="¿Estás completamente seguro de que querés eliminar permanentemente a"
+        nombreUsuario={usuarioParaEliminar?.name || ""}
+        onCerrar={manejarCerrarBorrado}
+        onConfirmar={ejecutarEliminacionDefinitiva}
+        loading={loading && usuarios.length > 0}
       />
     </div>
   );

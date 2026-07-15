@@ -1,18 +1,34 @@
+// src/pages/dashboard/FormAltaUsuario.tsx
 import { useState, startTransition, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { HiOutlineUser, HiOutlineMail, HiOutlinePhone, HiOutlineOfficeBuilding } from "react-icons/hi";
-import type { Usuario, Rol } from "./ListaUsuarios";
+import {
+  HiOutlineUser,
+  HiOutlineMail,
+  HiOutlinePhone,
+  HiOutlineOfficeBuilding,
+} from "react-icons/hi";
+
+// 🎯 Cliente HTTP con interceptors JWT + manejo global de 401
+import api from "../../api";
+
+// 🎯 Tipos de dominio compartidos entre backend y frontend
+import type { Persona, Rol } from "@shared/types";
 
 interface FormAltaUsuarioProps {
   modalAbierto: boolean;
   onCerrar: () => void;
-  onUsuarioCreado: () => void; 
-  usuarioEditando?: Usuario | null; 
+  onUsuarioCreado: () => void;
+  usuarioEditando?: Persona | null;
 }
 
-const getBaseUrl = (): string => {
-  return (import.meta.env?.VITE_API_URL as string) || `http://${window.location.hostname}:5000`;
-};
+/**
+ * Respuesta esperada del backend al crear o editar un usuario.
+ */
+interface CrearOEditarUsuarioResponse {
+  success: boolean;
+  message?: string;
+  user?: Persona;
+}
 
 export default function FormAltaUsuario({
   modalAbierto,
@@ -20,7 +36,6 @@ export default function FormAltaUsuario({
   onUsuarioCreado,
   usuarioEditando,
 }: FormAltaUsuarioProps) {
-  
   // 🧠 Parseo inicial de datos directamente en la fase de inicialización de estados (Evita el useEffect)
   const esEdicion = Boolean(usuarioEditando);
 
@@ -54,7 +69,7 @@ export default function FormAltaUsuario({
   const [codigoPais, setCodigoPais] = useState(() => {
     const rawTel = usuarioEditando?.telefono || "";
     const telMatch = rawTel.match(/^(\+[0-9]{1,3})/);
-    return telMatch ? telMatch[1] : (rawTel ? "" : "+54");
+    return telMatch ? telMatch[1] : rawTel ? "" : "+54";
   });
 
   const [telefonoLocal, setTelefonoLocal] = useState(() => {
@@ -93,8 +108,8 @@ export default function FormAltaUsuario({
 
   const manejarSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (loading) return; 
-    
+    if (loading) return;
+
     setErrorForm(null);
     const nombreLimpio = name.trim();
     const emailLimpio = email.trim().toLowerCase();
@@ -134,8 +149,10 @@ export default function FormAltaUsuario({
 
     let telUnificado = "";
     if (telLocalLimpio) {
-      const prefix = codPaisLimpio 
-        ? (codPaisLimpio.startsWith("+") ? codPaisLimpio : `+${codPaisLimpio}`)
+      const prefix = codPaisLimpio
+        ? codPaisLimpio.startsWith("+")
+          ? codPaisLimpio
+          : `+${codPaisLimpio}`
         : "";
       telUnificado = prefix ? `${prefix} ${telLocalLimpio}` : telLocalLimpio;
     }
@@ -149,27 +166,15 @@ export default function FormAltaUsuario({
     };
 
     try {
-      const token = localStorage.getItem("token");
-      const url = esEdicion 
-        ? `${getBaseUrl()}/api/users/${usuarioEditando?._id}` 
-        : `${getBaseUrl()}/api/users`;
-        
-      const respuesta = await fetch(url, {
-        method: esEdicion ? "PUT" : "POST",
-        headers: { 
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
-        },
-        body: JSON.stringify(payload),
-      });
+      const { data } = esEdicion
+        ? await api.put<CrearOEditarUsuarioResponse>(`/users/${usuarioEditando?._id}`, payload)
+        : await api.post<CrearOEditarUsuarioResponse>("/users", payload);
 
-      const resultado = await respuesta.json();
-
-      if (resultado.success) {
+      if (data.success) {
         onUsuarioCreado();
         onCerrar();
       } else {
-        setErrorForm(resultado.message || "Ocurrió un error en la solicitud.");
+        setErrorForm(data.message || "Ocurrió un error en la solicitud.");
       }
     } catch (err) {
       console.error("Error en submit de usuario:", err);
@@ -184,25 +189,24 @@ export default function FormAltaUsuario({
       <div className="absolute inset-0 -z-10" onClick={() => !loading && onCerrar()} />
 
       <div className="bg-white w-full max-w-md h-screen flex flex-col overflow-hidden animate-in slide-in-from-right duration-300 ease-out border-l border-slate-100 shadow-2xl">
-        
         {/* Encabezado */}
         <div className="px-6 py-5 border-b border-slate-100 bg-slate-50/50 shrink-0">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-black text-slate-900 tracking-tight">
               {esEdicion ? "Editar Datos del Usuario" : "Registrar Nuevo Usuario"}
             </h3>
-            <button 
-              type="button" 
+            <button
+              type="button"
               disabled={loading}
-              onClick={onCerrar} 
+              onClick={onCerrar}
               className="text-slate-400 hover:text-slate-600 text-sm font-bold p-1 rounded-lg hover:bg-slate-100 transition cursor-pointer disabled:opacity-50"
             >
               ✕
             </button>
           </div>
           <p className="text-xs text-slate-500 font-medium mt-1">
-            {esEdicion 
-              ? "Modificá la información asignada de este miembro del consorcio." 
+            {esEdicion
+              ? "Modificá la información asignada de este miembro del consorcio."
               : "Se le enviará un correo electrónico para que configure su contraseña de acceso."}
           </p>
         </div>
