@@ -1,17 +1,21 @@
 // src/App.tsx
-import { useEffect, useState } from "react";
+import { useEffect, useState, lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
-import Landing from "./pages/landing";
-import Login from "./pages/login";
-import ActivarCuenta from "./pages/ActivarCuenta";
+// 🔴 EAGER — Páginas críticas de arranque (login y splash)
+import Login from "@/pages/login";
 import SplashScreen from "@/components/SplashScreen";
 
-import DashboardLayout from "@/components/layout/DashboardLayout";
+// 🟢 LAZY — Páginas post-login o secundarias (chunks separados)
+const Landing = lazy(() => import("@/pages/landing"));
+const ActivarCuenta = lazy(() => import("@/pages/ActivarCuenta"));
+const DashboardLayout = lazy(() => import("@/components/layout/DashboardLayout"));
+const Overview = lazy(() => import("@/pages/dashboard/Overview"));
+const ListaUsuarios = lazy(() => import("@/pages/dashboard/ListaUsuarios"));
+const MapaEdificio = lazy(() => import("@/pages/dashboard/MapaEdificio"));
+
+// 🔴 EAGER — ProtectedRoute es un guard chico, sin costo mantenerlo eager
 import ProtectedRoute from "@/components/layout/ProtectedRoute";
-import Overview from "./pages/dashboard/Overview";
-import ListaUsuarios from "./pages/dashboard/ListaUsuarios";
-import MapaEdificio from "./pages/dashboard/MapaEdificio";
 
 // 🎯 Helper de sesión centralizado (Fase 4)
 import { estaAutenticado } from "@/lib/session";
@@ -65,38 +69,45 @@ function NotFoundRedirect() {
 function App() {
   return (
     <BrowserRouter>
-      <Routes>
-        {/* ============================================================
-         * RUTAS PÚBLICAS
-         * ============================================================ */}
-        <Route path="/" element={<RootHandler />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/activar-cuenta" element={<ActivarCuenta />} />
+      {/*
+        🎯 Suspense boundary global.
+        Mientras un chunk lazy se descarga, se muestra SplashScreen.
+        Esto evita pantalla en blanco durante la transición.
+      */}
+      <Suspense fallback={<SplashScreen />}>
+        <Routes>
+          {/* ============================================================
+           * RUTAS PÚBLICAS
+           * ============================================================ */}
+          <Route path="/" element={<RootHandler />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/activar-cuenta" element={<ActivarCuenta />} />
 
-        {/* ============================================================
-         * RUTAS PROTEGIDAS — cualquier usuario autenticado
-         * ============================================================ */}
-        <Route element={<ProtectedRoute />}>
-          <Route path="/dashboard" element={<DashboardLayout />}>
-            <Route index element={<Overview />} />
+          {/* ============================================================
+           * RUTAS PROTEGIDAS — cualquier usuario autenticado
+           * ============================================================ */}
+          <Route element={<ProtectedRoute />}>
+            <Route path="/dashboard" element={<DashboardLayout />}>
+              <Route index element={<Overview />} />
 
-            {/* Sub-rutas de gestión (solo admin y superadmin) */}
-            <Route
-              element={
-                <ProtectedRoute rolesPermitidos={["admin", "superadmin"]} />
-              }
-            >
-              <Route path="usuarios" element={<ListaUsuarios />} />
-              <Route path="unidades" element={<MapaEdificio />} />
+              {/* Sub-rutas de gestión (solo admin y superadmin) */}
+              <Route
+                element={
+                  <ProtectedRoute rolesPermitidos={["admin", "superadmin"]} />
+                }
+              >
+                <Route path="usuarios" element={<ListaUsuarios />} />
+                <Route path="unidades" element={<MapaEdificio />} />
+              </Route>
             </Route>
           </Route>
-        </Route>
 
-        {/* ============================================================
-         * FALLBACK 404
-         * ============================================================ */}
-        <Route path="*" element={<NotFoundRedirect />} />
-      </Routes>
+          {/* ============================================================
+           * FALLBACK 404
+           * ============================================================ */}
+          <Route path="*" element={<NotFoundRedirect />} />
+        </Routes>
+      </Suspense>
     </BrowserRouter>
   );
 }
