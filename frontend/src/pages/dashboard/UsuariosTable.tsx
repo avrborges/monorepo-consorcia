@@ -1,5 +1,6 @@
 // src/components/dashboard/UsuariosTable.tsx
 import { memo, useState, useEffect, useRef } from "react";
+import type { KeyboardEvent } from "react";
 import {
   HiOutlineMail,
   HiOutlineShieldCheck,
@@ -14,6 +15,7 @@ import {
   HiOutlineTrash,
   HiDotsVertical,
   HiOutlinePaperAirplane,
+  HiCheck,
 } from "react-icons/hi";
 
 // 🎯 Tipos de dominio compartidos entre backend y frontend
@@ -21,6 +23,12 @@ import type { Persona, Rol, EstadoUsuario } from "@shared/types";
 
 // 🎨 Tipos de UI específicos del ordenamiento de la tabla (viven en ListaUsuarios)
 import type { ConfiguracionOrden, ColumnaOrdenable } from "./ListaUsuarios";
+
+/* ============================================================
+ * CONSTANTES
+ * ============================================================ */
+
+const FEEDBACK_COPIADO_MS = 2000;
 
 /* ============================================================
  * ESTILOS DE BADGE POR ROL
@@ -101,8 +109,15 @@ export default function UsuariosTable({
   const [menuAbiertoId, setMenuAbiertoId] = useState<string | null>(null);
   const contenedorRef = useRef<HTMLDivElement>(null);
 
+  // 🎯 Estado para el feedback visual del email copiado
+  const [emailCopiadoId, setEmailCopiadoId] = useState<string | null>(null);
+  const timeoutCopiadoRef = useRef<number | null>(null);
+
   const ahoraMs = new Date().getTime();
 
+  /* ------------------------------------------------------------
+   * Click afuera del menú kebab → cerrar
+   * ------------------------------------------------------------ */
   useEffect(() => {
     function manejarClickAfuera(evento: MouseEvent) {
       if (contenedorRef.current && !contenedorRef.current.contains(evento.target as Node)) {
@@ -113,8 +128,58 @@ export default function UsuariosTable({
     return () => document.removeEventListener("mousedown", manejarClickAfuera);
   }, []);
 
+  /* ------------------------------------------------------------
+   * 🎯 Escape → cerrar menú kebab si está abierto
+   * ------------------------------------------------------------ */
+  useEffect(() => {
+    if (menuAbiertoId === null) return;
+
+    const manejarEscape = (e: globalThis.KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setMenuAbiertoId(null);
+      }
+    };
+
+    document.addEventListener("keydown", manejarEscape);
+    return () => document.removeEventListener("keydown", manejarEscape);
+  }, [menuAbiertoId]);
+
+  /* ------------------------------------------------------------
+   * 🎯 Limpieza del timeout de feedback de copiado al desmontar
+   * ------------------------------------------------------------ */
+  useEffect(() => {
+    return () => {
+      if (timeoutCopiadoRef.current !== null) {
+        window.clearTimeout(timeoutCopiadoRef.current);
+      }
+    };
+  }, []);
+
   const toggleMenu = (id: string) => {
     setMenuAbiertoId((prev) => (prev === id ? null : id));
+  };
+
+  /* ------------------------------------------------------------
+   * 🎯 Copiar email al portapapeles con feedback visual
+   * ------------------------------------------------------------ */
+  const copiarEmail = async (email: string, id: string): Promise<void> => {
+    try {
+      await navigator.clipboard.writeText(email);
+      setEmailCopiadoId(id);
+
+      // Cancelar timeout anterior si el usuario clickea múltiples emails rápido
+      if (timeoutCopiadoRef.current !== null) {
+        window.clearTimeout(timeoutCopiadoRef.current);
+      }
+
+      timeoutCopiadoRef.current = window.setTimeout(() => {
+        setEmailCopiadoId(null);
+        timeoutCopiadoRef.current = null;
+      }, FEEDBACK_COPIADO_MS);
+    } catch (err) {
+      // navigator.clipboard puede fallar en contextos no seguros (HTTP sin localhost)
+      console.error("No se pudo copiar el email al portapapeles:", err);
+    }
   };
 
   const renderIconoOrden = (columna: ColumnaOrdenable) => {
@@ -130,30 +195,62 @@ export default function UsuariosTable({
     );
   };
 
+  /**
+   * 🎯 Determina el valor de aria-sort para una columna dada.
+   * "ascending" | "descending" | "none"
+   */
+  const getAriaSort = (columna: ColumnaOrdenable): "ascending" | "descending" | "none" => {
+    if (orden.columna !== columna) return "none";
+    return orden.direccion === "asc" ? "ascending" : "descending";
+  };
+
+  /**
+   * 🎯 Handler de teclado para headers ordenables (Enter/Space).
+   */
+  const manejarTeclaOrden = (
+    e: KeyboardEvent<HTMLTableCellElement>,
+    columna: ColumnaOrdenable
+  ) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      onClickOrden(columna);
+    }
+  };
+
   return (
     <div ref={contenedorRef} className="w-full overflow-x-auto overflow-y-hidden min-h-0">
       <table className="w-full min-w-237.5 text-left border-collapse layout-auto">
         <thead>
           <tr className="bg-slate-50/70 border-b border-slate-100">
             <th
+              scope="col"
+              role="button"
+              tabIndex={0}
+              aria-sort={getAriaSort("name")}
               className="px-4 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider cursor-pointer group hover:text-slate-900"
               onClick={() => onClickOrden("name")}
+              onKeyDown={(e) => manejarTeclaOrden(e, "name")}
             >
               <div className="flex items-center gap-1">
                 <span>Usuario / Nombre</span>
                 {renderIconoOrden("name")}
               </div>
             </th>
-            <th className="px-4 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">
+            <th scope="col" className="px-4 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">
               Correo Electrónico
             </th>
-            <th className="px-4 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">
+            <th scope="col" className="px-4 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">
               Rol Asignado
             </th>
 
             <th
+              scope="col"
+              role="button"
+              tabIndex={0}
+              aria-sort={getAriaSort("unidadFuncional")}
               className="hidden xl:table-cell px-4 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider cursor-pointer group hover:text-slate-900"
               onClick={() => onClickOrden("unidadFuncional")}
+              onKeyDown={(e) => manejarTeclaOrden(e, "unidadFuncional")}
             >
               <div className="flex items-center gap-1">
                 <span>U.F.</span>
@@ -161,15 +258,15 @@ export default function UsuariosTable({
               </div>
             </th>
 
-            <th className="hidden lg:table-cell px-4 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">
+            <th scope="col" className="hidden lg:table-cell px-4 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">
               Teléfono
             </th>
 
-            <th className="px-4 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">
+            <th scope="col" className="px-4 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">
               Estado
             </th>
 
-            <th className="px-4 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right w-20 min-w-20">
+            <th scope="col" className="px-4 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right w-20 min-w-20">
               Acciones
             </th>
           </tr>
@@ -180,6 +277,7 @@ export default function UsuariosTable({
               const esInactivo = u.estado === "inactivo";
               const esPendiente = u.estado === "pendiente";
               const elMenuEstaAbierto = menuAbiertoId === u._id;
+              const emailFueCopiado = emailCopiadoId === u._id;
 
               const esUltimaFila = usuarios.length > 2 && indice >= usuarios.length - 2;
 
@@ -201,14 +299,42 @@ export default function UsuariosTable({
                   <td className={`px-4 py-4 font-bold ${claseOpacidad} ${filaAtenuada ? "text-slate-400 line-through font-medium" : "text-slate-900"}`}>
                     {u.name}
                   </td>
+
+                  {/* 🎯 Celda de email — click para copiar con feedback visual */}
                   <td className={`px-4 py-4 text-slate-500 ${claseOpacidad}`}>
-                    <div className="flex items-center gap-2 max-w-60 truncate" title={u.email}>
-                      <HiOutlineMail className={`w-4 h-4 shrink-0 ${filaAtenuada ? "text-slate-300" : "text-slate-400"}`} />
-                      <span className={`${filaAtenuada ? "line-through text-slate-400" : ""} truncate`}>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void copiarEmail(u.email, u._id);
+                      }}
+                      title={emailFueCopiado ? "¡Email copiado!" : `Click para copiar: ${u.email}`}
+                      aria-label={
+                        emailFueCopiado
+                          ? `Email de ${u.name} copiado al portapapeles`
+                          : `Copiar email de ${u.name}`
+                      }
+                      className="flex items-center gap-2 max-w-60 text-left cursor-pointer transition-colors"
+                    >
+                      {emailFueCopiado ? (
+                        <HiCheck className="w-4 h-4 shrink-0 text-emerald-500" />
+                      ) : (
+                        <HiOutlineMail className={`w-4 h-4 shrink-0 ${filaAtenuada ? "text-slate-300" : "text-slate-400"}`} />
+                      )}
+                      <span
+                        className={`truncate transition-colors ${
+                          emailFueCopiado
+                            ? "text-emerald-600 font-bold"
+                            : filaAtenuada
+                            ? "line-through text-slate-400"
+                            : ""
+                        }`}
+                      >
                         {u.email}
                       </span>
-                    </div>
+                    </button>
                   </td>
+
                   <td className={`px-4 py-4 ${claseOpacidad}`}>
                     <BadgeRol role={u.role} />
                   </td>
@@ -263,6 +389,9 @@ export default function UsuariosTable({
                           toggleMenu(u._id);
                         }}
                         title="Ver acciones"
+                        aria-label={`Acciones para ${u.name}`}
+                        aria-haspopup="menu"
+                        aria-expanded={elMenuEstaAbierto}
                         className={`p-2 rounded-xl transition cursor-pointer ${
                           elMenuEstaAbierto
                             ? "bg-slate-900 text-white shadow-sm"
@@ -274,6 +403,9 @@ export default function UsuariosTable({
 
                       {elMenuEstaAbierto && (
                         <div
+                          role="menu"
+                          aria-orientation="vertical"
+                          aria-label={`Acciones disponibles para ${u.name}`}
                           className={`absolute right-0 w-52 bg-white border border-slate-200/80 rounded-xl shadow-lg py-1.5 z-50 animate-in fade-in duration-150 ${
                             esUltimaFila
                               ? "bottom-full mb-1 origin-bottom-right slide-in-from-bottom-2"
@@ -282,6 +414,7 @@ export default function UsuariosTable({
                         >
                           {esPendiente && (
                             <button
+                              role="menuitem"
                               onClick={async () => {
                                 setMenuAbiertoId(null);
                                 await onReenviarInvitacion(u._id);
@@ -294,6 +427,7 @@ export default function UsuariosTable({
                           )}
 
                           <button
+                            role="menuitem"
                             onClick={() => {
                               setMenuAbiertoId(null);
                               onEditar(u);
@@ -306,6 +440,7 @@ export default function UsuariosTable({
 
                           {!estaExpirado && (
                             <button
+                              role="menuitem"
                               onClick={() => {
                                 setMenuAbiertoId(null);
                                 onToggleEstado(u._id);
@@ -326,9 +461,10 @@ export default function UsuariosTable({
                             </button>
                           )}
 
-                          <div className="h-px bg-slate-100 my-1" />
+                          <div className="h-px bg-slate-100 my-1" role="separator" />
 
                           <button
+                            role="menuitem"
                             onClick={() => {
                               setMenuAbiertoId(null);
                               onEliminar(u);
