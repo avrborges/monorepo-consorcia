@@ -1,5 +1,4 @@
 // src/pages/login.tsx
-import { guardarSesion } from "@/lib/session";
 import { useEffect, useRef, useState } from "react";
 import type { SyntheticEvent } from "react";
 import { useNavigate } from "react-router-dom";
@@ -13,8 +12,28 @@ import AuthLayout from "@/components/layout/AuthLayout";
 // 🎯 Capa de servicios (Fase 3)
 import { userService } from "@/services";
 
+// 🎯 Helpers de sesión (Fase 4)
+import { guardarSesion } from "@/lib/session";
+
 // 🎯 Tipos de respuesta compartidos entre backend y frontend
 import type { ErrorResponse } from "@shared/types";
+
+/* ============================================================
+ * PREFETCH ESTRATÉGICO
+ * ============================================================ */
+
+/**
+ * Precarga en paralelo los chunks del dashboard mientras el usuario
+ * ve el mensaje "Redirigiendo..." tras un login exitoso.
+ *
+ * Cuando navegue a /dashboard, los chunks ya estarán en la caché
+ * del navegador → transición sin flash del SplashScreen.
+ */
+const prefetchDashboardChunks = (): void => {
+  // Fire-and-forget: no await, ignoramos errores intencionalmente
+  void import("@/components/layout/DashboardLayout");
+  void import("@/pages/dashboard/Overview");
+};
 
 export default function Login() {
   const navigate = useNavigate();
@@ -51,8 +70,10 @@ export default function Login() {
       const result = await userService.login(email.trim(), password);
 
       setSuccessMsg(result.message);
-
       guardarSesion(result.token, result.user);
+
+      // 🚀 Precargar los chunks del dashboard en paralelo mientras se muestra "Redirigiendo..."
+      prefetchDashboardChunks();
 
       redirectTimeoutRef.current = window.setTimeout(() => {
         navigate("/dashboard");
@@ -61,11 +82,9 @@ export default function Login() {
       console.error("Error durante el inicio de sesión:", error);
 
       if (error instanceof AxiosError && error.response?.data) {
-        // Error del backend con shape { success: false, message: string }
         const errorData = error.response.data as ErrorResponse;
         setErrorMsg(errorData.message || "Credenciales inválidas.");
       } else {
-        // Network error / timeout / desconexión
         setErrorMsg(
           "No fue posible conectarse con el servidor. Intente nuevamente."
         );
@@ -118,7 +137,6 @@ export default function Login() {
               Correo electrónico
             </label>
             <div className="relative">
-              {/* Ícono de Email */}
               <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400 pointer-events-none">
                 <HiOutlineMail className="w-5 h-5" />
               </span>
@@ -158,7 +176,6 @@ export default function Login() {
             </div>
 
             <div className="relative">
-              {/* Ícono de Password */}
               <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400 pointer-events-none">
                 <HiOutlineLockClosed className="w-5 h-5" />
               </span>
