@@ -1,22 +1,63 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es-AR">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#0b132b" /> <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 
+    <!-- 🎨 Color de la barra del navegador en mobile -->
+    <meta name="theme-color" content="#0b132b" />
+
+    <!-- 📖 Metadatos SEO y compartir -->
+    <meta name="description" content="CONSORCIA — Gestión inteligente de consorcios. Administrá unidades funcionales, habitantes, expensas y comunicaciones desde un único panel moderno." />
+    <meta name="author" content="ARTHEMYSA" />
+    <meta name="robots" content="index, follow" />
+
+    <!-- 📱 Comportamiento nativo en iOS al agregar a pantalla de inicio -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="CONSORCIA" />
+
+    <!-- 🌐 OpenGraph (WhatsApp, Facebook, Slack) -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="CONSORCIA" />
+    <meta property="og:title" content="CONSORCIA — Gestión Inteligente de Consorcios" />
+    <meta property="og:description" content="Administrá unidades funcionales, habitantes, expensas y comunicaciones desde un único panel moderno." />
+    <meta property="og:locale" content="es_AR" />
+    <meta property="og:image" content="/android-chrome-512x512.png" />
+
+    <!-- 🐦 Twitter Card -->
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="CONSORCIA — Gestión Inteligente" />
+    <meta name="twitter:description" content="Administrá unidades funcionales, habitantes, expensas y comunicaciones desde un único panel moderno." />
+    <meta name="twitter:image" content="/android-chrome-512x512.png" />
+
+    <!-- 🎯 Favicons -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
     <link rel="shortcut icon" href="/favicon.ico" />
-
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
 
+    <!-- 📦 Manifest PWA -->
     <link rel="manifest" href="/manifest.json" />
 
-    <title>Consorcia</title>
+    <!-- 🏷️ Título por defecto (React lo reemplaza dinámicamente según la ruta) -->
+    <title>CONSORCIA — Gestión Inteligente</title>
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+
+    <!-- 🚨 Fallback si JavaScript está desactivado -->
+    <noscript>
+      <div style="max-width: 600px; margin: 4rem auto; padding: 2rem; font-family: system-ui, sans-serif; text-align: center; color: #0b132b;">
+        <h1 style="font-size: 1.5rem; margin-bottom: 1rem;">JavaScript requerido</h1>
+        <p style="color: #64748b; line-height: 1.6;">
+          CONSORCIA necesita JavaScript activado para funcionar correctamente.
+          Por favor, activá JavaScript en tu navegador y volvé a cargar la página.
+        </p>
+      </div>
+    </noscript>
+
+    /src/main.tsx
   </body>
 </html>
