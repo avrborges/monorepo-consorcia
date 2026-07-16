@@ -1,6 +1,6 @@
 // src/App.tsx
-import { lazy, Suspense } from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { lazy, Suspense, useEffect } from "react";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 
 // 🔴 EAGER — Páginas críticas de arranque (login y splash)
 import Login from "@/pages/login";
@@ -20,6 +20,24 @@ import ProtectedRoute from "@/components/layout/ProtectedRoute";
 // 🎯 Helpers y hooks centralizados
 import { estaAutenticado } from "@/lib/session";
 import { useIsMobile } from "@/hooks/useIsMobile";
+
+/* ============================================================
+ * SCROLL TO TOP EN CADA CAMBIO DE RUTA
+ * ============================================================
+ *
+ * Al navegar entre páginas, si el usuario estaba scrolleado hacia abajo,
+ * la nueva página se abre en el mismo scroll (comportamiento default de SPAs).
+ * Este componente resetea el scroll al top con cada cambio de pathname.
+ */
+function ScrollToTop() {
+  const { pathname } = useLocation();
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
+
+  return null;
+}
 
 /* ============================================================
  * GUARDIÁN DE LA RUTA RAÍZ
@@ -46,6 +64,9 @@ function NotFoundRedirect() {
 function App() {
   return (
     <BrowserRouter>
+      {/* 🔝 Resetea el scroll al top al navegar entre rutas */}
+      <ScrollToTop />
+
       {/*
         🎯 Suspense boundary global.
         Mientras un chunk lazy se descarga, se muestra SplashScreen.

@@ -1,8 +1,10 @@
 // src/pages/dashboard/Overview.tsx
 import { useAuth } from "@/hooks/useAuth";
 import { formatearRol } from "@/lib/session";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 export default function Overview() {
+  useDocumentTitle("Panel de Control");
   const { usuario, rol } = useAuth();
 
   // Fallback defensivo si la sesión no tiene datos válidos
