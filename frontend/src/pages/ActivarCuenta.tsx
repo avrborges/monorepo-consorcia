@@ -1,5 +1,6 @@
 // src/pages/ActivarCuenta.tsx
 import { useState, useEffect, useRef } from "react";
+import type { KeyboardEvent } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { AxiosError } from "axios";
 import { HiCheckCircle } from "react-icons/hi";
@@ -10,10 +11,26 @@ import AuthLayout from "@/components/layout/AuthLayout";
 // 🎯 Capa de servicios (Fase 3)
 import { userService } from "@/services";
 
+// 🎯 Hook para título dinámico de pestaña (Tanda 1 UX)
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
+
 // 🎯 Tipos de respuesta compartidos entre backend y frontend
 import type { ErrorResponse } from "@shared/types";
 
+/* ============================================================
+ * CONSTANTES
+ * ============================================================ */
+
+const REDIRECT_DELAY_MS = 3000;
+
+/* ============================================================
+ * COMPONENTE
+ * ============================================================ */
+
 export default function ActivarCuenta() {
+  // 🎯 Título dinámico de la pestaña
+  useDocumentTitle("Activar cuenta");
+
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const token = searchParams.get("token");
@@ -25,6 +42,9 @@ export default function ActivarCuenta() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+
+  // 🎯 Detección de Caps Lock activo
+  const [capsLockActivo, setCapsLockActivo] = useState(false);
 
   const redirectTimeoutRef = useRef<number | null>(null);
 
@@ -48,6 +68,14 @@ export default function ActivarCuenta() {
     tieneNumeroOEspecial &&
     coincidenContrasenas;
 
+  /**
+   * Detecta si Caps Lock está activo al escribir en cualquiera de los inputs de password.
+   * Usa `getModifierState` que retorna el estado actual de la tecla.
+   */
+  const detectarCapsLock = (e: KeyboardEvent<HTMLInputElement>): void => {
+    setCapsLockActivo(e.getModifierState("CapsLock"));
+  };
+
   const handleActivar = async (e: React.SyntheticEvent) => {
     e.preventDefault();
     setError(null);
@@ -62,7 +90,7 @@ export default function ActivarCuenta() {
 
       redirectTimeoutRef.current = window.setTimeout(() => {
         navigate("/login");
-      }, 3000);
+      }, REDIRECT_DELAY_MS);
     } catch (err: unknown) {
       const axiosError = err as AxiosError<ErrorResponse>;
       setError(
@@ -73,10 +101,27 @@ export default function ActivarCuenta() {
     }
   };
 
+  /**
+   * Permite al usuario ir al login inmediatamente sin esperar los 3 segundos
+   * del redirect automático tras la activación exitosa.
+   */
+  const irAlLoginAhora = (): void => {
+    if (redirectTimeoutRef.current !== null) {
+      window.clearTimeout(redirectTimeoutRef.current);
+    }
+    navigate("/login");
+  };
+
   if (!token) {
     return (
       <AuthLayout title="Error" subtitle="Token inválido o expirado.">
-        <p className="text-red-500 text-sm font-medium">El enlace de activación no es válido.</p>
+        <p
+          className="text-red-500 text-sm font-medium"
+          role="alert"
+          aria-live="polite"
+        >
+          El enlace de activación no es válido.
+        </p>
       </AuthLayout>
     );
   }
@@ -87,14 +132,29 @@ export default function ActivarCuenta() {
       subtitle="Por favor, define tu contraseña para ingresar a Consorcia."
     >
       {success ? (
-        <div className="text-center p-6 bg-teal-50 border border-teal-200 rounded-xl animate-fade-in">
+        <div
+          className="text-center p-6 bg-teal-50 border border-teal-200 rounded-xl animate-fade-in"
+          role="status"
+          aria-live="polite"
+        >
           <p className="text-teal-700 font-bold">¡Cuenta activada con éxito!</p>
           <p className="text-sm text-teal-600 mt-2">Redirigiendo al login...</p>
+          <button
+            type="button"
+            onClick={irAlLoginAhora}
+            className="mt-4 text-xs font-bold text-teal-700 hover:text-teal-900 underline underline-offset-2 transition-colors cursor-pointer"
+          >
+            Ir al login ahora
+          </button>
         </div>
       ) : (
-        <form onSubmit={handleActivar} className="space-y-5">
+        <form onSubmit={handleActivar} className="space-y-5" noValidate>
           {error && (
-            <div className="p-3 bg-red-50 border border-red-100 rounded-xl text-xs font-bold text-red-600">
+            <div
+              className="p-3 bg-red-50 border border-red-100 rounded-xl text-xs font-bold text-red-600"
+              role="alert"
+              aria-live="polite"
+            >
               {error}
             </div>
           )}
@@ -113,6 +173,10 @@ export default function ActivarCuenta() {
                 autoComplete="new-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                onKeyUp={detectarCapsLock}
+                onKeyDown={detectarCapsLock}
+                aria-invalid={Boolean(error)}
+                aria-describedby="requisitos-password"
                 className="w-full border border-slate-200 rounded-xl pl-4 pr-12 py-3 text-sm text-slate-800 font-mono focus:border-teal-600 focus:ring-4 focus:ring-teal-600/10 transition-all shadow-sm disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
               />
               <button
@@ -120,10 +184,23 @@ export default function ActivarCuenta() {
                 disabled={loading}
                 onClick={() => setShowPassword(!showPassword)}
                 className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors p-1 disabled:opacity-50"
+                aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                title={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
               >
                 {showPassword ? <HiOutlineEyeOff className="w-5 h-5" /> : <HiOutlineEye className="w-5 h-5" />}
               </button>
             </div>
+
+            {/* Aviso sutil de Caps Lock activo */}
+            {capsLockActivo && (
+              <p
+                className="mt-1.5 text-[10px] font-bold text-amber-600 uppercase tracking-wider"
+                role="status"
+                aria-live="polite"
+              >
+                ⚠ Bloq Mayús está activado
+              </p>
+            )}
           </div>
 
           <div>
@@ -139,6 +216,10 @@ export default function ActivarCuenta() {
                 autoComplete="new-password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
+                onKeyUp={detectarCapsLock}
+                onKeyDown={detectarCapsLock}
+                aria-invalid={Boolean(error)}
+                aria-describedby="requisitos-password"
                 className="w-full border border-slate-200 rounded-xl pl-4 pr-12 py-3 text-sm text-slate-800 font-mono focus:border-teal-600 focus:ring-4 focus:ring-teal-600/10 transition-all shadow-sm disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
               />
               <button
@@ -146,6 +227,8 @@ export default function ActivarCuenta() {
                 disabled={loading}
                 onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                 className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors p-1 disabled:opacity-50"
+                aria-label={showConfirmPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                title={showConfirmPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
               >
                 {showConfirmPassword ? <HiOutlineEyeOff className="w-5 h-5" /> : <HiOutlineEye className="w-5 h-5" />}
               </button>
@@ -153,7 +236,11 @@ export default function ActivarCuenta() {
           </div>
 
           {/* Checklist constructivo y sutil */}
-          <div className="p-3.5 bg-slate-50/80 border border-slate-100 rounded-xl space-y-2.5 text-xs font-semibold">
+          <div
+            id="requisitos-password"
+            className="p-3.5 bg-slate-50/80 border border-slate-100 rounded-xl space-y-2.5 text-xs font-semibold"
+            aria-label="Requerimientos de seguridad para la contraseña"
+          >
             <p className="text-slate-400 uppercase tracking-wider text-[10px] font-bold mb-1">Requerimientos de seguridad:</p>
 
             <div className={`flex items-center gap-2 transition-colors duration-200 ${tieneMinimoCaracteres ? "text-emerald-600" : "text-slate-400"}`}>
