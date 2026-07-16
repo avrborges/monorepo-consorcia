@@ -1,5 +1,5 @@
 // src/pages/dashboard/ListaUsuarios.tsx
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   HiOutlineUserGroup,
   HiOutlineShieldExclamation,
@@ -16,6 +16,9 @@ import { userService } from "@/services";
 
 // 🎯 Hook de sesión centralizado (Fase 4)
 import { useAuth } from "@/hooks/useAuth";
+
+// 🎯 Hook para título dinámico de pestaña (Tanda 1 UX)
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 // 🎯 Tipos de dominio compartidos entre backend y frontend
 import type { Persona, Rol, EstadoUsuario } from "@shared/types";
@@ -40,11 +43,19 @@ export interface ConfiguracionOrden {
   direccion: DireccionOrden;
 }
 
+type PestanaActiva = "lista" | "auditoria";
+
 /* ============================================================
  * CONSTANTES
  * ============================================================ */
 const ITEMS_POR_PAGINA = 10;
 const DEBOUNCE_MS = 250;
+
+// 🎯 Claves para persistir estado en sessionStorage (se limpian al cerrar el navegador)
+const STORAGE_KEY_BUSQUEDA = "consorcia_lista_busqueda";
+const STORAGE_KEY_ROL = "consorcia_lista_filtro_rol";
+const STORAGE_KEY_ESTADO = "consorcia_lista_filtro_estado";
+const STORAGE_KEY_PESTANA = "consorcia_lista_pestana";
 
 const OPCIONES_ROL: { value: Rol | "todos"; label: string }[] = [
   { value: "todos", label: "Todos los roles" },
@@ -74,10 +85,43 @@ function useDebounce<T>(value: T, delay: number): T {
   return debounced;
 }
 
+/**
+ * Recupera un valor de sessionStorage con validación de tipo.
+ * Si el valor guardado no está entre los permitidos, retorna el default.
+ */
+function leerFiltroPersistido<T extends string>(
+  key: string,
+  valoresPermitidos: readonly T[],
+  defaultValue: T
+): T {
+  try {
+    const valor = sessionStorage.getItem(key);
+    if (valor && (valoresPermitidos as readonly string[]).includes(valor)) {
+      return valor as T;
+    }
+  } catch {
+    // sessionStorage puede fallar en modo incógnito, etc.
+  }
+  return defaultValue;
+}
+
+const VALORES_ROL_VALIDOS: readonly (Rol | "todos")[] = [
+  "todos", "superadmin", "admin", "consejo", "propietario", "inquilino",
+];
+
+const VALORES_ESTADO_VALIDOS: readonly (EstadoUsuario | "todos")[] = [
+  "todos", "activo", "pendiente", "inactivo",
+];
+
+const VALORES_PESTANA_VALIDOS: readonly PestanaActiva[] = ["lista", "auditoria"];
+
 /* ============================================================
  * COMPONENTE PRINCIPAL
  * ============================================================ */
 export default function ListaUsuarios() {
+  // 🎯 Título dinámico de la pestaña
+  useDocumentTitle("Usuarios");
+
   // 🎯 Sesión centralizada via useAuth
   const { esAdmin, esSuperAdmin } = useAuth();
 
@@ -85,18 +129,31 @@ export default function ListaUsuarios() {
   const [usuarios, setUsuarios] = useState<Persona[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  // 📝 Gestión de pestañas activas para el Admin
-  const [pestanaActiva, setPestanaActiva] = useState<"lista" | "auditoria">("lista");
+  // 📝 Gestión de pestañas activas (persistida en sessionStorage)
+  const [pestanaActiva, setPestanaActiva] = useState<PestanaActiva>(() =>
+    leerFiltroPersistido(STORAGE_KEY_PESTANA, VALORES_PESTANA_VALIDOS, "lista")
+  );
 
   const [modalAbierto, setModalAbierto] = useState<boolean>(false);
   const [usuarioParaEliminar, setUsuarioParaEliminar] = useState<Persona | null>(null);
   const [usuarioEditando, setUsuarioEditando] = useState<Persona | null>(null);
 
-  const [busqueda, setBusqueda] = useState("");
+  // 🎯 Filtros persistidos en sessionStorage
+  const [busqueda, setBusqueda] = useState(() => {
+    try {
+      return sessionStorage.getItem(STORAGE_KEY_BUSQUEDA) || "";
+    } catch {
+      return "";
+    }
+  });
   const busquedaDebounced = useDebounce(busqueda, DEBOUNCE_MS);
 
-  const [filtroRol, setFiltroRol] = useState<Rol | "todos">("todos");
-  const [filtroEstado, setFiltroEstado] = useState<EstadoUsuario | "todos">("todos");
+  const [filtroRol, setFiltroRol] = useState<Rol | "todos">(() =>
+    leerFiltroPersistido(STORAGE_KEY_ROL, VALORES_ROL_VALIDOS, "todos")
+  );
+  const [filtroEstado, setFiltroEstado] = useState<EstadoUsuario | "todos">(() =>
+    leerFiltroPersistido(STORAGE_KEY_ESTADO, VALORES_ESTADO_VALIDOS, "todos")
+  );
 
   const [orden, setOrden] = useState<ConfiguracionOrden>({
     columna: "name",
@@ -104,6 +161,36 @@ export default function ListaUsuarios() {
   });
 
   const [paginaActual, setPaginaActual] = useState(1);
+
+  // 🎯 Ref al input de búsqueda para atajos de teclado
+  const inputBusquedaRef = useRef<HTMLInputElement>(null);
+
+  /* ------------------------------------------------------------
+   * Persistencia de filtros y tab en sessionStorage
+   * ------------------------------------------------------------ */
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(STORAGE_KEY_BUSQUEDA, busqueda);
+    } catch { /* silent */ }
+  }, [busqueda]);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(STORAGE_KEY_ROL, filtroRol);
+    } catch { /* silent */ }
+  }, [filtroRol]);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(STORAGE_KEY_ESTADO, filtroEstado);
+    } catch { /* silent */ }
+  }, [filtroEstado]);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(STORAGE_KEY_PESTANA, pestanaActiva);
+    } catch { /* silent */ }
+  }, [pestanaActiva]);
 
   /* ------------------------------------------------------------
    * Carga inicial (usando userService con AbortController)
@@ -226,25 +313,58 @@ export default function ListaUsuarios() {
   /* ------------------------------------------------------------
    * Handlers usando userService
    * ------------------------------------------------------------ */
+
+  /**
+   * 🎯 Toggle con OPTIMISTIC UPDATE:
+   * 1. Cambia el estado en UI inmediatamente (feedback instantáneo).
+   * 2. Manda el request al backend.
+   * 3. Si falla, revierte el cambio y muestra error.
+   */
   const toggleEstadoUsuario = useCallback(async (id: string) => {
-    setLoading(true);
     setError(null);
+
+    // Snapshot del estado actual (para revertir en caso de fallo)
+    let estadoAnterior: EstadoUsuario | null = null;
+
+    setUsuarios((prev) =>
+      prev.map((u) => {
+        if (u._id !== id) return u;
+        estadoAnterior = u.estado;
+        const nuevoEstadoOptimista: EstadoUsuario =
+          u.estado === "activo" ? "inactivo" : "activo";
+        return { ...u, estado: nuevoEstadoOptimista };
+      })
+    );
+
     try {
       const data = await userService.toggleStatus(id);
 
       if (data.success && data.estado) {
-        const nuevoEstado = data.estado;
+        // Sincronizamos con el estado real que devolvió el backend
+        const estadoConfirmado = data.estado;
         setUsuarios((prev) =>
-          prev.map((u) => (u._id === id ? { ...u, estado: nuevoEstado } : u))
+          prev.map((u) => (u._id === id ? { ...u, estado: estadoConfirmado } : u))
         );
       } else {
+        // Revertir al estado anterior
+        if (estadoAnterior !== null) {
+          const estadoARevertir = estadoAnterior;
+          setUsuarios((prev) =>
+            prev.map((u) => (u._id === id ? { ...u, estado: estadoARevertir } : u))
+          );
+        }
         setError("No se pudo cambiar el estado de la cuenta.");
       }
     } catch (err) {
       console.error("Error al mutar el estado del usuario:", err);
+      // Revertir al estado anterior
+      if (estadoAnterior !== null) {
+        const estadoARevertir = estadoAnterior;
+        setUsuarios((prev) =>
+          prev.map((u) => (u._id === id ? { ...u, estado: estadoARevertir } : u))
+        );
+      }
       setError("Error de comunicación. No se pudo impactar el cambio en el servidor.");
-    } finally {
-      setLoading(false);
     }
   }, []);
 
@@ -325,6 +445,34 @@ export default function ListaUsuarios() {
     }));
   }, []);
 
+  /* ------------------------------------------------------------
+   * 🎯 Atajos de teclado globales
+   * ------------------------------------------------------------ */
+  useEffect(() => {
+    if (!esAdmin) return;
+
+    const manejarAtajo = (e: KeyboardEvent) => {
+      // No disparar atajos si hay un modal abierto
+      if (modalAbierto || usuarioParaEliminar !== null) return;
+
+      // Ctrl + K → foco en búsqueda
+      if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+        e.preventDefault();
+        inputBusquedaRef.current?.focus();
+        inputBusquedaRef.current?.select();
+      }
+
+      // Ctrl + N → nuevo usuario
+      if ((e.ctrlKey || e.metaKey) && e.key === "n") {
+        e.preventDefault();
+        manejarAltaUsuario();
+      }
+    };
+
+    window.addEventListener("keydown", manejarAtajo);
+    return () => window.removeEventListener("keydown", manejarAtajo);
+  }, [esAdmin, modalAbierto, usuarioParaEliminar, manejarAltaUsuario]);
+
   if (!esAdmin) {
     return (
       <div className="min-h-[60vh] flex flex-col items-center justify-center p-6 bg-white border border-slate-100 rounded-2xl shadow-sm text-center">
@@ -368,6 +516,7 @@ export default function ListaUsuarios() {
             onClick={recargarUsuarios}
             disabled={loading}
             title="Actualizar listado"
+            aria-label="Actualizar listado de usuarios"
             className="p-2.5 border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 rounded-xl transition shadow-sm disabled:opacity-50 cursor-pointer group flex items-center justify-center shrink-0"
           >
             <HiRefresh
@@ -381,6 +530,7 @@ export default function ListaUsuarios() {
 
           <button
             onClick={manejarAltaUsuario}
+            title="Nuevo usuario (Ctrl+N)"
             className="w-full lg:w-auto px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-sm font-bold rounded-xl flex items-center justify-center gap-2 shadow-sm shadow-slate-900/10 hover:shadow transition-all active:scale-[0.98] cursor-pointer whitespace-nowrap shrink-0"
           >
             <HiPlus className="w-5 h-5" />
@@ -429,10 +579,13 @@ export default function ListaUsuarios() {
                 <HiOutlineSearch className="w-5 h-5" />
               </span>
               <input
+                ref={inputBusquedaRef}
                 type="text"
                 value={busqueda}
                 onChange={(e) => setBusqueda(e.target.value)}
                 placeholder="Buscar por nombre, email o UF..."
+                title="Buscar (Ctrl+K)"
+                aria-label="Buscar usuarios (Ctrl+K)"
                 className="w-full pl-11 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition shadow-sm"
               />
             </div>
@@ -446,6 +599,7 @@ export default function ListaUsuarios() {
                 <select
                   value={filtroRol}
                   onChange={(e) => setFiltroRol(e.target.value as Rol | "todos")}
+                  aria-label="Filtrar por rol"
                   className="w-full pl-11 pr-10 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition appearance-none cursor-pointer shadow-sm"
                 >
                   {OPCIONES_ROL.map((op) => (
@@ -469,6 +623,7 @@ export default function ListaUsuarios() {
                   onChange={(e) =>
                     setFiltroEstado(e.target.value as EstadoUsuario | "todos")
                   }
+                  aria-label="Filtrar por estado"
                   className="w-full pl-11 pr-10 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition appearance-none cursor-pointer shadow-sm"
                 >
                   {OPCIONES_ESTADO.map((op) => (
@@ -491,7 +646,11 @@ export default function ListaUsuarios() {
               Cargando listado de usuarios desde MongoDB Atlas...
             </div>
           ) : error ? (
-            <div className="p-6 text-center text-sm font-medium text-red-600 bg-red-50 border border-red-100 rounded-2xl flex flex-col items-center gap-2">
+            <div
+              className="p-6 text-center text-sm font-medium text-red-600 bg-red-50 border border-red-100 rounded-2xl flex flex-col items-center gap-2"
+              role="alert"
+              aria-live="polite"
+            >
               <HiOutlineShieldExclamation className="w-8 h-8 text-red-500" />
               <span>{error}</span>
               <button
