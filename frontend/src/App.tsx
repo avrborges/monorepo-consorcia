@@ -13,6 +13,7 @@ const DashboardLayout = lazy(() => import("@/components/layout/DashboardLayout")
 const Overview = lazy(() => import("@/pages/dashboard/Overview"));
 const ListaUsuarios = lazy(() => import("@/pages/dashboard/ListaUsuarios"));
 const MapaEdificio = lazy(() => import("@/pages/dashboard/MapaEdificio"));
+const Auditoria = lazy(() => import("@/pages/dashboard/Auditoria"));
 
 // 🔴 EAGER — ProtectedRoute es un guard chico, sin costo mantenerlo eager
 import ProtectedRoute from "@/components/layout/ProtectedRoute";
@@ -82,13 +83,13 @@ function App() {
           <Route path="/activar-cuenta" element={<ActivarCuenta />} />
 
           {/* ============================================================
-           * RUTAS PROTEGIDAS — cualquier usuario autenticado
-           * ============================================================ */}
+          * RUTAS PROTEGIDAS — cualquier usuario autenticado
+          * ============================================================ */}
           <Route element={<ProtectedRoute />}>
             <Route path="/dashboard" element={<DashboardLayout />}>
               <Route index element={<Overview />} />
 
-              {/* Sub-rutas de gestión (solo admin y superadmin) */}
+              {/* Sub-rutas de gestión (admin y superadmin) */}
               <Route
                 element={
                   <ProtectedRoute rolesPermitidos={["admin", "superadmin"]} />
@@ -96,6 +97,15 @@ function App() {
               >
                 <Route path="usuarios" element={<ListaUsuarios />} />
                 <Route path="unidades" element={<MapaEdificio />} />
+              </Route>
+
+              {/* Sub-ruta exclusiva de auditoría (solo superadmin) */}
+              <Route
+                element={
+                  <ProtectedRoute rolesPermitidos={["superadmin"]} />
+                }
+              >
+                <Route path="auditoria" element={<Auditoria />} />
               </Route>
             </Route>
           </Route>

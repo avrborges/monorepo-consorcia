@@ -7,6 +7,7 @@ import {
   HiX,
   HiOutlineUserGroup,
   HiOutlineOfficeBuilding,
+  HiOutlineClipboardList,
 } from "react-icons/hi";
 import { FaSignOutAlt } from "react-icons/fa";
 
@@ -29,6 +30,7 @@ import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 const CHUNK_PREFETCHERS: Record<string, () => Promise<unknown>> = {
   "/dashboard/unidades": () => import("@/pages/dashboard/MapaEdificio"),
   "/dashboard/usuarios": () => import("@/pages/dashboard/ListaUsuarios"),
+  "/dashboard/auditoria": () => import("@/pages/dashboard/Auditoria"),
 };
 
 /* ============================================================
@@ -43,7 +45,7 @@ export default function DashboardLayout() {
   useDocumentTitle("Dashboard");
 
   // 🎯 Todo lo de sesión pasa por useAuth
-  const { usuario, rol, esAdmin, logout } = useAuth();
+  const { usuario, rol, esAdmin, esSuperAdmin, logout } = useAuth();
 
   // Fallbacks defensivos si por algún motivo la sesión no está cargada aún
   const nombreCompleto = usuario?.name || "Usuario";
@@ -65,6 +67,9 @@ export default function DashboardLayout() {
     void prefetcher();
   }, []);
 
+  /* ------------------------------------------------------------
+   * Construcción del menú del sidebar según rol
+   * ------------------------------------------------------------ */
   const menuItems = [
     {
       name: "Panel de Control",
@@ -85,6 +90,15 @@ export default function DashboardLayout() {
       name: "Lista de Usuarios",
       path: "/dashboard/usuarios",
       icon: <HiOutlineUserGroup className="w-5 h-5" />,
+    });
+  }
+
+  // Item exclusivo para superadmin — auditoría del sistema
+  if (esSuperAdmin) {
+    menuItems.push({
+      name: "Auditoría",
+      path: "/dashboard/auditoria",
+      icon: <HiOutlineClipboardList className="w-5 h-5" />,
     });
   }
 

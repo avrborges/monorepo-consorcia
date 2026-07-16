@@ -30,7 +30,6 @@ import ModalConfirmacion from "@/components/common/ModalConfirmacion";
 // Componentes de la vista
 import FormAltaUsuario from "./FormAltaUsuario";
 import UsuariosTable from "./UsuariosTable";
-import HistorialAuditoria from "./HistorialAuditoria";
 
 /* ============================================================
  * TIPOS LOCALES (específicos del componente)
@@ -43,8 +42,6 @@ export interface ConfiguracionOrden {
   direccion: DireccionOrden;
 }
 
-type PestanaActiva = "lista" | "auditoria";
-
 /* ============================================================
  * CONSTANTES
  * ============================================================ */
@@ -55,7 +52,6 @@ const DEBOUNCE_MS = 250;
 const STORAGE_KEY_BUSQUEDA = "consorcia_lista_busqueda";
 const STORAGE_KEY_ROL = "consorcia_lista_filtro_rol";
 const STORAGE_KEY_ESTADO = "consorcia_lista_filtro_estado";
-const STORAGE_KEY_PESTANA = "consorcia_lista_pestana";
 
 const OPCIONES_ROL: { value: Rol | "todos"; label: string }[] = [
   { value: "todos", label: "Todos los roles" },
@@ -113,8 +109,6 @@ const VALORES_ESTADO_VALIDOS: readonly (EstadoUsuario | "todos")[] = [
   "todos", "activo", "pendiente", "inactivo",
 ];
 
-const VALORES_PESTANA_VALIDOS: readonly PestanaActiva[] = ["lista", "auditoria"];
-
 /* ============================================================
  * COMPONENTE PRINCIPAL
  * ============================================================ */
@@ -123,16 +117,11 @@ export default function ListaUsuarios() {
   useDocumentTitle("Usuarios");
 
   // 🎯 Sesión centralizada via useAuth
-  const { esAdmin, esSuperAdmin } = useAuth();
+  const { esAdmin } = useAuth();
 
   const [loading, setLoading] = useState<boolean>(esAdmin);
   const [usuarios, setUsuarios] = useState<Persona[]>([]);
   const [error, setError] = useState<string | null>(null);
-
-  // 📝 Gestión de pestañas activas (persistida en sessionStorage)
-  const [pestanaActiva, setPestanaActiva] = useState<PestanaActiva>(() =>
-    leerFiltroPersistido(STORAGE_KEY_PESTANA, VALORES_PESTANA_VALIDOS, "lista")
-  );
 
   const [modalAbierto, setModalAbierto] = useState<boolean>(false);
   const [usuarioParaEliminar, setUsuarioParaEliminar] = useState<Persona | null>(null);
@@ -166,7 +155,7 @@ export default function ListaUsuarios() {
   const inputBusquedaRef = useRef<HTMLInputElement>(null);
 
   /* ------------------------------------------------------------
-   * Persistencia de filtros y tab en sessionStorage
+   * Persistencia de filtros en sessionStorage
    * ------------------------------------------------------------ */
   useEffect(() => {
     try {
@@ -185,12 +174,6 @@ export default function ListaUsuarios() {
       sessionStorage.setItem(STORAGE_KEY_ESTADO, filtroEstado);
     } catch { /* silent */ }
   }, [filtroEstado]);
-
-  useEffect(() => {
-    try {
-      sessionStorage.setItem(STORAGE_KEY_PESTANA, pestanaActiva);
-    } catch { /* silent */ }
-  }, [pestanaActiva]);
 
   /* ------------------------------------------------------------
    * Carga inicial (usando userService con AbortController)
@@ -539,166 +522,131 @@ export default function ListaUsuarios() {
         </div>
       </div>
 
-      {/* 🎛️ CONTROL DE PESTAÑAS (TABS) */}
-      <div className="flex border-b border-slate-200 gap-6 text-sm font-bold">
-        <button
-          type="button"
-          onClick={() => setPestanaActiva("lista")}
-          className={`pb-3 transition-all relative cursor-pointer ${
-            pestanaActiva === "lista"
-              ? "text-slate-900 border-b-2 border-slate-900"
-              : "text-slate-400 hover:text-slate-600"
-          }`}
-        >
-          Lista de Usuarios
-        </button>
+      {/* Contenido del listado */}
+      <div className="space-y-6 animate-in fade-in duration-150">
+        {/* Barra de herramientas */}
+        <div className="flex flex-col lg:flex-row gap-3 w-full items-center">
+          <div className="relative w-full lg:flex-1">
+            <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400 pointer-events-none">
+              <HiOutlineSearch className="w-5 h-5" />
+            </span>
+            <input
+              ref={inputBusquedaRef}
+              type="text"
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              placeholder="Buscar por nombre, email o UF..."
+              title="Buscar (Ctrl+K)"
+              aria-label="Buscar usuarios (Ctrl+K)"
+              className="w-full pl-11 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition shadow-sm"
+            />
+          </div>
 
-        {/* 🔐 RENDERIZADO CONDICIONAL: Solo visible para superadmin */}
-        {esSuperAdmin && (
-          <button
-            type="button"
-            onClick={() => setPestanaActiva("auditoria")}
-            className={`pb-3 transition-all relative cursor-pointer ${
-              pestanaActiva === "auditoria"
-                ? "text-slate-900 border-b-2 border-slate-900"
-                : "text-slate-400 hover:text-slate-600"
-            }`}
-          >
-            Historial de Auditoría
-          </button>
-        )}
-      </div>
-
-      {/* 🔄 RENDERIZADO DE CONTENIDO SEGÚN TAB */}
-      {pestanaActiva === "lista" ? (
-        <div className="space-y-6 animate-in fade-in duration-150">
-          {/* Barra de herramientas */}
-          <div className="flex flex-col lg:flex-row gap-3 w-full items-center">
-            <div className="relative w-full lg:flex-1">
+          <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto shrink-0">
+            {/* Filtro Rol */}
+            <div className="relative w-full sm:w-56 shrink-0">
               <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400 pointer-events-none">
-                <HiOutlineSearch className="w-5 h-5" />
+                <HiOutlineFilter className="w-5 h-5" />
               </span>
-              <input
-                ref={inputBusquedaRef}
-                type="text"
-                value={busqueda}
-                onChange={(e) => setBusqueda(e.target.value)}
-                placeholder="Buscar por nombre, email o UF..."
-                title="Buscar (Ctrl+K)"
-                aria-label="Buscar usuarios (Ctrl+K)"
-                className="w-full pl-11 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition shadow-sm"
+              <select
+                value={filtroRol}
+                onChange={(e) => setFiltroRol(e.target.value as Rol | "todos")}
+                aria-label="Filtrar por rol"
+                className="w-full pl-11 pr-10 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition appearance-none cursor-pointer shadow-sm"
+              >
+                {OPCIONES_ROL.map((op) => (
+                  <option key={op.value} value={op.value}>
+                    {op.label}
+                  </option>
+                ))}
+              </select>
+              <span className="absolute inset-y-0 right-0 flex items-center pr-3.5 pointer-events-none text-slate-400">
+                <HiChevronDown className="w-4 h-4" />
+              </span>
+            </div>
+
+            {/* Filtro Estado */}
+            <div className="relative w-full sm:w-52 shrink-0">
+              <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400 pointer-events-none">
+                <HiOutlineEye className="w-5 h-5" />
+              </span>
+              <select
+                value={filtroEstado}
+                onChange={(e) =>
+                  setFiltroEstado(e.target.value as EstadoUsuario | "todos")
+                }
+                aria-label="Filtrar por estado"
+                className="w-full pl-11 pr-10 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition appearance-none cursor-pointer shadow-sm"
+              >
+                {OPCIONES_ESTADO.map((op) => (
+                  <option key={op.value} value={op.value}>
+                    {op.label}
+                  </option>
+                ))}
+              </select>
+              <span className="absolute inset-y-0 right-0 flex items-center pr-3.5 pointer-events-none text-slate-400">
+                <HiChevronDown className="w-4 h-4" />
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Estado de carga u obtención de datos */}
+        {loading && usuarios.length === 0 ? (
+          <div className="py-20 text-center text-sm font-medium text-slate-500 bg-white border border-slate-100 rounded-2xl shadow-sm">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-900 mx-auto mb-3" />
+            Cargando listado de usuarios desde MongoDB Atlas...
+          </div>
+        ) : error ? (
+          <div
+            className="p-6 text-center text-sm font-medium text-red-600 bg-red-50 border border-red-100 rounded-2xl flex flex-col items-center gap-2"
+            role="alert"
+            aria-live="polite"
+          >
+            <HiOutlineShieldExclamation className="w-8 h-8 text-red-500" />
+            <span>{error}</span>
+            <button
+              type="button"
+              onClick={recargarUsuarios}
+              className="mt-2 px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-xl text-xs font-bold transition cursor-pointer"
+            >
+              Reintentar conexión
+            </button>
+          </div>
+        ) : (
+          /* 🎨 CONTENEDOR OPTIMIZADO: Evita el desborde y scroll vertical en el layout del dashboard */
+          <div className="bg-white border border-slate-100 rounded-2xl shadow-sm flex flex-col min-h-0 relative">
+            {loading && (
+              <div className="absolute inset-0 bg-white/40 backdrop-blur-[1px] flex items-center justify-center z-10" />
+            )}
+
+            {/* Contenedor de la tabla aislado para scroll horizontal en resoluciones móviles */}
+            <div className="w-full overflow-x-auto overflow-y-hidden min-h-0">
+              <UsuariosTable
+                usuarios={usuariosPaginados}
+                orden={orden}
+                onClickOrden={manejarClickOrden}
+                onEditar={manejarEditar}
+                onToggleEstado={toggleEstadoUsuario}
+                onEliminar={manejarAperturaBorrado}
+                onReenviarInvitacion={manejarReenviarInvitacion}
               />
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto shrink-0">
-              {/* Filtro Rol */}
-              <div className="relative w-full sm:w-56 shrink-0">
-                <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400 pointer-events-none">
-                  <HiOutlineFilter className="w-5 h-5" />
-                </span>
-                <select
-                  value={filtroRol}
-                  onChange={(e) => setFiltroRol(e.target.value as Rol | "todos")}
-                  aria-label="Filtrar por rol"
-                  className="w-full pl-11 pr-10 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition appearance-none cursor-pointer shadow-sm"
-                >
-                  {OPCIONES_ROL.map((op) => (
-                    <option key={op.value} value={op.value}>
-                      {op.label}
-                    </option>
-                  ))}
-                </select>
-                <span className="absolute inset-y-0 right-0 flex items-center pr-3.5 pointer-events-none text-slate-400">
-                  <HiChevronDown className="w-4 h-4" />
-                </span>
-              </div>
-
-              {/* Filtro Estado */}
-              <div className="relative w-full sm:w-52 shrink-0">
-                <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400 pointer-events-none">
-                  <HiOutlineEye className="w-5 h-5" />
-                </span>
-                <select
-                  value={filtroEstado}
-                  onChange={(e) =>
-                    setFiltroEstado(e.target.value as EstadoUsuario | "todos")
-                  }
-                  aria-label="Filtrar por estado"
-                  className="w-full pl-11 pr-10 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition appearance-none cursor-pointer shadow-sm"
-                >
-                  {OPCIONES_ESTADO.map((op) => (
-                    <option key={op.value} value={op.value}>
-                      {op.label}
-                    </option>
-                  ))}
-                </select>
-                <span className="absolute inset-y-0 right-0 flex items-center pr-3.5 pointer-events-none text-slate-400">
-                  <HiChevronDown className="w-4 h-4" />
-                </span>
-              </div>
+            {/* Paginación anclada de manera estática al pie de la tarjeta */}
+            <div className="border-t border-slate-100 bg-slate-50/50 rounded-b-2xl shrink-0">
+              <Paginador
+                paginaActual={paginaEfectiva}
+                totalPaginas={totalPaginas}
+                indicePrimerItem={indicePrimerItem}
+                indiceUltimoItem={indiceUltimoItem}
+                totalFiltrados={usuariosFiltrados.length}
+                onCambioPagina={setPaginaActual}
+              />
             </div>
           </div>
-
-          {/* Estado de carga u obtención de datos */}
-          {loading && usuarios.length === 0 ? (
-            <div className="py-20 text-center text-sm font-medium text-slate-500 bg-white border border-slate-100 rounded-2xl shadow-sm">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-900 mx-auto mb-3" />
-              Cargando listado de usuarios desde MongoDB Atlas...
-            </div>
-          ) : error ? (
-            <div
-              className="p-6 text-center text-sm font-medium text-red-600 bg-red-50 border border-red-100 rounded-2xl flex flex-col items-center gap-2"
-              role="alert"
-              aria-live="polite"
-            >
-              <HiOutlineShieldExclamation className="w-8 h-8 text-red-500" />
-              <span>{error}</span>
-              <button
-                type="button"
-                onClick={recargarUsuarios}
-                className="mt-2 px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-xl text-xs font-bold transition cursor-pointer"
-              >
-                Reintentar conexión
-              </button>
-            </div>
-          ) : (
-            /* 🎨 CONTENEDOR OPTIMIZADO: Evita el desborde y scroll vertical en el layout del dashboard */
-            <div className="bg-white border border-slate-100 rounded-2xl shadow-sm flex flex-col min-h-0 relative">
-              {loading && (
-                <div className="absolute inset-0 bg-white/40 backdrop-blur-[1px] flex items-center justify-center z-10" />
-              )}
-
-              {/* Contenedor de la tabla aislado para scroll horizontal en resoluciones móviles */}
-              <div className="w-full overflow-x-auto overflow-y-hidden min-h-0">
-                <UsuariosTable
-                  usuarios={usuariosPaginados}
-                  orden={orden}
-                  onClickOrden={manejarClickOrden}
-                  onEditar={manejarEditar}
-                  onToggleEstado={toggleEstadoUsuario}
-                  onEliminar={manejarAperturaBorrado}
-                  onReenviarInvitacion={manejarReenviarInvitacion}
-                />
-              </div>
-
-              {/* Paginación anclada de manera estática al pie de la tarjeta */}
-              <div className="border-t border-slate-100 bg-slate-50/50 rounded-b-2xl shrink-0">
-                <Paginador
-                  paginaActual={paginaEfectiva}
-                  totalPaginas={totalPaginas}
-                  indicePrimerItem={indicePrimerItem}
-                  indiceUltimoItem={indiceUltimoItem}
-                  totalFiltrados={usuariosFiltrados.length}
-                  onCambioPagina={setPaginaActual}
-                />
-              </div>
-            </div>
-          )}
-        </div>
-      ) : (
-        /* 📝 Vista exclusiva del Historial de Auditoría */
-        <HistorialAuditoria />
-      )}
+        )}
+      </div>
 
       {/* Modales correspondientes */}
       <FormAltaUsuario
