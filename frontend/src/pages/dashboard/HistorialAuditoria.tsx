@@ -1,5 +1,5 @@
 // src/pages/dashboard/HistorialAuditoria.tsx
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import {
   HiOutlineChip,
   HiOutlineUserAdd,
@@ -8,6 +8,8 @@ import {
   HiOutlineRefresh,
   HiSearch,
   HiX,
+  HiCheck,
+  HiBell,
 } from "react-icons/hi";
 
 // 🎯 Capa de servicios (Fase 3)
@@ -16,48 +18,266 @@ import { auditService } from "@/services";
 // 🎯 Tipos de dominio compartidos entre backend y frontend
 import type { AuditLog, AccionAuditoria } from "@shared/types";
 
+/* ============================================================
+ * CONSTANTES
+ * ============================================================ */
+
+const AUTO_REFRESH_MS = 60 * 1000; // 60 segundos
+const FEEDBACK_COPIADO_MS = 2000;
+
+// 🎯 Claves para persistir filtros en sessionStorage
+const STORAGE_KEY_BUSQUEDA = "consorcia_auditoria_busqueda";
+const STORAGE_KEY_ACCION = "consorcia_auditoria_accion";
+const STORAGE_KEY_DESDE = "consorcia_auditoria_desde";
+const STORAGE_KEY_HASTA = "consorcia_auditoria_hasta";
+
+const VALORES_ACCION_VALIDOS: readonly (AccionAuditoria | "TODOS")[] = [
+  "TODOS",
+  "USUARIO_CREADO",
+  "USUARIO_EDITADO",
+  "USUARIO_ELIMINADO",
+];
+
+/* ============================================================
+ * HELPERS
+ * ============================================================ */
+
+/**
+ * Recupera un valor validado desde sessionStorage.
+ */
+function leerFiltroPersistido<T extends string>(
+  key: string,
+  valoresPermitidos: readonly T[],
+  defaultValue: T
+): T {
+  try {
+    const valor = sessionStorage.getItem(key);
+    if (valor && (valoresPermitidos as readonly string[]).includes(valor)) {
+      return valor as T;
+    }
+  } catch {
+    /* silent */
+  }
+  return defaultValue;
+}
+
+/**
+ * Recupera un string simple desde sessionStorage (sin validación de enum).
+ */
+function leerStringPersistido(key: string, defaultValue: string): string {
+  try {
+    return sessionStorage.getItem(key) || defaultValue;
+  } catch {
+    return defaultValue;
+  }
+}
+
+/* ============================================================
+ * COMPONENTE
+ * ============================================================ */
+
 export default function HistorialAuditoria() {
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  // 🛠️ Estados para Filtros
-  const [busqueda, setBusqueda] = useState<string>("");
-  const [filtroAccion, setFiltroAccion] = useState<AccionAuditoria | "TODOS">("TODOS");
-  const [fechaDesde, setFechaDesde] = useState<string>("");
-  const [fechaHasta, setFechaHasta] = useState<string>("");
+  // 🎯 Contador de logs nuevos desde el último "reconocimiento" del usuario
+  const [logsNuevosCount, setLogsNuevosCount] = useState<number>(0);
+  const cantidadLogsPreviaRef = useRef<number>(0);
 
-  const cargarLogs = async (isRefresh = false) => {
-    if (isRefresh) setLoading(true);
-    setError(null);
+  // 🎯 Feedback visual de log copiado al portapapeles
+  const [logCopiadoId, setLogCopiadoId] = useState<string | null>(null);
+  const timeoutCopiadoRef = useRef<number | null>(null);
+
+  // 🛠️ Estados para Filtros (persistidos en sessionStorage)
+  const [busqueda, setBusqueda] = useState<string>(() =>
+    leerStringPersistido(STORAGE_KEY_BUSQUEDA, "")
+  );
+  const [filtroAccion, setFiltroAccion] = useState<AccionAuditoria | "TODOS">(() =>
+    leerFiltroPersistido(STORAGE_KEY_ACCION, VALORES_ACCION_VALIDOS, "TODOS")
+  );
+  const [fechaDesde, setFechaDesde] = useState<string>(() =>
+    leerStringPersistido(STORAGE_KEY_DESDE, "")
+  );
+  const [fechaHasta, setFechaHasta] = useState<string>(() =>
+    leerStringPersistido(STORAGE_KEY_HASTA, "")
+  );
+
+  /* ------------------------------------------------------------
+   * Persistencia de filtros en sessionStorage
+   * ------------------------------------------------------------ */
+  useEffect(() => {
     try {
-      const data = await auditService.getLogs();
+      sessionStorage.setItem(STORAGE_KEY_BUSQUEDA, busqueda);
+    } catch { /* silent */ }
+  }, [busqueda]);
 
-      if (data.success) {
-        setLogs(data.logs);
-      } else {
-        setError("No se pudo cargar el historial.");
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(STORAGE_KEY_ACCION, filtroAccion);
+    } catch { /* silent */ }
+  }, [filtroAccion]);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(STORAGE_KEY_DESDE, fechaDesde);
+    } catch { /* silent */ }
+  }, [fechaDesde]);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(STORAGE_KEY_HASTA, fechaHasta);
+    } catch { /* silent */ }
+  }, [fechaHasta]);
+
+  /* ------------------------------------------------------------
+   * Carga de logs (con soporte para auto-refresh silencioso)
+   * ------------------------------------------------------------ */
+  const cargarLogs = useCallback(
+    async (opciones: { esRefreshVisible?: boolean; esAutoRefresh?: boolean } = {}) => {
+      const { esRefreshVisible = false, esAutoRefresh = false } = opciones;
+
+      // En auto-refresh no mostramos el loading global (silencioso)
+      if (esRefreshVisible) setLoading(true);
+      if (!esAutoRefresh) setError(null);
+
+      try {
+        const data = await auditService.getLogs();
+
+        if (data.success) {
+          const nuevos = data.logs;
+
+          // 🎯 Detectar si hay logs nuevos en auto-refresh
+          if (esAutoRefresh && cantidadLogsPreviaRef.current > 0) {
+            const diferencia = nuevos.length - cantidadLogsPreviaRef.current;
+            if (diferencia > 0) {
+              setLogsNuevosCount((prev) => prev + diferencia);
+            }
+          }
+
+          cantidadLogsPreviaRef.current = nuevos.length;
+          setLogs(nuevos);
+          if (!esAutoRefresh) setError(null);
+        } else {
+          if (!esAutoRefresh) setError("No se pudo cargar el historial.");
+        }
+      } catch (err) {
+        console.error("Error al cargar logs:", err);
+        // En auto-refresh silencioso no mostramos error (evita spam si backend está caído)
+        if (!esAutoRefresh) setError("Error de conexión con el servidor.");
+      } finally {
+        if (esRefreshVisible) setLoading(false);
+        if (!esRefreshVisible && !esAutoRefresh) setLoading(false);
       }
-    } catch (err) {
-      console.error("Error al cargar logs:", err);
-      setError("Error de conexión con el servidor.");
-    } finally {
-      setLoading(false);
-    }
-  };
+    },
+    []
+  );
 
+  /* ------------------------------------------------------------
+   * Carga inicial
+   * ------------------------------------------------------------ */
   useEffect(() => {
     let activo = true;
     const inicializar = async () => {
       if (activo) {
-        await cargarLogs(false);
+        await cargarLogs();
       }
     };
     void inicializar();
     return () => {
       activo = false;
     };
+  }, [cargarLogs]);
+
+  /* ------------------------------------------------------------
+   * 🎯 Auto-refresh cada 60s (solo si la tab está visible)
+   * ------------------------------------------------------------ */
+  useEffect(() => {
+    const intervaloId = window.setInterval(() => {
+      // Solo refrescar si la pestaña está visible
+      if (document.visibilityState === "visible") {
+        void cargarLogs({ esAutoRefresh: true });
+      }
+    }, AUTO_REFRESH_MS);
+
+    return () => {
+      window.clearInterval(intervaloId);
+    };
+  }, [cargarLogs]);
+
+  /* ------------------------------------------------------------
+   * 🎯 Refresh inmediato al volver a la pestaña (visibilitychange)
+   * ------------------------------------------------------------ */
+  useEffect(() => {
+    const manejarVisibilidad = () => {
+      if (document.visibilityState === "visible") {
+        void cargarLogs({ esAutoRefresh: true });
+      }
+    };
+
+    document.addEventListener("visibilitychange", manejarVisibilidad);
+    return () => {
+      document.removeEventListener("visibilitychange", manejarVisibilidad);
+    };
+  }, [cargarLogs]);
+
+  /* ------------------------------------------------------------
+   * 🎯 Limpieza del timeout de feedback de copiado
+   * ------------------------------------------------------------ */
+  useEffect(() => {
+    return () => {
+      if (timeoutCopiadoRef.current !== null) {
+        window.clearTimeout(timeoutCopiadoRef.current);
+      }
+    };
   }, []);
+
+  /* ------------------------------------------------------------
+   * Handlers de UI
+   * ------------------------------------------------------------ */
+
+  const recargarManual = useCallback(async () => {
+    await cargarLogs({ esRefreshVisible: true });
+    setLogsNuevosCount(0); // reset del contador
+  }, [cargarLogs]);
+
+  const reconocerLogsNuevos = useCallback(() => {
+    setLogsNuevosCount(0);
+  }, []);
+
+  /**
+   * 🎯 Copia los detalles completos del log al portapapeles.
+   */
+  const copiarLog = async (log: AuditLog): Promise<void> => {
+    const detalles = [
+      `Fecha: ${new Date(log.timestamp).toLocaleString("es-AR")}`,
+      `Admin: ${log.adminName}`,
+      `Acción: ${log.accion}`,
+      `Usuario afectado: ${log.detalles.nombreUsuario}`,
+    ];
+
+    if (log.detalles.cambios && Object.keys(log.detalles.cambios).length > 0) {
+      detalles.push(`Cambios: ${traducirCambios(log.detalles.cambios)}`);
+    }
+
+    const texto = detalles.join(" | ");
+
+    try {
+      await navigator.clipboard.writeText(texto);
+      setLogCopiadoId(log._id);
+
+      if (timeoutCopiadoRef.current !== null) {
+        window.clearTimeout(timeoutCopiadoRef.current);
+      }
+
+      timeoutCopiadoRef.current = window.setTimeout(() => {
+        setLogCopiadoId(null);
+        timeoutCopiadoRef.current = null;
+      }, FEEDBACK_COPIADO_MS);
+    } catch (err) {
+      console.error("No se pudo copiar el log al portapapeles:", err);
+    }
+  };
 
   const getIconoAccion = (accion: AccionAuditoria) => {
     switch (accion) {
@@ -149,13 +369,40 @@ export default function HistorialAuditoria() {
         </div>
         <button
           type="button"
-          onClick={() => cargarLogs(true)}
+          onClick={recargarManual}
           disabled={loading}
+          title="Actualizar historial"
+          aria-label="Actualizar historial de auditoría"
           className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-50 border border-slate-200 rounded-xl transition cursor-pointer disabled:opacity-50"
         >
           <HiOutlineRefresh className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
         </button>
       </div>
+
+      {/* 🎯 Banner de logs nuevos detectados por auto-refresh */}
+      {logsNuevosCount > 0 && (
+        <div
+          className="mb-4 flex items-center justify-between gap-3 p-3 bg-amber-50 border border-amber-200 rounded-xl animate-in fade-in slide-in-from-top-2 duration-200"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="flex items-center gap-2 text-amber-700 text-xs font-bold">
+            <HiBell className="w-4 h-4 shrink-0" />
+            <span>
+              {logsNuevosCount === 1
+                ? "Hay 1 registro nuevo desde tu última visita."
+                : `Hay ${logsNuevosCount} registros nuevos desde tu última visita.`}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={reconocerLogsNuevos}
+            className="text-xs font-bold text-amber-700 hover:text-amber-900 underline underline-offset-2 transition cursor-pointer shrink-0"
+          >
+            Entendido
+          </button>
+        </div>
+      )}
 
       {/* 🛠️ BARRA DE FILTROS EN UN SOLO RENGLÓN */}
       <div className="flex flex-wrap md:flex-nowrap items-center gap-3 mb-6 p-3.5 bg-slate-50/60 rounded-xl border border-slate-100">
@@ -167,6 +414,7 @@ export default function HistorialAuditoria() {
             placeholder="Buscar por usuario o admin..."
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
+            aria-label="Buscar en historial de auditoría"
             className="w-full pl-10 pr-4 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-700 placeholder-slate-400 focus:outline-none focus:border-slate-300 transition"
           />
         </div>
@@ -176,6 +424,7 @@ export default function HistorialAuditoria() {
           <select
             value={filtroAccion}
             onChange={(e) => setFiltroAccion(e.target.value as AccionAuditoria | "TODOS")}
+            aria-label="Filtrar por tipo de acción"
             className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 focus:outline-none focus:border-slate-300 transition cursor-pointer"
           >
             <option value="TODOS">Todas las acciones</option>
@@ -191,6 +440,7 @@ export default function HistorialAuditoria() {
             type="date"
             value={fechaDesde}
             onChange={(e) => setFechaDesde(e.target.value)}
+            aria-label="Fecha desde"
             className="w-full sm:w-36 px-2 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-600 focus:outline-none focus:border-slate-300 transition cursor-pointer"
           />
           <span className="text-[11px] font-bold text-slate-400 uppercase tracking-tight">al</span>
@@ -198,6 +448,7 @@ export default function HistorialAuditoria() {
             type="date"
             value={fechaHasta}
             onChange={(e) => setFechaHasta(e.target.value)}
+            aria-label="Fecha hasta"
             className="w-full sm:w-36 px-2 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-600 focus:outline-none focus:border-slate-300 transition cursor-pointer"
           />
         </div>
@@ -207,6 +458,7 @@ export default function HistorialAuditoria() {
           <button
             type="button"
             onClick={limpiarFiltros}
+            aria-label="Limpiar todos los filtros"
             className="flex items-center justify-center gap-1 px-2.5 py-1.5 text-xs font-bold text-red-500 hover:text-red-700 hover:bg-red-50 rounded-xl transition cursor-pointer shrink-0"
           >
             <HiX className="w-3.5 h-3.5" />
@@ -216,13 +468,29 @@ export default function HistorialAuditoria() {
       </div>
 
       {loading && logs.length === 0 && (
-        <div className="py-12 text-center text-xs font-semibold text-slate-400 animate-pulse">Cargando logs de auditoría...</div>
+        <div
+          className="py-12 text-center text-xs font-semibold text-slate-400 animate-pulse"
+          role="status"
+          aria-live="polite"
+        >
+          Cargando logs de auditoría...
+        </div>
       )}
 
-      {error && <div className="p-4 bg-red-50 border border-red-100 text-red-600 text-xs font-bold rounded-xl mb-4">{error}</div>}
+      {error && (
+        <div
+          className="p-4 bg-red-50 border border-red-100 text-red-600 text-xs font-bold rounded-xl mb-4"
+          role="alert"
+          aria-live="polite"
+        >
+          {error}
+        </div>
+      )}
 
       {!loading && logs.length === 0 && !error && (
-        <div className="py-12 text-center text-xs font-semibold text-slate-400">No hay movimientos registrados.</div>
+        <div className="py-12 text-center text-xs font-semibold text-slate-400">
+          No hay movimientos registrados.
+        </div>
       )}
 
       {!loading && logs.length > 0 && logsFiltrados.length === 0 && (
@@ -233,35 +501,67 @@ export default function HistorialAuditoria() {
 
       {/* ⏳ LISTADO DEL HISTORIAL */}
       <div className="relative space-y-4 max-h-150 overflow-y-auto pr-3 scrollbar-thin">
-        {logsFiltrados.map((log) => (
-          <div key={log._id} className="flex items-start gap-4 group animate-in fade-in slide-in-from-bottom-2 duration-150">
-            {/* ÍCONO DE ACCIÓN */}
-            <div className={`mt-2 w-7 h-7 rounded-full border-2 flex items-center justify-center bg-white shadow-sm transition duration-200 shrink-0 ${getEstilosCirculo(log.accion)}`}>
-              {getIconoAccion(log.accion)}
-            </div>
+        {logsFiltrados.map((log) => {
+          const logCopiado = logCopiadoId === log._id;
 
-            {/* Tarjeta de log */}
-            <div className="flex-1 bg-slate-50/50 group-hover:bg-slate-50 p-3.5 rounded-xl border border-slate-100 transition duration-200">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-                <span className="text-xs font-bold text-slate-800">{log.adminName}</span>
-                <span className="text-[10px] font-bold text-slate-400">{new Date(log.timestamp).toLocaleString("es-AR")}</span>
+          return (
+            <div key={log._id} className="flex items-start gap-4 group animate-in fade-in slide-in-from-bottom-2 duration-150">
+              {/* ÍCONO DE ACCIÓN */}
+              <div className={`mt-2 w-7 h-7 rounded-full border-2 flex items-center justify-center bg-white shadow-sm transition duration-200 shrink-0 ${getEstilosCirculo(log.accion)}`}>
+                {getIconoAccion(log.accion)}
               </div>
 
-              <p className="text-xs text-slate-600 font-medium mt-1">
-                {log.accion === "USUARIO_CREADO" && "Dio de alta a: "}
-                {log.accion === "USUARIO_EDITADO" && "Modificó a: "}
-                {log.accion === "USUARIO_ELIMINADO" && "Eliminó a: "}
-                <span className="font-bold text-slate-700">{log.detalles.nombreUsuario}</span>
-              </p>
-
-              {log.detalles.cambios && Object.keys(log.detalles.cambios || {}).length > 0 && (
-                <div className="mt-2 text-[10px] bg-white border border-slate-100 rounded-lg py-1 px-2.5 font-mono text-slate-500 wrap-break-word">
-                  {traducirCambios(log.detalles.cambios)}
+              {/* Tarjeta de log — clickeable para copiar */}
+              <button
+                type="button"
+                onClick={() => void copiarLog(log)}
+                title={logCopiado ? "¡Detalles copiados!" : "Click para copiar los detalles del registro"}
+                aria-label={`Registro de ${log.adminName}: ${log.accion} sobre ${log.detalles.nombreUsuario}. Click para copiar detalles.`}
+                className={`flex-1 text-left p-3.5 rounded-xl border transition duration-200 cursor-pointer ${
+                  logCopiado
+                    ? "bg-emerald-50 border-emerald-200 group-hover:bg-emerald-50"
+                    : "bg-slate-50/50 group-hover:bg-slate-50 border-slate-100"
+                }`}
+              >
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                  <span className={`text-xs font-bold ${logCopiado ? "text-emerald-700" : "text-slate-800"}`}>
+                    {log.adminName}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    {logCopiado && (
+                      <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 uppercase tracking-wider">
+                        <HiCheck className="w-3 h-3" />
+                        Copiado
+                      </span>
+                    )}
+                    <span className="text-[10px] font-bold text-slate-400">
+                      {new Date(log.timestamp).toLocaleString("es-AR")}
+                    </span>
+                  </div>
                 </div>
-              )}
+
+                <p className={`text-xs font-medium mt-1 ${logCopiado ? "text-emerald-700" : "text-slate-600"}`}>
+                  {log.accion === "USUARIO_CREADO" && "Dio de alta a: "}
+                  {log.accion === "USUARIO_EDITADO" && "Modificó a: "}
+                  {log.accion === "USUARIO_ELIMINADO" && "Eliminó a: "}
+                  <span className={`font-bold ${logCopiado ? "text-emerald-800" : "text-slate-700"}`}>
+                    {log.detalles.nombreUsuario}
+                  </span>
+                </p>
+
+                {log.detalles.cambios && Object.keys(log.detalles.cambios || {}).length > 0 && (
+                  <div className={`mt-2 text-[10px] rounded-lg py-1 px-2.5 font-mono wrap-break-word border ${
+                    logCopiado
+                      ? "bg-white border-emerald-100 text-emerald-700"
+                      : "bg-white border-slate-100 text-slate-500"
+                  }`}>
+                    {traducirCambios(log.detalles.cambios)}
+                  </div>
+                )}
+              </button>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
