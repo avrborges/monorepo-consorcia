@@ -15,8 +15,17 @@ import { userService } from "@/services";
 // 🎯 Helpers de sesión (Fase 4)
 import { guardarSesion } from "@/lib/session";
 
+// 🎯 Hook para título dinámico de pestaña (Tanda 1 UX)
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
+
 // 🎯 Tipos de respuesta compartidos entre backend y frontend
 import type { ErrorResponse } from "@shared/types";
+
+/* ============================================================
+ * CONSTANTES
+ * ============================================================ */
+
+const REMEMBER_EMAIL_KEY = "consorcia_remember_email";
 
 /* ============================================================
  * PREFETCH ESTRATÉGICO
@@ -35,11 +44,22 @@ const prefetchDashboardChunks = (): void => {
   void import("@/pages/dashboard/Overview");
 };
 
+/* ============================================================
+ * COMPONENTE
+ * ============================================================ */
+
 export default function Login() {
+  // 🎯 Título dinámico de la pestaña
+  useDocumentTitle("Iniciar sesión");
+
   const navigate = useNavigate();
 
-  const [email, setEmail] = useState("");
+  // 🎯 Recuperar email guardado si existe (feature "Recordarme")
+  const emailGuardado = localStorage.getItem(REMEMBER_EMAIL_KEY) || "";
+
+  const [email, setEmail] = useState(emailGuardado);
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState<boolean>(Boolean(emailGuardado));
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
@@ -72,11 +92,26 @@ export default function Login() {
       setSuccessMsg(result.message);
       guardarSesion(result.token, result.user);
 
-      // 🚀 Precargar los chunks del dashboard en paralelo mientras se muestra "Redirigiendo..."
+      // 🎯 Persistir o limpiar email según checkbox "Recordarme"
+      if (rememberMe) {
+        localStorage.setItem(REMEMBER_EMAIL_KEY, email.trim());
+      } else {
+        localStorage.removeItem(REMEMBER_EMAIL_KEY);
+      }
+
+      // 🚀 Precargar los chunks del dashboard en paralelo
       prefetchDashboardChunks();
 
+      // 🎯 Redirect inteligente: volver a la ruta original (si venía de un 401)
+      const rutaOriginal = sessionStorage.getItem("redirect_after_login");
+      sessionStorage.removeItem("redirect_after_login");
+
+      const destino = rutaOriginal && !rutaOriginal.startsWith("/login")
+        ? rutaOriginal
+        : "/dashboard";
+
       redirectTimeoutRef.current = window.setTimeout(() => {
-        navigate("/dashboard");
+        navigate(destino);
       }, 1500);
     } catch (error: unknown) {
       console.error("Error durante el inicio de sesión:", error);
@@ -114,14 +149,22 @@ export default function Login() {
 
         {/* Mensajes de feedback */}
         {errorMsg && (
-          <div className="mb-5 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-medium text-red-600 animate-in fade-in zoom-in-95 duration-200">
+          <div
+            className="mb-5 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-medium text-red-600 animate-in fade-in zoom-in-95 duration-200"
+            role="alert"
+            aria-live="polite"
+          >
             <MdErrorOutline className="shrink-0 text-lg" />
             <span>{errorMsg}</span>
           </div>
         )}
 
         {successMsg && (
-          <div className="mb-5 flex items-center gap-2 rounded-xl border border-teal-200 bg-teal-50 p-3 text-sm font-medium text-teal-700 animate-in fade-in zoom-in-95 duration-200">
+          <div
+            className="mb-5 flex items-center gap-2 rounded-xl border border-teal-200 bg-teal-50 p-3 text-sm font-medium text-teal-700 animate-in fade-in zoom-in-95 duration-200"
+            role="status"
+            aria-live="polite"
+          >
             <CiCircleCheck className="shrink-0 text-lg" />
             <span>{successMsg} Redirigiendo...</span>
           </div>
@@ -145,12 +188,13 @@ export default function Login() {
                 name="email"
                 type="email"
                 required
-                autoFocus
+                autoFocus={!emailGuardado}
                 disabled={isLoading}
                 autoComplete="email"
                 placeholder="ejemplo@correo.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                aria-invalid={Boolean(errorMsg)}
                 className="w-full rounded-xl border border-slate-200 bg-white pl-11 pr-4 py-3 text-sm text-slate-800 shadow-sm transition-all focus:border-teal-600 focus:ring-4 focus:ring-teal-600/10 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed placeholder:text-slate-300"
               />
             </div>
@@ -184,11 +228,13 @@ export default function Login() {
                 name="password"
                 type={showPassword ? "text" : "password"}
                 required
+                autoFocus={Boolean(emailGuardado)}
                 disabled={isLoading}
                 autoComplete="current-password"
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                aria-invalid={Boolean(errorMsg)}
                 className="w-full rounded-xl border border-slate-200 bg-white pl-11 pr-12 py-3 font-mono text-sm text-slate-800 shadow-sm transition-all focus:border-teal-600 focus:ring-4 focus:ring-teal-600/10 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed placeholder:text-slate-200"
               />
 
@@ -198,6 +244,7 @@ export default function Login() {
                 onClick={() => setShowPassword(!showPassword)}
                 className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors p-1 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                 title={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
               >
                 {showPassword ? (
                   <HiOutlineEyeOff className="w-5 h-5" />
@@ -206,6 +253,24 @@ export default function Login() {
                 )}
               </button>
             </div>
+          </div>
+
+          {/* 🎯 Checkbox "Recordarme" */}
+          <div className="flex items-center gap-2">
+            <input
+              id="rememberMe"
+              type="checkbox"
+              disabled={isLoading}
+              checked={rememberMe}
+              onChange={(e) => setRememberMe(e.target.checked)}
+              className="w-4 h-4 rounded border-slate-300 text-teal-600 focus:ring-teal-600/20 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+            />
+            <label
+              htmlFor="rememberMe"
+              className="text-xs font-semibold text-slate-500 cursor-pointer select-none"
+            >
+              Recordar mi correo electrónico
+            </label>
           </div>
 
           <button

@@ -7,11 +7,6 @@ import { limpiarSesion } from "@/lib/session";
  * CONFIGURACIÓN DE BASE URL
  * ============================================================ */
 
-/**
- * Determina la URL base del backend de forma flexible:
- *  1. Si existe VITE_API_URL en el entorno → la usa (producción / staging).
- *  2. En su defecto → construye una URL relativa al hostname actual (desarrollo local + red LAN).
- */
 const obtenerBaseUrl = (): string => {
   const fromEnv = import.meta.env?.VITE_API_URL as string | undefined;
   if (fromEnv) return `${fromEnv.replace(/\/$/, "")}/api`;
@@ -22,18 +17,6 @@ const obtenerBaseUrl = (): string => {
  * INSTANCIA DE AXIOS
  * ============================================================ */
 
-/**
- * Cliente HTTP compartido por toda la aplicación.
- *
- * ⚠️ NO usar directamente desde componentes.
- * Toda la lógica de dominio debe pasar por la capa `src/services/*`.
- *
- * Este archivo es puramente infraestructura de transporte:
- *  - Base URL
- *  - Headers por defecto
- *  - Interceptor de request (JWT auto-inject)
- *  - Interceptor de response (manejo global de 401)
- */
 const api = axios.create({
   baseURL: obtenerBaseUrl(),
   headers: {
@@ -61,18 +44,19 @@ api.interceptors.request.use(
 
 /**
  * RESPONSE: maneja globalmente los errores 401 (token expirado o inválido).
- * Limpia la sesión y redirige al login.
- *
- * Excluye las rutas /login y /activar-cuenta para evitar loops
- * (esos endpoints legítimamente pueden devolver 401 con credenciales inválidas).
+ * Limpia la sesión y redirige al login, guardando la ruta actual
+ * en sessionStorage para volver ahí tras el re-login exitoso.
  */
 api.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {
     if (error.response?.status === 401) {
-      const rutaActual = window.location.pathname;
+      const rutaActual = window.location.pathname + window.location.search;
 
       if (!rutaActual.startsWith("/login") && !rutaActual.startsWith("/activar-cuenta")) {
+        // 🎯 Guardamos la ruta destino para volver después del login
+        sessionStorage.setItem("redirect_after_login", rutaActual);
+
         limpiarSesion();
         window.location.href = "/login";
       }
