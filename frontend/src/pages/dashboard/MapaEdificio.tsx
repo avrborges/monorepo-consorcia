@@ -1,5 +1,5 @@
 // src/pages/dashboard/MapaEdificio.tsx
-import { useState, useEffect, useMemo, useCallback, memo } from "react";
+import { useState, useEffect, useMemo, useCallback, memo, useRef } from "react";
 import { createPortal } from "react-dom";
 import {
   HiOutlineOfficeBuilding,
@@ -14,8 +14,20 @@ import {
 // 🎯 Capa de servicios (Fase 3)
 import { userService, unidadService } from "@/services";
 
+// 🎯 Hook para título dinámico de pestaña (Tanda 1 UX)
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
+
+// 🎯 Modal de confirmación estilizado (usado en drawer habitantes)
+import ModalConfirmacion from "@/components/common/ModalConfirmacion";
+
 // 🎯 Tipos de dominio compartidos entre backend y frontend
 import type { Persona, UnidadFuncional } from "@shared/types";
+
+/* ============================================================
+ * CONSTANTES
+ * ============================================================ */
+
+const STORAGE_KEY_UNIDAD_SELECCIONADA = "consorcia_mapa_unidad_seleccionada";
 
 /**
  * En este contexto SIEMPRE recibimos unidades populadas desde el backend
@@ -27,7 +39,9 @@ type UnidadPopulada = Omit<UnidadFuncional, "propietario" | "inquilino"> & {
   inquilino?: Persona | null;
 };
 
-// Subcomponente de detalle optimizado para evitar re-renderizados innecesarios
+/* ============================================================
+ * SUBCOMPONENTE: DetalleUnidad
+ * ============================================================ */
 const DetalleUnidad = memo(
   ({
     unidad,
@@ -65,6 +79,7 @@ const DetalleUnidad = memo(
           </div>
           <button
             onClick={onCerrar}
+            aria-label="Cerrar detalle de la unidad"
             className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition cursor-pointer"
           >
             <HiX className="w-5 h-5" />
@@ -159,7 +174,13 @@ const DetalleUnidad = memo(
 
 DetalleUnidad.displayName = "DetalleUnidad";
 
+/* ============================================================
+ * COMPONENTE PRINCIPAL
+ * ============================================================ */
 export default function MapaEdificio() {
+  // 🎯 Título dinámico de la pestaña
+  useDocumentTitle("Unidades funcionales");
+
   const [unidades, setUnidades] = useState<UnidadPopulada[]>([]);
   const [usuariosSistema, setUsuariosSistema] = useState<Persona[]>([]);
   const [cargando, setCargando] = useState<boolean>(true);
@@ -179,6 +200,12 @@ export default function MapaEdificio() {
   const [nuevoInquilinoId, setNuevoInquilinoId] = useState<string>("");
   const [guardando, setGuardando] = useState<boolean>(false);
 
+  // 🎯 Estado del modal de confirmación de cierre del drawer
+  const [mostrarConfirmarCierreDrawer, setMostrarConfirmarCierreDrawer] = useState<boolean>(false);
+
+  // 🎯 Snapshot de valores iniciales del drawer para detectar cambios
+  const valoresInicialesDrawer = useRef<{ propietarioId: string; inquilinoId: string } | null>(null);
+
   // Carga de datos
   useEffect(() => {
     const controller = new AbortController();
@@ -194,7 +221,21 @@ export default function MapaEdificio() {
         if (!activo) return;
 
         if (dataUnidades.ok && dataUnidades.unidades) {
-          setUnidades(dataUnidades.unidades as UnidadPopulada[]);
+          const unidadesPop = dataUnidades.unidades as UnidadPopulada[];
+          setUnidades(unidadesPop);
+
+          // 🎯 Restaurar unidad seleccionada desde sessionStorage
+          try {
+            const idPersistido = sessionStorage.getItem(STORAGE_KEY_UNIDAD_SELECCIONADA);
+            if (idPersistido) {
+              const encontrada = unidadesPop.find((u) => u._id === idPersistido);
+              if (encontrada) {
+                setUnidadSeleccionada(encontrada);
+              }
+            }
+          } catch {
+            /* silent */
+          }
         }
 
         if (dataUsuarios.success && dataUsuarios.users) {
@@ -215,6 +256,21 @@ export default function MapaEdificio() {
       controller.abort();
     };
   }, []);
+
+  /* ------------------------------------------------------------
+   * 🎯 Persistencia de la unidad seleccionada en sessionStorage
+   * ------------------------------------------------------------ */
+  useEffect(() => {
+    try {
+      if (unidadSeleccionada) {
+        sessionStorage.setItem(STORAGE_KEY_UNIDAD_SELECCIONADA, unidadSeleccionada._id);
+      } else {
+        sessionStorage.removeItem(STORAGE_KEY_UNIDAD_SELECCIONADA);
+      }
+    } catch {
+      /* silent */
+    }
+  }, [unidadSeleccionada]);
 
   const handleCrearUnidad = useCallback(
     async (e: React.FormEvent) => {
@@ -263,10 +319,52 @@ export default function MapaEdificio() {
 
   const abrirGestionHabitantes = useCallback(() => {
     if (!unidadSeleccionada) return;
-    setNuevoPropietarioId(unidadSeleccionada.propietario?._id || "");
-    setNuevoInquilinoId(unidadSeleccionada.inquilino?._id || "");
+    const propInicial = unidadSeleccionada.propietario?._id || "";
+    const inqInicial = unidadSeleccionada.inquilino?._id || "";
+    setNuevoPropietarioId(propInicial);
+    setNuevoInquilinoId(inqInicial);
+    // 🎯 Guardar snapshot para detectar cambios
+    valoresInicialesDrawer.current = {
+      propietarioId: propInicial,
+      inquilinoId: inqInicial,
+    };
     setDrawerAbierto(true);
   }, [unidadSeleccionada]);
+
+  /**
+   * 🎯 Detecta si hay cambios sin guardar en el drawer de habitantes.
+   */
+  const drawerTieneCambios = useCallback((): boolean => {
+    if (!valoresInicialesDrawer.current) return false;
+    return (
+      nuevoPropietarioId !== valoresInicialesDrawer.current.propietarioId ||
+      nuevoInquilinoId !== valoresInicialesDrawer.current.inquilinoId
+    );
+  }, [nuevoPropietarioId, nuevoInquilinoId]);
+
+  /**
+   * 🎯 Intenta cerrar el drawer. Si hay cambios sin guardar,
+   * muestra el modal de confirmación.
+   */
+  const intentarCerrarDrawer = useCallback(() => {
+    if (guardando) return;
+
+    if (drawerTieneCambios()) {
+      setMostrarConfirmarCierreDrawer(true);
+      return;
+    }
+
+    setDrawerAbierto(false);
+  }, [guardando, drawerTieneCambios]);
+
+  const confirmarDescartarCambiosDrawer = useCallback(() => {
+    setMostrarConfirmarCierreDrawer(false);
+    setDrawerAbierto(false);
+  }, []);
+
+  const cancelarCierreDrawer = useCallback(() => {
+    setMostrarConfirmarCierreDrawer(false);
+  }, []);
 
   const guardarHabitantes = useCallback(
     async (e: React.FormEvent) => {
@@ -300,6 +398,34 @@ export default function MapaEdificio() {
   const handleCerrarDetalle = useCallback(() => {
     setUnidadSeleccionada(null);
   }, []);
+
+  /* ------------------------------------------------------------
+   * 🎯 Escape para cerrar detalle o drawer (según lo que esté abierto)
+   * ------------------------------------------------------------ */
+  useEffect(() => {
+    const manejarEscape = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+
+      // No hacer nada si el modal de confirmación está abierto (tiene su propio Escape)
+      if (mostrarConfirmarCierreDrawer) return;
+
+      // Prioridad: drawer > detalle
+      if (drawerAbierto) {
+        intentarCerrarDrawer();
+      } else if (unidadSeleccionada) {
+        handleCerrarDetalle();
+      }
+    };
+
+    document.addEventListener("keydown", manejarEscape);
+    return () => document.removeEventListener("keydown", manejarEscape);
+  }, [
+    drawerAbierto,
+    unidadSeleccionada,
+    mostrarConfirmarCierreDrawer,
+    intentarCerrarDrawer,
+    handleCerrarDetalle,
+  ]);
 
   // Bloquear el scroll de forma limpia y responsiva
   useEffect(() => {
@@ -343,9 +469,32 @@ export default function MapaEdificio() {
     });
   }, [unidades]);
 
+  /**
+   * 🎯 Genera un aria-label descriptivo para cada botón de unidad.
+   */
+  const generarAriaLabelUnidad = (u: UnidadPopulada): string => {
+    const ubicacion =
+      u.piso === "0" || u.piso.toLowerCase() === "pb"
+        ? `Planta baja departamento ${u.departamento}`
+        : `Piso ${u.piso} departamento ${u.departamento}`;
+
+    let estado = "vacío";
+    if (u.inquilino) {
+      estado = `ocupado por inquilino ${u.inquilino.name}`;
+    } else if (u.propietario) {
+      estado = `ocupado por propietario ${u.propietario.name}`;
+    }
+
+    return `${ubicacion}, ${estado}. Click para ver detalle.`;
+  };
+
   if (cargando) {
     return (
-      <div className="flex h-60 items-center justify-center text-slate-400 font-medium">
+      <div
+        className="flex h-60 items-center justify-center text-slate-400 font-medium"
+        role="status"
+        aria-live="polite"
+      >
         Cargando plano estructural del consorcio...
       </div>
     );
@@ -366,6 +515,8 @@ export default function MapaEdificio() {
 
         <button
           onClick={() => setMostrarFormAlta((prev) => !prev)}
+          aria-label={mostrarFormAlta ? "Cerrar formulario de nueva unidad" : "Abrir formulario para crear nueva unidad"}
+          aria-expanded={mostrarFormAlta}
           className="flex items-center justify-center gap-2 bg-[#0f172a] hover:bg-slate-800 text-white text-xs font-bold py-3 px-5 rounded-xl transition cursor-pointer active:scale-[0.99] shrink-0"
         >
           {mostrarFormAlta ? (
@@ -395,16 +546,16 @@ export default function MapaEdificio() {
       {mostrarFormAlta && (
         <form onSubmit={handleCrearUnidad} className="mb-8 bg-white border border-slate-200 p-5 rounded-2xl flex flex-wrap gap-4 items-end shadow-xs animate-in fade-in duration-200">
           <div className="w-24">
-            <label className="block text-slate-600 font-bold text-[11px] uppercase mb-1">Piso</label>
-            <input type="text" required placeholder="Ej: 1" value={nuevoPiso} onChange={(e) => setNuevoPiso(e.target.value)} className="w-full text-sm px-3 py-2 rounded-lg border border-slate-200 bg-white outline-none focus:border-slate-900" />
+            <label htmlFor="nueva-unidad-piso" className="block text-slate-600 font-bold text-[11px] uppercase mb-1">Piso</label>
+            <input id="nueva-unidad-piso" type="text" required placeholder="Ej: 1" value={nuevoPiso} onChange={(e) => setNuevoPiso(e.target.value)} className="w-full text-sm px-3 py-2 rounded-lg border border-slate-200 bg-white outline-none focus:border-slate-900" />
           </div>
           <div className="w-28">
-            <label className="block text-slate-600 font-bold text-[11px] uppercase mb-1">Dpto / Nro</label>
-            <input type="text" required placeholder="Ej: A" value={nuevoDepto} onChange={(e) => setNuevoDepto(e.target.value)} className="w-full text-sm px-3 py-2 rounded-lg border border-slate-200 bg-white outline-none focus:border-slate-900" />
+            <label htmlFor="nueva-unidad-depto" className="block text-slate-600 font-bold text-[11px] uppercase mb-1">Dpto / Nro</label>
+            <input id="nueva-unidad-depto" type="text" required placeholder="Ej: A" value={nuevoDepto} onChange={(e) => setNuevoDepto(e.target.value)} className="w-full text-sm px-3 py-2 rounded-lg border border-slate-200 bg-white outline-none focus:border-slate-900" />
           </div>
           <div className="w-32">
-            <label className="block text-slate-600 font-bold text-[11px] uppercase mb-1">Coeficiente</label>
-            <input type="number" step="0.00001" required value={nuevoCoeficiente} onChange={(e) => setNuevoCoeficiente(e.target.value)} className="w-full text-sm px-3 py-2 rounded-lg border border-slate-200 bg-white outline-none focus:border-slate-900" />
+            <label htmlFor="nueva-unidad-coef" className="block text-slate-600 font-bold text-[11px] uppercase mb-1">Coeficiente</label>
+            <input id="nueva-unidad-coef" type="number" step="0.00001" required value={nuevoCoeficiente} onChange={(e) => setNuevoCoeficiente(e.target.value)} className="w-full text-sm px-3 py-2 rounded-lg border border-slate-200 bg-white outline-none focus:border-slate-900" />
           </div>
           <button type="submit" disabled={creandoUnidad} className="bg-[#0f172a] hover:bg-slate-800 disabled:opacity-50 text-white font-bold text-xs h-9.5 px-4 rounded-lg transition flex items-center gap-1.5 cursor-pointer">
             <HiCheck className="w-4 h-4" />
@@ -424,16 +575,16 @@ export default function MapaEdificio() {
             </div>
 
             {/* Referencias */}
-            <div className="flex flex-wrap gap-2 mb-6 md:mb-8">
-              <div className="flex items-center gap-1.5 bg-[#ecfdf5] border border-[#a7f3d0] px-2.5 py-1 rounded-full text-[9px] md:text-[10px] font-extrabold text-[#047857] uppercase tracking-wider">
+            <div className="flex flex-wrap gap-2 mb-6 md:mb-8" role="list" aria-label="Referencias de colores del mapa">
+              <div role="listitem" className="flex items-center gap-1.5 bg-[#ecfdf5] border border-[#a7f3d0] px-2.5 py-1 rounded-full text-[9px] md:text-[10px] font-extrabold text-[#047857] uppercase tracking-wider">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#10b981]" />
                 Propietario
               </div>
-              <div className="flex items-center gap-1.5 bg-[#eff6ff] border border-[#bfdbfe] px-2.5 py-1 rounded-full text-[9px] md:text-[10px] font-extrabold text-[#1d4ed8] uppercase tracking-wider">
+              <div role="listitem" className="flex items-center gap-1.5 bg-[#eff6ff] border border-[#bfdbfe] px-2.5 py-1 rounded-full text-[9px] md:text-[10px] font-extrabold text-[#1d4ed8] uppercase tracking-wider">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#3b82f6]" />
                 Inquilino
               </div>
-              <div className="flex items-center gap-1.5 bg-[#f8fafc] border border-[#e2e8f0] px-2.5 py-1 rounded-full text-[9px] md:text-[10px] font-extrabold text-[#64748b] uppercase tracking-wider">
+              <div role="listitem" className="flex items-center gap-1.5 bg-[#f8fafc] border border-[#e2e8f0] px-2.5 py-1 rounded-full text-[9px] md:text-[10px] font-extrabold text-[#64748b] uppercase tracking-wider">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#cbd5e1]" />
                 Vacío
               </div>
@@ -471,6 +622,8 @@ export default function MapaEdificio() {
                           <button
                             key={u._id}
                             onClick={() => setUnidadSeleccionada(u)}
+                            aria-label={generarAriaLabelUnidad(u)}
+                            aria-pressed={esSeleccionada}
                             className={`px-3 rounded-xl border text-xs lg:text-sm font-extrabold tracking-wide transition-all cursor-pointer flex items-center justify-center min-w-12 md:min-w-16 h-10.5 md:h-12.5 ${clasesOcupacion} ${
                               esSeleccionada ? "ring-2 ring-slate-900 ring-offset-2 scale-105" : "hover:scale-[1.02]"
                             }`}
@@ -505,15 +658,23 @@ export default function MapaEdificio() {
 
               {/* Mobile (Portal) */}
               {createPortal(
-                <div className="fixed inset-x-0 bottom-0 z-110 flex items-end justify-center lg:hidden w-screen h-screen pointer-events-none">
+                <div
+                  className="fixed inset-x-0 bottom-0 z-110 flex items-end justify-center lg:hidden w-screen h-screen pointer-events-none"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-label={`Detalle de la unidad ${unidadSeleccionada.departamento}`}
+                >
                   <div
                     className="absolute inset-0 bg-slate-950/60 backdrop-blur-xs transition-opacity pointer-events-auto"
                     onClick={handleCerrarDetalle}
+                    aria-label="Cerrar detalle"
                   />
                   <div className="relative w-full bg-white border-t border-slate-200 rounded-t-3xl shadow-2xl animate-in slide-in-from-bottom duration-300 ease-out z-10 max-h-[85vh] overflow-y-auto pointer-events-auto pb-12">
                     <div
                       className="w-12 h-1 bg-slate-200 rounded-full mx-auto my-4 cursor-pointer"
                       onClick={handleCerrarDetalle}
+                      role="button"
+                      aria-label="Cerrar detalle"
                     />
                     <DetalleUnidad
                       key={unidadSeleccionada._id}
@@ -547,10 +708,12 @@ export default function MapaEdificio() {
             className="fixed inset-0 z-120 overflow-hidden flex items-end lg:items-start lg:justify-end"
             role="dialog"
             aria-modal="true"
+            aria-labelledby="drawer-habitantes-titulo"
           >
             <div
               className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity duration-300 animate-in fade-in"
-              onClick={() => setDrawerAbierto(false)}
+              onClick={intentarCerrarDrawer}
+              aria-label="Cerrar drawer"
             />
             <form
               onSubmit={guardarHabitantes}
@@ -559,11 +722,16 @@ export default function MapaEdificio() {
               <div>
                 <div
                   className="w-12 h-1 bg-slate-200 rounded-full mx-auto my-4 lg:hidden cursor-pointer"
-                  onClick={() => setDrawerAbierto(false)}
+                  onClick={intentarCerrarDrawer}
+                  role="button"
+                  aria-label="Cerrar drawer"
                 />
                 <div className="border-b border-slate-100 p-5 md:p-6">
                   <div className="flex items-center justify-between">
-                    <h4 className="text-sm md:text-base font-black text-slate-900">
+                    <h4
+                      id="drawer-habitantes-titulo"
+                      className="text-sm md:text-base font-black text-slate-900"
+                    >
                       Asignar Habitantes:{" "}
                       {unidadSeleccionada.piso === "0" || unidadSeleccionada.piso.toLowerCase() === "pb"
                         ? ""
@@ -572,7 +740,8 @@ export default function MapaEdificio() {
                     </h4>
                     <button
                       type="button"
-                      onClick={() => setDrawerAbierto(false)}
+                      onClick={intentarCerrarDrawer}
+                      aria-label="Cerrar formulario de asignación de habitantes"
                       className="text-slate-400 hover:text-slate-600 transition p-1.5 cursor-pointer rounded-lg hover:bg-slate-50"
                     >
                       <HiX className="w-5 h-5" />
@@ -582,10 +751,11 @@ export default function MapaEdificio() {
 
                 <div className="p-5 md:p-6 space-y-5 overflow-y-auto max-h-[50vh] lg:max-h-[calc(100vh-12rem)]">
                   <div>
-                    <label className="block text-slate-700 font-bold text-xs mb-1.5 uppercase tracking-wider">
+                    <label htmlFor="drawer-propietario" className="block text-slate-700 font-bold text-xs mb-1.5 uppercase tracking-wider">
                       Propietario de la Unidad
                     </label>
                     <select
+                      id="drawer-propietario"
                       value={nuevoPropietarioId}
                       onChange={(e) => setNuevoPropietarioId(e.target.value)}
                       className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-900 shadow-xs"
@@ -600,10 +770,11 @@ export default function MapaEdificio() {
                   </div>
 
                   <div>
-                    <label className="block text-slate-700 font-bold text-xs mb-1.5 uppercase tracking-wider">
+                    <label htmlFor="drawer-inquilino" className="block text-slate-700 font-bold text-xs mb-1.5 uppercase tracking-wider">
                       Inquilino / Ocupante (Opcional)
                     </label>
                     <select
+                      id="drawer-inquilino"
                       value={nuevoInquilinoId}
                       onChange={(e) => setNuevoInquilinoId(e.target.value)}
                       className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-900 shadow-xs"
@@ -622,7 +793,7 @@ export default function MapaEdificio() {
               <div className="border-t border-slate-100 p-5 md:p-6 bg-slate-50/50 flex items-center justify-end gap-3 pb-10 md:pb-6">
                 <button
                   type="button"
-                  onClick={() => setDrawerAbierto(false)}
+                  onClick={intentarCerrarDrawer}
                   className="px-4 py-2.5 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition cursor-pointer"
                 >
                   Cancelar
@@ -640,6 +811,29 @@ export default function MapaEdificio() {
           </div>,
           document.body
         )}
+
+      {/* Modal de confirmación de cierre del drawer con cambios sin guardar */}
+      <ModalConfirmacion
+        abierto={mostrarConfirmarCierreDrawer}
+        titulo="¿Descartar los cambios?"
+        mensaje="Tenés cambios sin guardar en la asignación de habitantes de"
+        nombreUsuario={
+          unidadSeleccionada
+            ? `${
+                unidadSeleccionada.piso === "0" || unidadSeleccionada.piso.toLowerCase() === "pb"
+                  ? "P. Baja"
+                  : `Piso ${unidadSeleccionada.piso}°`
+              } "${unidadSeleccionada.departamento}"`
+            : "la unidad"
+        }
+        labelConfirmar="Descartar cambios"
+        labelCargando="Descartando..."
+        textoFinal=". Si continuás, se perderán los datos ingresados."
+        variante="advertencia"
+        onCerrar={cancelarCierreDrawer}
+        onConfirmar={confirmarDescartarCambiosDrawer}
+        loading={false}
+      />
     </div>
   );
 }
