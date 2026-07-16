@@ -182,12 +182,18 @@ export const crearUsuario = async (
     );
 
     // 4. Registrar acción en el Log de Auditoría
-    await registrarLog(req, "USUARIO_CREADO", nuevoUsuario._id, {
-      nombreUsuario: nuevoUsuario.name,
-      cambios: {
-        email: nuevoUsuario.email,
-        role: nuevoUsuario.role,
-        unidadFuncional: nuevoUsuario.unidadFuncional,
+    await registrarLog({
+      req,
+      accion: "USUARIO_CREADO",
+      tipoEntidad: "USUARIO",
+      entidadId: nuevoUsuario._id,
+      detalles: {
+        nombreEntidad: nuevoUsuario.name,
+        cambios: {
+          email: nuevoUsuario.email,
+          role: nuevoUsuario.role,
+          unidadFuncional: nuevoUsuario.unidadFuncional,
+        },
       },
     });
 
@@ -286,9 +292,15 @@ export const toggleStatus = async (req: Request<ParamsId>, res: Response) => {
 
     await usuario.save();
 
-    await registrarLog(req, "USUARIO_EDITADO", usuario._id, {
-      nombreUsuario: usuario.name,
-      cambios: { estado: nuevoEstado },
+    await registrarLog({
+      req,
+      accion: "USUARIO_EDITADO",
+      tipoEntidad: "USUARIO",
+      entidadId: usuario._id,
+      detalles: {
+        nombreEntidad: usuario.name,
+        cambios: { estado: nuevoEstado },
+      },
     });
 
     return res.status(200).json({
@@ -321,13 +333,20 @@ export const eliminarUsuario = async (req: Request<ParamsId>, res: Response) => 
       });
     }
 
-    await registrarLog(req, "USUARIO_ELIMINADO", id, {
-      nombreUsuario: usuarioEliminado.name,
-      cambios: {
-        email: usuarioEliminado.email,
-        role: usuarioEliminado.role,
+    await registrarLog({
+      req,
+      accion: "USUARIO_ELIMINADO",
+      tipoEntidad: "USUARIO",
+      entidadId: id,
+      detalles: {
+        nombreEntidad: usuarioEliminado.name,
+        cambios: {
+          email: usuarioEliminado.email,
+          role: usuarioEliminado.role,
+        },
       },
     });
+
 
     return res.status(200).json({
       success: true,
@@ -535,14 +554,20 @@ export const updateUser = async (
 
     const usuarioActualizado = await usuario.save();
 
-    await registrarLog(req, "USUARIO_EDITADO", usuarioActualizado._id, {
-      nombreUsuario: usuarioActualizado.name,
-      cambios: {
-        name: usuarioActualizado.name,
-        email: usuarioActualizado.email,
-        role: usuarioActualizado.role,
-        unidadFuncional: usuarioActualizado.unidadFuncional,
-        telefono: usuarioActualizado.telefono,
+    await registrarLog({
+      req,
+      accion: "USUARIO_EDITADO",
+      tipoEntidad: "USUARIO",
+      entidadId: usuarioActualizado._id,
+      detalles: {
+        nombreEntidad: usuarioActualizado.name,
+        cambios: {
+          name: usuarioActualizado.name,
+          email: usuarioActualizado.email,
+          role: usuarioActualizado.role,
+          unidadFuncional: usuarioActualizado.unidadFuncional,
+          telefono: usuarioActualizado.telefono,
+        },
       },
     });
 

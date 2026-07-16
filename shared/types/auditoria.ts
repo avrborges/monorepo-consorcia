@@ -1,30 +1,72 @@
 // shared/types/auditoria.ts
 
 /**
- * Tipos de acciones que se registran en el historial de auditoría.
+ * Tipo de entidad sobre la que se ejecutó la acción auditada.
+ * Permite filtrar y agrupar logs en el frontend.
  */
-export type AccionAuditoria =
-  | "USUARIO_CREADO"
-  | "USUARIO_EDITADO"
-  | "USUARIO_ELIMINADO";
+export type TipoEntidad = "USUARIO" | "UNIDAD";
 
 /**
- * Detalles de un registro de auditoría.
+ * Tipos de acciones que se registran en el historial de auditoría.
+ *
+ * Convención de naming: `<ENTIDAD>_<VERBO_PASADO>`
+ */
+export type AccionAuditoria =
+  // 🎯 Acciones sobre usuarios
+  | "USUARIO_CREADO"
+  | "USUARIO_EDITADO"
+  | "USUARIO_ELIMINADO"
+  // 🎯 Acciones sobre unidades funcionales
+  | "UNIDAD_CREADA"
+  | "UNIDAD_EDITADA"
+  | "UNIDAD_ELIMINADA"
+  | "HABITANTES_VINCULADOS";
+
+/**
+ * Detalles del registro de auditoría.
+ *
+ * @field nombreEntidad - Nombre legible de la entidad afectada
+ *                        (ej: "Juan Pérez" para usuarios, "Piso 2 Depto A" para unidades)
+ * @field cambios - Objeto con los cambios aplicados. Estructura libre según el contexto.
  */
 export interface AuditLogDetalles {
-  nombreUsuario: string;
-  cambios: Record<string, unknown>;
+  nombreEntidad: string;
+  cambios?: Record<string, unknown>;
 }
 
 /**
  * Representación pública de un registro de auditoría.
+ *
+ * @field entidadId - ID de la entidad afectada (usuario o unidad)
+ * @field tipoEntidad - Discriminador del tipo de entidad
  */
 export interface AuditLog {
   _id: string;
   adminId: string;
   adminName: string;
   accion: AccionAuditoria;
-  targetUserId: string;
+  tipoEntidad: TipoEntidad;
+  entidadId: string;
   detalles: AuditLogDetalles;
   timestamp: string;
 }
+
+/* ============================================================
+ * HELPERS DE TIPO (útiles para narrowing en componentes)
+ * ============================================================ */
+
+/**
+ * Acciones específicas de la entidad "USUARIO".
+ */
+export type AccionUsuario = Extract<
+  AccionAuditoria,
+  "USUARIO_CREADO" | "USUARIO_EDITADO" | "USUARIO_ELIMINADO"
+>;
+
+/**
+ * Acciones específicas de la entidad "UNIDAD".
+ */
+export type AccionUnidad = Extract<
+  AccionAuditoria,
+  "UNIDAD_CREADA" | "UNIDAD_EDITADA" | "UNIDAD_ELIMINADA" | "HABITANTES_VINCULADOS"
+>;

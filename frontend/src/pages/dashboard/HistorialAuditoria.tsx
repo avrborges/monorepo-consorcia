@@ -10,13 +10,16 @@ import {
   HiX,
   HiCheck,
   HiBell,
+  HiOutlineOfficeBuilding,
+  HiOutlineUserGroup,
+  HiOutlineHome,
 } from "react-icons/hi";
 
 // 🎯 Capa de servicios (Fase 3)
 import { auditService } from "@/services";
 
 // 🎯 Tipos de dominio compartidos entre backend y frontend
-import type { AuditLog, AccionAuditoria } from "@shared/types";
+import type { AuditLog, AccionAuditoria, TipoEntidad } from "@shared/types";
 
 /* ============================================================
  * CONSTANTES
@@ -28,6 +31,7 @@ const FEEDBACK_COPIADO_MS = 2000;
 // 🎯 Claves para persistir filtros en sessionStorage
 const STORAGE_KEY_BUSQUEDA = "consorcia_auditoria_busqueda";
 const STORAGE_KEY_ACCION = "consorcia_auditoria_accion";
+const STORAGE_KEY_ENTIDAD = "consorcia_auditoria_entidad";
 const STORAGE_KEY_DESDE = "consorcia_auditoria_desde";
 const STORAGE_KEY_HASTA = "consorcia_auditoria_hasta";
 
@@ -36,15 +40,22 @@ const VALORES_ACCION_VALIDOS: readonly (AccionAuditoria | "TODOS")[] = [
   "USUARIO_CREADO",
   "USUARIO_EDITADO",
   "USUARIO_ELIMINADO",
+  "UNIDAD_CREADA",
+  "UNIDAD_EDITADA",
+  "UNIDAD_ELIMINADA",
+  "HABITANTES_VINCULADOS",
+];
+
+const VALORES_ENTIDAD_VALIDOS: readonly (TipoEntidad | "TODOS")[] = [
+  "TODOS",
+  "USUARIO",
+  "UNIDAD",
 ];
 
 /* ============================================================
  * HELPERS
  * ============================================================ */
 
-/**
- * Recupera un valor validado desde sessionStorage.
- */
 function leerFiltroPersistido<T extends string>(
   key: string,
   valoresPermitidos: readonly T[],
@@ -61,9 +72,6 @@ function leerFiltroPersistido<T extends string>(
   return defaultValue;
 }
 
-/**
- * Recupera un string simple desde sessionStorage (sin validación de enum).
- */
 function leerStringPersistido(key: string, defaultValue: string): string {
   try {
     return sessionStorage.getItem(key) || defaultValue;
@@ -81,20 +89,22 @@ export default function HistorialAuditoria() {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  // 🎯 Contador de logs nuevos desde el último "reconocimiento" del usuario
   const [logsNuevosCount, setLogsNuevosCount] = useState<number>(0);
   const cantidadLogsPreviaRef = useRef<number>(0);
 
-  // 🎯 Feedback visual de log copiado al portapapeles
   const [logCopiadoId, setLogCopiadoId] = useState<string | null>(null);
   const timeoutCopiadoRef = useRef<number | null>(null);
 
-  // 🛠️ Estados para Filtros (persistidos en sessionStorage)
+  // 🛠️ Filtros (persistidos en sessionStorage)
   const [busqueda, setBusqueda] = useState<string>(() =>
     leerStringPersistido(STORAGE_KEY_BUSQUEDA, "")
   );
   const [filtroAccion, setFiltroAccion] = useState<AccionAuditoria | "TODOS">(() =>
     leerFiltroPersistido(STORAGE_KEY_ACCION, VALORES_ACCION_VALIDOS, "TODOS")
+  );
+  // 🆕 Filtro por tipo de entidad
+  const [filtroEntidad, setFiltroEntidad] = useState<TipoEntidad | "TODOS">(() =>
+    leerFiltroPersistido(STORAGE_KEY_ENTIDAD, VALORES_ENTIDAD_VALIDOS, "TODOS")
   );
   const [fechaDesde, setFechaDesde] = useState<string>(() =>
     leerStringPersistido(STORAGE_KEY_DESDE, "")
@@ -107,37 +117,32 @@ export default function HistorialAuditoria() {
    * Persistencia de filtros en sessionStorage
    * ------------------------------------------------------------ */
   useEffect(() => {
-    try {
-      sessionStorage.setItem(STORAGE_KEY_BUSQUEDA, busqueda);
-    } catch { /* silent */ }
+    try { sessionStorage.setItem(STORAGE_KEY_BUSQUEDA, busqueda); } catch { /* silent */ }
   }, [busqueda]);
 
   useEffect(() => {
-    try {
-      sessionStorage.setItem(STORAGE_KEY_ACCION, filtroAccion);
-    } catch { /* silent */ }
+    try { sessionStorage.setItem(STORAGE_KEY_ACCION, filtroAccion); } catch { /* silent */ }
   }, [filtroAccion]);
 
   useEffect(() => {
-    try {
-      sessionStorage.setItem(STORAGE_KEY_DESDE, fechaDesde);
-    } catch { /* silent */ }
+    try { sessionStorage.setItem(STORAGE_KEY_ENTIDAD, filtroEntidad); } catch { /* silent */ }
+  }, [filtroEntidad]);
+
+  useEffect(() => {
+    try { sessionStorage.setItem(STORAGE_KEY_DESDE, fechaDesde); } catch { /* silent */ }
   }, [fechaDesde]);
 
   useEffect(() => {
-    try {
-      sessionStorage.setItem(STORAGE_KEY_HASTA, fechaHasta);
-    } catch { /* silent */ }
+    try { sessionStorage.setItem(STORAGE_KEY_HASTA, fechaHasta); } catch { /* silent */ }
   }, [fechaHasta]);
 
   /* ------------------------------------------------------------
-   * Carga de logs (con soporte para auto-refresh silencioso)
+   * Carga de logs
    * ------------------------------------------------------------ */
   const cargarLogs = useCallback(
     async (opciones: { esRefreshVisible?: boolean; esAutoRefresh?: boolean } = {}) => {
       const { esRefreshVisible = false, esAutoRefresh = false } = opciones;
 
-      // En auto-refresh no mostramos el loading global (silencioso)
       if (esRefreshVisible) setLoading(true);
       if (!esAutoRefresh) setError(null);
 
@@ -147,7 +152,6 @@ export default function HistorialAuditoria() {
         if (data.success) {
           const nuevos = data.logs;
 
-          // 🎯 Detectar si hay logs nuevos en auto-refresh
           if (esAutoRefresh && cantidadLogsPreviaRef.current > 0) {
             const diferencia = nuevos.length - cantidadLogsPreviaRef.current;
             if (diferencia > 0) {
@@ -163,7 +167,6 @@ export default function HistorialAuditoria() {
         }
       } catch (err) {
         console.error("Error al cargar logs:", err);
-        // En auto-refresh silencioso no mostramos error (evita spam si backend está caído)
         if (!esAutoRefresh) setError("Error de conexión con el servidor.");
       } finally {
         if (esRefreshVisible) setLoading(false);
@@ -173,57 +176,38 @@ export default function HistorialAuditoria() {
     []
   );
 
-  /* ------------------------------------------------------------
-   * Carga inicial
-   * ------------------------------------------------------------ */
   useEffect(() => {
     let activo = true;
     const inicializar = async () => {
-      if (activo) {
-        await cargarLogs();
-      }
+      if (activo) await cargarLogs();
     };
     void inicializar();
-    return () => {
-      activo = false;
-    };
+    return () => { activo = false; };
   }, [cargarLogs]);
 
   /* ------------------------------------------------------------
-   * 🎯 Auto-refresh cada 60s (solo si la tab está visible)
+   * Auto-refresh cada 60s (solo si tab visible)
    * ------------------------------------------------------------ */
   useEffect(() => {
     const intervaloId = window.setInterval(() => {
-      // Solo refrescar si la pestaña está visible
       if (document.visibilityState === "visible") {
         void cargarLogs({ esAutoRefresh: true });
       }
     }, AUTO_REFRESH_MS);
 
-    return () => {
-      window.clearInterval(intervaloId);
-    };
+    return () => window.clearInterval(intervaloId);
   }, [cargarLogs]);
 
-  /* ------------------------------------------------------------
-   * 🎯 Refresh inmediato al volver a la pestaña (visibilitychange)
-   * ------------------------------------------------------------ */
   useEffect(() => {
     const manejarVisibilidad = () => {
       if (document.visibilityState === "visible") {
         void cargarLogs({ esAutoRefresh: true });
       }
     };
-
     document.addEventListener("visibilitychange", manejarVisibilidad);
-    return () => {
-      document.removeEventListener("visibilitychange", manejarVisibilidad);
-    };
+    return () => document.removeEventListener("visibilitychange", manejarVisibilidad);
   }, [cargarLogs]);
 
-  /* ------------------------------------------------------------
-   * 🎯 Limpieza del timeout de feedback de copiado
-   * ------------------------------------------------------------ */
   useEffect(() => {
     return () => {
       if (timeoutCopiadoRef.current !== null) {
@@ -232,13 +216,9 @@ export default function HistorialAuditoria() {
     };
   }, []);
 
-  /* ------------------------------------------------------------
-   * Handlers de UI
-   * ------------------------------------------------------------ */
-
   const recargarManual = useCallback(async () => {
     await cargarLogs({ esRefreshVisible: true });
-    setLogsNuevosCount(0); // reset del contador
+    setLogsNuevosCount(0);
   }, [cargarLogs]);
 
   const reconocerLogsNuevos = useCallback(() => {
@@ -246,14 +226,15 @@ export default function HistorialAuditoria() {
   }, []);
 
   /**
-   * 🎯 Copia los detalles completos del log al portapapeles.
+   * 🎯 Copia los detalles del log al portapapeles.
    */
   const copiarLog = async (log: AuditLog): Promise<void> => {
     const detalles = [
       `Fecha: ${new Date(log.timestamp).toLocaleString("es-AR")}`,
       `Admin: ${log.adminName}`,
       `Acción: ${log.accion}`,
-      `Usuario afectado: ${log.detalles.nombreUsuario}`,
+      `Tipo: ${log.tipoEntidad}`,
+      `Entidad: ${log.detalles.nombreEntidad}`,
     ];
 
     if (log.detalles.cambios && Object.keys(log.detalles.cambios).length > 0) {
@@ -279,6 +260,9 @@ export default function HistorialAuditoria() {
     }
   };
 
+  /* ------------------------------------------------------------
+   * 🎨 Íconos por acción (ampliado con acciones de unidades)
+   * ------------------------------------------------------------ */
   const getIconoAccion = (accion: AccionAuditoria) => {
     switch (accion) {
       case "USUARIO_CREADO":
@@ -287,11 +271,22 @@ export default function HistorialAuditoria() {
         return <HiOutlinePencilAlt className="w-4 h-4 text-amber-600 shrink-0" />;
       case "USUARIO_ELIMINADO":
         return <HiOutlineTrash className="w-4 h-4 text-red-600 shrink-0" />;
+      case "UNIDAD_CREADA":
+        return <HiOutlineOfficeBuilding className="w-4 h-4 text-teal-600 shrink-0" />;
+      case "UNIDAD_EDITADA":
+        return <HiOutlinePencilAlt className="w-4 h-4 text-blue-600 shrink-0" />;
+      case "UNIDAD_ELIMINADA":
+        return <HiOutlineTrash className="w-4 h-4 text-rose-600 shrink-0" />;
+      case "HABITANTES_VINCULADOS":
+        return <HiOutlineUserGroup className="w-4 h-4 text-indigo-600 shrink-0" />;
       default:
         return <HiOutlineChip className="w-4 h-4 text-slate-600 shrink-0" />;
     }
   };
 
+  /* ------------------------------------------------------------
+   * 🎨 Estilos del círculo por acción (ampliado)
+   * ------------------------------------------------------------ */
   const getEstilosCirculo = (accion: AccionAuditoria) => {
     switch (accion) {
       case "USUARIO_CREADO":
@@ -300,36 +295,134 @@ export default function HistorialAuditoria() {
         return "bg-amber-50 border-amber-200 text-amber-600";
       case "USUARIO_ELIMINADO":
         return "bg-red-50 border-red-200 text-red-600";
+      case "UNIDAD_CREADA":
+        return "bg-teal-50 border-teal-200 text-teal-600";
+      case "UNIDAD_EDITADA":
+        return "bg-blue-50 border-blue-200 text-blue-600";
+      case "UNIDAD_ELIMINADA":
+        return "bg-rose-50 border-rose-200 text-rose-600";
+      case "HABITANTES_VINCULADOS":
+        return "bg-indigo-50 border-indigo-200 text-indigo-600";
       default:
         return "bg-slate-50 border-slate-200 text-slate-600";
     }
   };
 
-  const traducirCambios = (cambios?: Record<string, unknown>) => {
+  /* ------------------------------------------------------------
+   * 📝 Traducción del texto principal de la acción
+   * ------------------------------------------------------------ */
+  const getTextoAccion = (accion: AccionAuditoria): string => {
+    switch (accion) {
+      case "USUARIO_CREADO":
+        return "Dio de alta al usuario: ";
+      case "USUARIO_EDITADO":
+        return "Modificó al usuario: ";
+      case "USUARIO_ELIMINADO":
+        return "Eliminó al usuario: ";
+      case "UNIDAD_CREADA":
+        return "Dio de alta la unidad: ";
+      case "UNIDAD_EDITADA":
+        return "Modificó la unidad: ";
+      case "UNIDAD_ELIMINADA":
+        return "Eliminó la unidad: ";
+      case "HABITANTES_VINCULADOS":
+        return "Modificó los habitantes de: ";
+      default:
+        return "Acción sobre: ";
+    }
+  };
+
+  /* ------------------------------------------------------------
+   * 🌐 Traducción inteligente de "cambios"
+   * Detecta si un campo es una referencia de habitante y usa
+   * el nombre snapshot si está disponible (auditoría inmutable).
+   * ------------------------------------------------------------ */
+  const traducirCambios = (cambios?: Record<string, unknown>): string | null => {
     if (!cambios) return null;
+
+    // Labels legibles por campo
     const labels: Record<string, string> = {
+      // Usuarios
       name: "Nombre",
       email: "Email",
       role: "Rol",
       unidadFuncional: "UF",
       telefono: "Teléfono",
       estado: "Estado",
+      // Unidades (crear/eliminar)
+      piso: "Piso",
+      departamento: "Depto",
+      coeficiente: "Coeficiente",
+      estadoOcupacion: "Ocupación",
+      propietarioId: "Propietario ID",
+      inquilinoId: "Inquilino ID",
+      propietarioNombre: "Propietario",
+      inquilinoNombre: "Inquilino",
+      // Habitantes vinculados
+      propietarioAnterior: "Propietario anterior (ID)",
+      propietarioAnteriorNombre: "Propietario anterior",
+      propietarioNuevo: "Propietario nuevo (ID)",
+      propietarioNuevoNombre: "Propietario nuevo",
+      inquilinoAnterior: "Inquilino anterior (ID)",
+      inquilinoAnteriorNombre: "Inquilino anterior",
+      inquilinoNuevo: "Inquilino nuevo (ID)",
+      inquilinoNuevoNombre: "Inquilino nuevo",
+      estadoAnterior: "Estado anterior",
+      estadoNuevo: "Estado nuevo",
     };
+
+    // 🎯 Filtrado inteligente:
+    // Si existe un campo `xxxNombre`, ocultamos su versión ID correspondiente.
+    // Ejemplo: si hay `propietarioNuevoNombre`, ocultamos `propietarioNuevo` (el ID crudo).
+    const camposConNombreDisponible = new Set<string>();
+    Object.keys(cambios).forEach((key) => {
+      if (key.endsWith("Nombre")) {
+        // Extraer el campo base: "propietarioNuevoNombre" → "propietarioNuevo"
+        const campoBase = key.replace(/Nombre$/, "");
+        camposConNombreDisponible.add(campoBase);
+      }
+    });
+
     return Object.entries(cambios)
-      .map(([key, val]) => `${labels[key] || key}: "${String(val)}"`)
+      .filter(([key, val]) => {
+        // Si este campo tiene un `xxxNombre` correspondiente, lo ocultamos
+        if (camposConNombreDisponible.has(key)) return false;
+        // Ocultamos valores null (sin información útil)
+        if (val === null || val === undefined) return false;
+        return true;
+      })
+      .map(([key, val]) => {
+        const label = labels[key] || key;
+        // Formatear el valor
+        let valorFormateado: string;
+        if (val === "") {
+          valorFormateado = "(vacío)";
+        } else {
+          valorFormateado = String(val);
+        }
+        return `${label}: "${valorFormateado}"`;
+      })
       .join(" | ");
   };
 
-  // 🎯 Filtrado Multi-Criterio
+  /* ------------------------------------------------------------
+   * 🎯 Filtrado Multi-Criterio
+   * ------------------------------------------------------------ */
   const logsFiltrados = logs.filter((log) => {
+    // Filtro por tipo de entidad
+    const cumpleEntidad = filtroEntidad === "TODOS" || log.tipoEntidad === filtroEntidad;
+
+    // Filtro por acción
     const cumpleAccion = filtroAccion === "TODOS" || log.accion === filtroAccion;
 
+    // Filtro por texto libre
     const texto = busqueda.toLowerCase().trim();
     const cumpleBusqueda =
       !texto ||
       log.adminName.toLowerCase().includes(texto) ||
-      log.detalles.nombreUsuario.toLowerCase().includes(texto);
+      log.detalles.nombreEntidad.toLowerCase().includes(texto);
 
+    // Filtro por fecha desde
     const logFecha = new Date(log.timestamp);
 
     let cumpleDesde = true;
@@ -346,18 +439,23 @@ export default function HistorialAuditoria() {
       cumpleHasta = logFecha <= hasta;
     }
 
-    return cumpleAccion && cumpleBusqueda && cumpleDesde && cumpleHasta;
+    return cumpleEntidad && cumpleAccion && cumpleBusqueda && cumpleDesde && cumpleHasta;
   });
 
   const limpiarFiltros = () => {
     setBusqueda("");
     setFiltroAccion("TODOS");
+    setFiltroEntidad("TODOS");
     setFechaDesde("");
     setFechaHasta("");
   };
 
   const tieneFiltrosActivos =
-    busqueda || filtroAccion !== "TODOS" || fechaDesde || fechaHasta;
+    busqueda ||
+    filtroAccion !== "TODOS" ||
+    filtroEntidad !== "TODOS" ||
+    fechaDesde ||
+    fechaHasta;
 
   return (
     <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm w-full animate-in fade-in duration-200">
@@ -365,7 +463,7 @@ export default function HistorialAuditoria() {
       <div className="flex items-center justify-between mb-5">
         <div>
           <h3 className="text-base font-black text-slate-900 tracking-tight">Historial de Auditoría</h3>
-          <p className="text-xs text-slate-500 font-medium">Registro de acciones críticas sobre las cuentas del consorcio.</p>
+          <p className="text-xs text-slate-500 font-medium">Registro de acciones críticas sobre las cuentas y unidades del consorcio.</p>
         </div>
         <button
           type="button"
@@ -379,7 +477,7 @@ export default function HistorialAuditoria() {
         </button>
       </div>
 
-      {/* 🎯 Banner de logs nuevos detectados por auto-refresh */}
+      {/* Banner de logs nuevos detectados */}
       {logsNuevosCount > 0 && (
         <div
           className="mb-4 flex items-center justify-between gap-3 p-3 bg-amber-50 border border-amber-200 rounded-xl animate-in fade-in slide-in-from-top-2 duration-200"
@@ -404,14 +502,14 @@ export default function HistorialAuditoria() {
         </div>
       )}
 
-      {/* 🛠️ BARRA DE FILTROS EN UN SOLO RENGLÓN */}
+      {/* BARRA DE FILTROS */}
       <div className="flex flex-wrap md:flex-nowrap items-center gap-3 mb-6 p-3.5 bg-slate-50/60 rounded-xl border border-slate-100">
-        {/* Buscador principal (ocupa el resto de la línea) */}
+        {/* Buscador */}
         <div className="relative flex-1 min-w-50">
           <HiSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input
             type="text"
-            placeholder="Buscar por usuario o admin..."
+            placeholder="Buscar por entidad o admin..."
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
             aria-label="Buscar en historial de auditoría"
@@ -419,8 +517,22 @@ export default function HistorialAuditoria() {
           />
         </div>
 
+        {/* 🆕 Filtro por Entidad */}
+        <div className="w-full sm:w-auto md:w-36 shrink-0">
+          <select
+            value={filtroEntidad}
+            onChange={(e) => setFiltroEntidad(e.target.value as TipoEntidad | "TODOS")}
+            aria-label="Filtrar por tipo de entidad"
+            className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 focus:outline-none focus:border-slate-300 transition cursor-pointer"
+          >
+            <option value="TODOS">Todas las entidades</option>
+            <option value="USUARIO">Usuarios</option>
+            <option value="UNIDAD">Unidades</option>
+          </select>
+        </div>
+
         {/* Selector de Acciones */}
-        <div className="w-full sm:w-auto md:w-44 shrink-0">
+        <div className="w-full sm:w-auto md:w-52 shrink-0">
           <select
             value={filtroAccion}
             onChange={(e) => setFiltroAccion(e.target.value as AccionAuditoria | "TODOS")}
@@ -428,9 +540,17 @@ export default function HistorialAuditoria() {
             className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 focus:outline-none focus:border-slate-300 transition cursor-pointer"
           >
             <option value="TODOS">Todas las acciones</option>
-            <option value="USUARIO_CREADO">Altas</option>
-            <option value="USUARIO_EDITADO">Modificaciones</option>
-            <option value="USUARIO_ELIMINADO">Bajas</option>
+            <optgroup label="Usuarios">
+              <option value="USUARIO_CREADO">Altas de usuario</option>
+              <option value="USUARIO_EDITADO">Modif. usuarios</option>
+              <option value="USUARIO_ELIMINADO">Bajas de usuario</option>
+            </optgroup>
+            <optgroup label="Unidades">
+              <option value="UNIDAD_CREADA">Altas de unidad</option>
+              <option value="UNIDAD_EDITADA">Modif. unidades</option>
+              <option value="UNIDAD_ELIMINADA">Bajas de unidad</option>
+              <option value="HABITANTES_VINCULADOS">Vinculación habitantes</option>
+            </optgroup>
           </select>
         </div>
 
@@ -453,7 +573,7 @@ export default function HistorialAuditoria() {
           />
         </div>
 
-        {/* Botón Limpiar compacto */}
+        {/* Botón Limpiar */}
         {tieneFiltrosActivos && (
           <button
             type="button"
@@ -499,24 +619,28 @@ export default function HistorialAuditoria() {
         </div>
       )}
 
-      {/* ⏳ LISTADO DEL HISTORIAL */}
+      {/* LISTADO DEL HISTORIAL */}
       <div className="relative space-y-4 max-h-150 overflow-y-auto pr-3 scrollbar-thin">
         {logsFiltrados.map((log) => {
           const logCopiado = logCopiadoId === log._id;
+          const iconoTipoEntidad =
+            log.tipoEntidad === "UNIDAD" ? (
+              <HiOutlineHome className="w-3 h-3" />
+            ) : (
+              <HiOutlineUserAdd className="w-3 h-3" />
+            );
 
           return (
             <div key={log._id} className="flex items-start gap-4 group animate-in fade-in slide-in-from-bottom-2 duration-150">
-              {/* ÍCONO DE ACCIÓN */}
               <div className={`mt-2 w-7 h-7 rounded-full border-2 flex items-center justify-center bg-white shadow-sm transition duration-200 shrink-0 ${getEstilosCirculo(log.accion)}`}>
                 {getIconoAccion(log.accion)}
               </div>
 
-              {/* Tarjeta de log — clickeable para copiar */}
               <button
                 type="button"
                 onClick={() => void copiarLog(log)}
                 title={logCopiado ? "¡Detalles copiados!" : "Click para copiar los detalles del registro"}
-                aria-label={`Registro de ${log.adminName}: ${log.accion} sobre ${log.detalles.nombreUsuario}. Click para copiar detalles.`}
+                aria-label={`Registro de ${log.adminName}: ${log.accion} sobre ${log.detalles.nombreEntidad}. Click para copiar detalles.`}
                 className={`flex-1 text-left p-3.5 rounded-xl border transition duration-200 cursor-pointer ${
                   logCopiado
                     ? "bg-emerald-50 border-emerald-200 group-hover:bg-emerald-50"
@@ -524,9 +648,20 @@ export default function HistorialAuditoria() {
                 }`}
               >
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-                  <span className={`text-xs font-bold ${logCopiado ? "text-emerald-700" : "text-slate-800"}`}>
-                    {log.adminName}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xs font-bold ${logCopiado ? "text-emerald-700" : "text-slate-800"}`}>
+                      {log.adminName}
+                    </span>
+                    {/* 🆕 Chip pequeño indicando tipo de entidad */}
+                    <span className={`inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-full ${
+                      log.tipoEntidad === "UNIDAD"
+                        ? "bg-teal-50 text-teal-700 border border-teal-100"
+                        : "bg-slate-50 text-slate-700 border border-slate-100"
+                    }`}>
+                      {iconoTipoEntidad}
+                      {log.tipoEntidad}
+                    </span>
+                  </div>
                   <div className="flex items-center gap-2">
                     {logCopiado && (
                       <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 uppercase tracking-wider">
@@ -541,11 +676,9 @@ export default function HistorialAuditoria() {
                 </div>
 
                 <p className={`text-xs font-medium mt-1 ${logCopiado ? "text-emerald-700" : "text-slate-600"}`}>
-                  {log.accion === "USUARIO_CREADO" && "Dio de alta a: "}
-                  {log.accion === "USUARIO_EDITADO" && "Modificó a: "}
-                  {log.accion === "USUARIO_ELIMINADO" && "Eliminó a: "}
+                  {getTextoAccion(log.accion)}
                   <span className={`font-bold ${logCopiado ? "text-emerald-800" : "text-slate-700"}`}>
-                    {log.detalles.nombreUsuario}
+                    {log.detalles.nombreEntidad}
                   </span>
                 </p>
 

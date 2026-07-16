@@ -1,11 +1,15 @@
 // backend/src/services/loggerService.ts
 import type { Types } from "mongoose";
 
-import AuditLog, {
-  type AccionAuditoria,
-  type IAuditLogDetalles,
-} from "../models/AuditLog";
+import AuditLog from "../models/AuditLog";
 import type { UserDocument } from "../models/User";
+
+// 🎯 Tipos de dominio compartidos entre backend y frontend
+import type {
+  AccionAuditoria,
+  TipoEntidad,
+  AuditLogDetalles,
+} from "@shared/types";
 
 /* ============================================================
  * TIPOS
@@ -21,6 +25,22 @@ interface RequestConUsuario {
   user?: UserDocument;
 }
 
+/**
+ * Parámetros para registrar una entrada de auditoría.
+ */
+interface RegistrarLogParams {
+  /** Petición Express con `req.user` cargado por el middleware de auth */
+  req: RequestConUsuario;
+  /** Tipo de acción ejecutada (ej: "USUARIO_CREADO", "UNIDAD_ELIMINADA") */
+  accion: AccionAuditoria;
+  /** Tipo de entidad afectada ("USUARIO" | "UNIDAD") */
+  tipoEntidad: TipoEntidad;
+  /** ID de la entidad afectada (usuario o unidad) */
+  entidadId: Types.ObjectId | string;
+  /** Detalles del cambio */
+  detalles: AuditLogDetalles;
+}
+
 /* ============================================================
  * SERVICIO
  * ============================================================ */
@@ -28,17 +48,41 @@ interface RequestConUsuario {
 /**
  * Registra una acción de administración en la base de datos de auditoría.
  *
- * @param req         Objeto con `req.user` cargado por el middleware de auth.
- * @param accion      Tipo de acción (ej: "USUARIO_CREADO", "USUARIO_EDITADO")
- * @param targetUserId ID del usuario afectado
- * @param detalles    Objeto con `{ nombreUsuario, cambios }`
+ * @param params Objeto con todos los parámetros necesarios.
+ *
+ * @example
+ *   // Registrar creación de usuario:
+ *   await registrarLog({
+ *     req,
+ *     accion: "USUARIO_CREADO",
+ *     tipoEntidad: "USUARIO",
+ *     entidadId: nuevoUsuario._id,
+ *     detalles: {
+ *       nombreEntidad: nuevoUsuario.name,
+ *       cambios: { email: "juan@mail.com", role: "propietario" },
+ *     },
+ *   });
+ *
+ * @example
+ *   // Registrar creación de unidad funcional:
+ *   await registrarLog({
+ *     req,
+ *     accion: "UNIDAD_CREADA",
+ *     tipoEntidad: "UNIDAD",
+ *     entidadId: nuevaUnidad._id,
+ *     detalles: {
+ *       nombreEntidad: `Piso ${piso} Depto ${departamento}`,
+ *       cambios: { coeficiente, estadoOcupacion },
+ *     },
+ *   });
  */
-export const registrarLog = async (
-  req: RequestConUsuario,
-  accion: AccionAuditoria,
-  targetUserId: Types.ObjectId | string,
-  detalles: IAuditLogDetalles
-): Promise<void> => {
+export const registrarLog = async ({
+  req,
+  accion,
+  tipoEntidad,
+  entidadId,
+  detalles,
+}: RegistrarLogParams): Promise<void> => {
   try {
     // 🛡️ Validación de seguridad: extraemos el admin desde el middleware de autenticación
     const adminId = req.user?._id;
@@ -55,7 +99,8 @@ export const registrarLog = async (
       adminId,
       adminName,
       accion,
-      targetUserId,
+      tipoEntidad,
+      entidadId,
       detalles,
     });
   } catch (error) {

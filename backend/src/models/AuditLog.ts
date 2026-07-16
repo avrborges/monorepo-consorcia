@@ -1,20 +1,27 @@
 // backend/src/models/AuditLog.ts
 import mongoose, { Schema, Model, HydratedDocument, Types } from "mongoose";
 
-/* ============================================================
- * TIPOS Y CONSTANTES
- * ============================================================ */
+import type {
+  AccionAuditoria,
+  TipoEntidad,
+  AuditLogDetalles,
+} from "@shared/types";
 
-export type AccionAuditoria =
-  | "USUARIO_CREADO"
-  | "USUARIO_EDITADO"
-  | "USUARIO_ELIMINADO";
+/* ============================================================
+ * CONSTANTES
+ * ============================================================ */
 
 const ACCIONES_AUDITORIA: AccionAuditoria[] = [
   "USUARIO_CREADO",
   "USUARIO_EDITADO",
   "USUARIO_ELIMINADO",
+  "UNIDAD_CREADA",
+  "UNIDAD_EDITADA",
+  "UNIDAD_ELIMINADA",
+  "HABITANTES_VINCULADOS",
 ];
+
+const TIPOS_ENTIDAD: TipoEntidad[] = ["USUARIO", "UNIDAD"];
 
 /* ============================================================
  * INTERFACES
@@ -26,10 +33,7 @@ const ACCIONES_AUDITORIA: AccionAuditoria[] = [
  * `cambios` es Mixed → permite guardar cualquier estructura de payload
  * (por ejemplo, diffs entre valores anteriores y nuevos).
  */
-export interface IAuditLogDetalles {
-  nombreUsuario: string;
-  cambios: Record<string, unknown>;
-}
+export interface IAuditLogDetalles extends AuditLogDetalles {}
 
 /**
  * Estructura de datos de un registro de auditoría.
@@ -39,7 +43,8 @@ export interface IAuditLog {
   adminId: Types.ObjectId;
   adminName: string;
   accion: AccionAuditoria;
-  targetUserId: Types.ObjectId;
+  tipoEntidad: TipoEntidad;
+  entidadId: Types.ObjectId;
   detalles: IAuditLogDetalles;
   timestamp: Date;
 }
@@ -51,14 +56,13 @@ export type AuditLogModel = Model<IAuditLog>;
 
 /**
  * Documento hidratado (con `.save()`, `_id`, etc.).
- * Usalo en controllers cuando trabajes con un registro obtenido de la DB.
  */
 export type AuditLogDocument = HydratedDocument<IAuditLog>;
 
 /* ============================================================
  * SCHEMA
  * ============================================================ */
-const AuditLogSchema = new Schema<IAuditLog, AuditLogModel>(
+const auditLogSchema = new Schema<IAuditLog, AuditLogModel>(
   {
     adminId: {
       type: Schema.Types.ObjectId,
@@ -84,19 +88,31 @@ const AuditLogSchema = new Schema<IAuditLog, AuditLogModel>(
       index: true,
     },
 
-    targetUserId: {
+    // 🆕 Tipo de entidad afectada (USUARIO o UNIDAD)
+    tipoEntidad: {
+      type: String,
+      required: [true, "El tipo de entidad es obligatorio."],
+      enum: {
+        values: TIPOS_ENTIDAD,
+        message: "El tipo de entidad no es válido.",
+      },
+      index: true,
+    },
+
+    // 🔄 Renombrado de targetUserId — ahora es genérico (usuario o unidad)
+    entidadId: {
       type: Schema.Types.ObjectId,
-      ref: "User",
-      required: [true, "El ID del usuario afectado es obligatorio."],
+      required: [true, "El ID de la entidad afectada es obligatorio."],
       index: true,
     },
 
     detalles: {
-      nombreUsuario: {
+      // 🔄 Renombrado de nombreUsuario a nombreEntidad
+      nombreEntidad: {
         type: String,
-        required: [true, "El nombre del usuario afectado es obligatorio."],
+        required: [true, "El nombre de la entidad afectada es obligatorio."],
         trim: true,
-        maxlength: [100, "El nombre del usuario afectado no puede superar los 100 caracteres."],
+        maxlength: [200, "El nombre de la entidad no puede superar los 200 caracteres."],
       },
 
       cambios: {
@@ -121,33 +137,36 @@ const AuditLogSchema = new Schema<IAuditLog, AuditLogModel>(
  * ============================================================ */
 
 /**
- * Optimiza la pantalla de historial, donde normalmente consultamos:
- * - últimos movimientos
- * - ordenados por timestamp descendente
+ * Optimiza la pantalla de historial (últimos movimientos ordenados por timestamp).
  */
-AuditLogSchema.index({ timestamp: -1 });
+auditLogSchema.index({ timestamp: -1 });
 
 /**
- * Optimiza búsquedas futuras por acción y fecha.
- * Ejemplo: USUARIO_CREADO entre dos fechas.
+ * Optimiza filtros por tipo de entidad + fecha (nuevo caso de uso).
+ * Ej: "Últimas modificaciones sobre UNIDADES en el último mes".
  */
-AuditLogSchema.index({ accion: 1, timestamp: -1 });
+auditLogSchema.index({ tipoEntidad: 1, timestamp: -1 });
 
 /**
- * Optimiza búsquedas futuras por usuario afectado.
+ * Optimiza búsquedas por acción y fecha.
  */
-AuditLogSchema.index({ targetUserId: 1, timestamp: -1 });
+auditLogSchema.index({ accion: 1, timestamp: -1 });
 
 /**
- * Optimiza búsquedas futuras por administrador.
+ * Optimiza búsquedas por entidad afectada (usuario o unidad).
  */
-AuditLogSchema.index({ adminId: 1, timestamp: -1 });
+auditLogSchema.index({ entidadId: 1, timestamp: -1 });
+
+/**
+ * Optimiza búsquedas por administrador.
+ */
+auditLogSchema.index({ adminId: 1, timestamp: -1 });
 
 /* ============================================================
  * EXPORT
  * ============================================================ */
 const AuditLog =
   (mongoose.models.AuditLog as AuditLogModel) ||
-  mongoose.model<IAuditLog, AuditLogModel>("AuditLog", AuditLogSchema);
+  mongoose.model<IAuditLog, AuditLogModel>("AuditLog", auditLogSchema);
 
 export default AuditLog;
