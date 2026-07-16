@@ -1,5 +1,5 @@
 // src/App.tsx
-import { useEffect, useState, lazy, Suspense } from "react";
+import { lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
 // 🔴 EAGER — Páginas críticas de arranque (login y splash)
@@ -17,32 +17,9 @@ const MapaEdificio = lazy(() => import("@/pages/dashboard/MapaEdificio"));
 // 🔴 EAGER — ProtectedRoute es un guard chico, sin costo mantenerlo eager
 import ProtectedRoute from "@/components/layout/ProtectedRoute";
 
-// 🎯 Helper de sesión centralizado (Fase 4)
+// 🎯 Helpers y hooks centralizados
 import { estaAutenticado } from "@/lib/session";
-
-/* ============================================================
- * CONSTANTES
- * ============================================================ */
-const MOBILE_BREAKPOINT = 768;
-
-/* ============================================================
- * HOOK: detección reactiva de mobile (via matchMedia)
- * ============================================================ */
-function useIsMobile(breakpoint = MOBILE_BREAKPOINT): boolean {
-  const [isMobile, setIsMobile] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    return window.matchMedia(`(max-width: ${breakpoint - 1}px)`).matches;
-  });
-
-  useEffect(() => {
-    const media = window.matchMedia(`(max-width: ${breakpoint - 1}px)`);
-    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
-    media.addEventListener("change", handler);
-    return () => media.removeEventListener("change", handler);
-  }, [breakpoint]);
-
-  return isMobile;
-}
+import { useIsMobile } from "@/hooks/useIsMobile";
 
 /* ============================================================
  * GUARDIÁN DE LA RUTA RAÍZ

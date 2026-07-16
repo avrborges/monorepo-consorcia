@@ -1,54 +1,56 @@
-// src/components/DashboardLayout.tsx
+// src/components/layout/DashboardLayout.tsx
 import { useState } from "react";
-import { Outlet, useNavigate, Link, useLocation } from "react-router-dom";
-import { 
-  HiChartPie, 
-  HiMenu, 
-  HiX, 
-  HiOutlineUserGroup, 
-  HiOutlineOfficeBuilding // 🏢 Ícono importado para Unidades Funcionales
-} from "react-icons/hi"; 
+import { Outlet, Link, useLocation } from "react-router-dom";
+import {
+  HiChartPie,
+  HiMenu,
+  HiX,
+  HiOutlineUserGroup,
+  HiOutlineOfficeBuilding,
+} from "react-icons/hi";
 import { FaSignOutAlt } from "react-icons/fa";
 
+// 🎯 Hook de sesión centralizado (Fase 4)
+import { useAuth } from "@/hooks/useAuth";
+import { formatearRol } from "@/lib/session";
+
 export default function DashboardLayout() {
-  const navigate = useNavigate();
   const location = useLocation();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-  const userString = localStorage.getItem("user");
-  const user = userString ? JSON.parse(userString) : { name: "Usuario", role: "admin" };
+  // 🎯 Sesión centralizada via useAuth
+  const { usuario, rol, esAdmin, logout } = useAuth();
 
-  const handleLogout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    navigate("/login");
-  };
+  // Fallbacks defensivos si la sesión no tiene datos válidos
+  const nombreCompleto = usuario?.name || "Usuario";
+  const inicial = nombreCompleto.charAt(0).toUpperCase();
+  const rolFormateado = rol ? formatearRol(rol) : "Admin";
 
   const menuItems = [
     { name: "Panel de Control", path: "/dashboard", icon: <HiChartPie className="w-5 h-5" /> },
   ];
 
   // Restringimos la visibilidad de las herramientas estructurales para administradores
-  if (user.role === "admin" || user.role === "superadmin") {
+  if (esAdmin) {
     menuItems.push({
       name: "Unidades Funcionales",
-      path: "/dashboard/unidades", // Asegurate de que esta ruta coincida con tu App.tsx
-      icon: <HiOutlineOfficeBuilding className="w-5 h-5" />
+      path: "/dashboard/unidades",
+      icon: <HiOutlineOfficeBuilding className="w-5 h-5" />,
     });
 
     menuItems.push({
       name: "Lista de Usuarios",
-      path: "/dashboard/usuarios", 
-      icon: <HiOutlineUserGroup className="w-5 h-5" />
+      path: "/dashboard/usuarios",
+      icon: <HiOutlineUserGroup className="w-5 h-5" />,
     });
   }
 
   return (
     <div className="h-screen w-screen overflow-hidden bg-[#f8fafc] flex font-sans text-slate-800 antialiased relative">
-      
+
       {/* 1. CAPA OSCURA DE FONDO (BACKDROP PARA MÓVILES) */}
       {isSidebarOpen && (
-        <div 
+        <div
           className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 md:hidden transition-opacity"
           onClick={() => setIsSidebarOpen(false)}
         />
@@ -58,14 +60,14 @@ export default function DashboardLayout() {
       <aside className={`
         fixed inset-y-0 left-0 z-50 bg-[#0b132b] text-slate-300 flex flex-col justify-between shadow-xl transition-transform duration-300
         w-64 border-r border-white/3 h-full
-        ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"} 
+        ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"}
         md:relative md:translate-x-0 shrink-0
       `}>
         <div className="flex flex-col flex-1 min-h-0">
-          
+
           {/* SECCIÓN SUPERIOR: PERFIL DE USUARIO PRINCIPAL */}
           <div className="py-8 px-4 flex flex-col items-center text-center border-b border-white/4 shrink-0 relative">
-            <button 
+            <button
               onClick={() => setIsSidebarOpen(false)}
               className="absolute top-4 right-4 text-slate-500 hover:text-white transition md:hidden p-1"
             >
@@ -75,18 +77,18 @@ export default function DashboardLayout() {
             <div className="relative">
               {/* Avatar circular */}
               <div className="h-14 w-14 rounded-full bg-white/6 text-white border border-white/10 flex items-center justify-center font-black text-lg shadow-md">
-                {user.name.charAt(0).toUpperCase()}
+                {inicial}
               </div>
               {/* Indicador de estado online */}
               <span className="absolute bottom-0 right-0 block h-3 w-3 rounded-full bg-emerald-500 border-2 border-[#0b132b]" />
             </div>
 
             <h3 className="mt-3 text-sm font-bold text-slate-100 tracking-wide truncate max-w-full px-2">
-              {user.name}
+              {nombreCompleto}
             </h3>
-            
+
             <span className="mt-1 text-[9px] text-[#fca311] font-extrabold uppercase tracking-widest bg-[#fca311]/10 px-2 py-0.5 rounded-full border border-[#fca311]/20">
-              {user.role}
+              {rolFormateado}
             </span>
           </div>
 
@@ -101,8 +103,8 @@ export default function DashboardLayout() {
                     to={item.path}
                     onClick={() => setIsSidebarOpen(false)}
                     className={`flex items-center space-x-3 px-4 py-3 transition-all duration-150 group relative ${
-                      isActive 
-                        ? "bg-[#f8fafc] text-slate-900 font-bold rounded-l-xl border-l-4 border-[#fca311]" 
+                      isActive
+                        ? "bg-[#f8fafc] text-slate-900 font-bold rounded-l-xl border-l-4 border-[#fca311]"
                         : "text-slate-400/80 hover:bg-white/2 hover:text-slate-200 rounded-l-xl mr-3"
                     }`}
                   >
@@ -122,7 +124,7 @@ export default function DashboardLayout() {
         {/* PIE DEL SIDEBAR: BOTÓN CERRAR SESIÓN */}
         <div className="p-3 border-t border-white/4 bg-transparent shrink-0">
           <button
-            onClick={handleLogout}
+            onClick={logout}
             className="w-full flex items-center space-x-3 px-4 py-3 text-slate-400/70 hover:bg-rose-500/10 hover:text-rose-400 rounded-xl transition duration-150 group cursor-pointer"
           >
             <FaSignOutAlt className="w-4 h-4 text-slate-500 group-hover:text-rose-400 transition-colors" />
@@ -133,7 +135,7 @@ export default function DashboardLayout() {
 
       {/* CONTENEDOR DERECHO PRINCIPAL */}
       <div className="flex-1 flex flex-col min-w-0 h-full">
-        
+
         {/* 3. BARRA SUPERIOR ULTRA LIMPIA */}
         <header className="bg-white/80 backdrop-blur-md border-b border-slate-100 h-16 flex items-center justify-between px-4 sm:px-6 shrink-0 z-30">
           <div className="flex items-center space-x-3">
@@ -143,7 +145,7 @@ export default function DashboardLayout() {
             >
               <HiMenu className="w-6 h-6" />
             </button>
-            
+
             <div className="flex items-center space-x-3 select-none">
               <span className="text-xl font-black tracking-wider text-[#0b132b]">
                 CONSOR<span className="text-[#fca311]">CIA</span>
