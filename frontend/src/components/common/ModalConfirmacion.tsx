@@ -1,7 +1,14 @@
-// src/pages/dashboard/ModalConfirmacion.tsx
+// src/components/common/ModalConfirmacion.tsx
 import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { HiOutlineTrash } from "react-icons/hi";
+import { HiOutlineTrash, HiOutlineExclamationCircle } from "react-icons/hi";
+
+/* ============================================================
+ * TIPOS
+ * ============================================================ */
+
+export type VarianteModal = "peligro" | "advertencia";
 
 interface ModalConfirmacionProps {
   abierto: boolean;
@@ -11,7 +18,47 @@ interface ModalConfirmacionProps {
   onCerrar: () => void;
   onConfirmar: () => void;
   loading: boolean;
+  /** Texto del botón principal. Default: "Eliminar Cuenta" */
+  labelConfirmar?: string;
+  /** Texto del botón durante loading. Default: "Eliminando..." */
+  labelCargando?: string;
+  /** Texto que aparece después del `nombreUsuario`. Default: "? Esta acción no se puede revertir." */
+  textoFinal?: string;
+  /** Variante visual del modal. Default: "peligro" (rojo) */
+  variante?: VarianteModal;
+  /** Ícono personalizado. Si no se pasa, se elige según la variante. */
+  icono?: ReactNode;
 }
+
+/* ============================================================
+ * ESTILOS POR VARIANTE
+ * ============================================================ */
+
+const ESTILOS_VARIANTE: Record<
+  VarianteModal,
+  {
+    iconoContainer: string;
+    icono: ReactNode;
+    botonPrincipal: string;
+  }
+> = {
+  peligro: {
+    iconoContainer: "bg-red-50 text-red-600",
+    icono: <HiOutlineTrash className="w-6 h-6" />,
+    botonPrincipal:
+      "bg-red-600 hover:bg-red-700 text-white shadow-sm shadow-red-600/10",
+  },
+  advertencia: {
+    iconoContainer: "bg-amber-50 text-amber-600",
+    icono: <HiOutlineExclamationCircle className="w-6 h-6" />,
+    botonPrincipal:
+      "bg-amber-600 hover:bg-amber-700 text-white shadow-sm shadow-amber-600/10",
+  },
+};
+
+/* ============================================================
+ * COMPONENTE
+ * ============================================================ */
 
 export default function ModalConfirmacion({
   abierto,
@@ -21,8 +68,13 @@ export default function ModalConfirmacion({
   onCerrar,
   onConfirmar,
   loading,
+  labelConfirmar = "Eliminar Cuenta",
+  labelCargando = "Eliminando...",
+  textoFinal = "? Esta acción no se puede revertir.",
+  variante = "peligro",
+  icono,
 }: ModalConfirmacionProps) {
-  // 1. Inicializamos con el valor actual de 'abierto'. 
+  // 1. Inicializamos con el valor actual de 'abierto'.
   // Evitamos sincronizar hacia "true" en el useEffect de forma síncrona.
   const [debeRenderizar, setDebeRenderizar] = useState(abierto);
 
@@ -41,17 +93,56 @@ export default function ModalConfirmacion({
       const timer = setTimeout(() => {
         setDebeRenderizar(false);
       }, 200);
-      
+
       document.body.style.overflow = "unset";
       return () => clearTimeout(timer);
     }
   }, [abierto]);
 
+  /* ------------------------------------------------------------
+   * Accesibilidad por teclado: Escape para cerrar, Enter para confirmar
+   * ------------------------------------------------------------ */
+  useEffect(() => {
+    if (!abierto) return;
+
+    const manejarTecla = (e: KeyboardEvent) => {
+      if (loading) return;
+
+      if (e.key === "Escape") {
+        onCerrar();
+      } else if (e.key === "Enter") {
+        // Solo si el usuario no está tipeando en un input/textarea
+        const target = e.target as HTMLElement;
+        const esInput =
+          target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT";
+
+        if (!esInput) {
+          e.preventDefault();
+          onConfirmar();
+        }
+      }
+    };
+
+    window.addEventListener("keydown", manejarTecla);
+    return () => window.removeEventListener("keydown", manejarTecla);
+  }, [abierto, loading, onCerrar, onConfirmar]);
+
   if (!debeRenderizar) return null;
 
+  const estilos = ESTILOS_VARIANTE[variante];
+  const iconoAMostrar = icono ?? estilos.icono;
+
   return createPortal(
-    <div className="fixed inset-0 z-999 flex items-end justify-center md:items-center p-0 md:p-4 isolation-auto">
-      
+    <div
+      className="fixed inset-0 z-999 flex items-end justify-center md:items-center p-0 md:p-4 isolation-auto"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="modal-confirmacion-titulo"
+      aria-describedby="modal-confirmacion-mensaje"
+    >
+
       {/* OVERLAY */}
       <div
         onClick={!loading ? onCerrar : undefined}
@@ -73,20 +164,28 @@ export default function ModalConfirmacion({
 
         {/* Cuerpo informativo */}
         <div className="flex flex-col items-center md:items-start text-center md:text-left">
-          <div className="flex items-center justify-center w-12 h-12 bg-red-50 text-red-600 rounded-full mb-4 shrink-0">
-            <HiOutlineTrash className="w-6 h-6" />
+          <div
+            className={`flex items-center justify-center w-12 h-12 rounded-full mb-4 shrink-0 ${estilos.iconoContainer}`}
+          >
+            {iconoAMostrar}
           </div>
 
-          <h3 className="text-lg font-black text-slate-900 tracking-tight mb-2">
+          <h3
+            id="modal-confirmacion-titulo"
+            className="text-lg font-black text-slate-900 tracking-tight mb-2"
+          >
             {titulo}
           </h3>
-          
-          <p className="text-sm text-slate-500 font-medium leading-relaxed mb-6">
+
+          <p
+            id="modal-confirmacion-mensaje"
+            className="text-sm text-slate-500 font-medium leading-relaxed mb-6"
+          >
             {mensaje}{" "}
             <span className="font-bold text-slate-800 break-all">
               {nombreUsuario}
             </span>
-            ? Esta acción no se puede revertir.
+            {textoFinal}
           </p>
         </div>
 
@@ -100,20 +199,20 @@ export default function ModalConfirmacion({
           >
             Cancelar
           </button>
-          
+
           <button
             type="button"
             disabled={loading}
             onClick={onConfirmar}
-            className="w-full md:w-auto px-5 py-3 md:py-2 text-sm font-bold bg-red-600 hover:bg-red-700 text-white disabled:opacity-50 rounded-xl transition-all shadow-sm shadow-red-600/10 cursor-pointer flex items-center justify-center gap-2"
+            className={`w-full md:w-auto px-5 py-3 md:py-2 text-sm font-bold disabled:opacity-50 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 ${estilos.botonPrincipal}`}
           >
             {loading ? (
               <>
                 <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                <span>Eliminando...</span>
+                <span>{labelCargando}</span>
               </>
             ) : (
-              <span>Eliminar Cuenta</span>
+              <span>{labelConfirmar}</span>
             )}
           </button>
         </div>
