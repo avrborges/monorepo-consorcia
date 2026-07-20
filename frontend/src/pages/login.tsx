@@ -1,7 +1,7 @@
 // src/pages/login.tsx
 import { useEffect, useRef, useState } from "react";
 import type { SyntheticEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { AxiosError } from "axios";
 import { MdErrorOutline } from "react-icons/md";
 import { CiCircleCheck } from "react-icons/ci";
@@ -129,11 +129,6 @@ export default function Login() {
     }
   };
 
-  const handleForgotPasswordClick = (): void => {
-    if (isLoading) return;
-    console.log("Recuperar contraseña pendiente de implementar.");
-  };
-
   const handleContactClick = (): void => {
     if (isLoading) return;
     console.log("Contacto pendiente de implementar.");
@@ -209,14 +204,16 @@ export default function Login() {
                 Contraseña
               </label>
 
-              <button
-                type="button"
-                disabled={isLoading}
-                onClick={handleForgotPasswordClick}
-                className="text-xs font-bold text-teal-600 transition-colors hover:text-teal-700 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+              <Link
+                to="/olvide-password"
+                className={`text-xs font-bold text-teal-600 transition-colors hover:text-teal-700 ${
+                  isLoading ? "opacity-50 pointer-events-none" : "cursor-pointer"
+                }`}
+                aria-disabled={isLoading}
+                tabIndex={isLoading ? -1 : undefined}
               >
                 ¿Olvidaste tu contraseña?
-              </button>
+              </Link>
             </div>
 
             <div className="relative">

@@ -6,7 +6,7 @@ import crypto from "crypto";
 
 import User, { type RolUsuario } from "../models/User";
 import AuditLog from "../models/AuditLog";
-import { enviarMailInvitacion } from "../services/emailService";
+import { enviarMailInvitacion, enviarEmailResetPassword } from "../services/emailService";
 import { registrarLog } from "../services/loggerService";
 
 /* ============================================================
@@ -37,6 +37,15 @@ interface UpdateUserBody {
   role?: RolUsuario;
   unidadFuncional?: string;
   telefono?: string;
+}
+
+interface OlvidePasswordBody {
+  email?: string;
+}
+
+interface ResetPasswordBody {
+  token?: string;
+  password?: string;
 }
 
 interface ParamsId {
@@ -601,6 +610,170 @@ export const getAuditLogs = async (_req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       message: "Hubo un error al obtener el historial de auditoría.",
+    });
+  }
+};
+
+
+/* ============================================================
+ * MÉTODO: Solicitar recuperación de contraseña
+ * ============================================================
+ *
+ * Genera un token de reset y envía un email con el link.
+ *
+ * 🛡️ SIEMPRE responde con mensaje genérico de éxito, exista o no el email.
+ *     Esto previene enumeración de usuarios (un atacante no puede
+ *     distinguir "email registrado" de "email no registrado").
+ *
+ * Ruta pública: POST /users/olvide-password
+ */
+export const olvidePassword = async (
+  req: Request<unknown, unknown, OlvidePasswordBody>,
+  res: Response
+) => {
+  try {
+    const { email } = req.body;
+
+    if (!email || !email.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "El correo electrónico es obligatorio.",
+      });
+    }
+
+    const emailLimpio = email.trim().toLowerCase();
+    const usuario = await User.findOne({ email: emailLimpio });
+
+    // 🎯 Solo generamos token y enviamos email si el usuario existe Y está activo.
+    //    Un usuario "pendiente" (nunca activó) debe usar el flujo de activación.
+    //    Un usuario "inactivo" (dado de baja) no debe poder resetear.
+    if (usuario && usuario.estado === "activo") {
+      // 1. Generar token seguro de 64 caracteres
+      const token = crypto.randomBytes(32).toString("hex");
+
+      // 2. Expiración de 1 hora (más estricta que activación por seguridad)
+      const expiracion = new Date();
+      expiracion.setHours(expiracion.getHours() + 1);
+
+      // 3. Guardar token en el usuario (reutilizamos los mismos campos)
+      usuario.tokenActivacion = token;
+      usuario.tokenExpiracion = expiracion;
+      await usuario.save();
+
+      // 4. Armar URL dinámica y enviar email (fire-and-forget)
+      const baseUrl = obtenerFrontendUrl(req);
+      const resetLink = `${baseUrl}/reset-password?token=${encodeURIComponent(token)}`;
+
+      // No usamos await ni catch — enviarEmailResetPassword es fire-and-forget
+      // y retorna false silenciosamente si falla (loguea internamente).
+      void enviarEmailResetPassword({
+        email: usuario.email,
+        name: usuario.name,
+        resetLink,
+      });
+    }
+
+    // 🛡️ SIEMPRE respuesta genérica — previene enumeración
+    return res.status(200).json({
+      success: true,
+      message:
+        "Si el correo electrónico existe en nuestros registros, recibirás un mensaje con las instrucciones para restablecer tu contraseña.",
+    });
+  } catch (error) {
+    console.error("Error en olvidePassword:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Hubo un error interno en el servidor.",
+    });
+  }
+};
+
+/* ============================================================
+ * MÉTODO: Confirmar reset de contraseña
+ * ============================================================
+ *
+ * Valida el token de reset y actualiza la contraseña del usuario.
+ *
+ * Ruta pública: POST /users/reset-password
+ */
+export const resetPassword = async (
+  req: Request<unknown, unknown, ResetPasswordBody>,
+  res: Response
+) => {
+  try {
+    const { token, password } = req.body;
+
+    if (!token || !password) {
+      return res.status(400).json({
+        success: false,
+        message: "El token y la nueva contraseña son obligatorios.",
+      });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: "La contraseña debe tener al menos 6 caracteres.",
+      });
+    }
+
+    // Buscar usuario con token válido y no expirado
+    const usuario = await User.findOne({
+      tokenActivacion: token,
+      tokenExpiracion: { $gt: new Date() },
+    });
+
+    if (!usuario) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "El enlace de recuperación es inválido o ha expirado. Solicitá uno nuevo desde el login.",
+      });
+    }
+
+    // 🛡️ Guard: solo permitimos reset a usuarios activos.
+    //     Si por algún motivo el usuario pasó a "inactivo" entre la solicitud
+    //     y el reset, no permitimos la operación.
+    if (usuario.estado !== "activo") {
+      return res.status(403).json({
+        success: false,
+        message:
+          "No es posible restablecer la contraseña de esta cuenta. Contactá al administrador.",
+      });
+    }
+
+    /*
+     * El middleware pre("save") del modelo User hashea automáticamente
+     * la contraseña antes de guardar.
+     */
+    usuario.password = password;
+    usuario.tokenActivacion = null;
+    usuario.tokenExpiracion = null;
+    usuario.debeCambiarPassword = false;
+
+    await usuario.save();
+
+    // 🎯 Registrar en auditoría (auto-registro: el propio usuario es el "admin")
+    await registrarLog({
+      req: { user: usuario },
+      accion: "USUARIO_EDITADO",
+      tipoEntidad: "USUARIO",
+      entidadId: usuario._id,
+      detalles: {
+        nombreEntidad: usuario.name,
+        cambios: { accion: "reset_password" },
+      },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Contraseña restablecida con éxito. Ya podés iniciar sesión.",
+    });
+  } catch (error) {
+    console.error("Error en resetPassword:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Hubo un error al intentar restablecer la contraseña.",
     });
   }
 };

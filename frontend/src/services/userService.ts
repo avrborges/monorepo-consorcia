@@ -37,6 +37,11 @@ export interface ActivarCuentaPayload {
   password: string;
 }
 
+export interface ResetPasswordPayload {
+  token: string;
+  password: string;
+}
+
 /* ============================================================
  * TIPOS DE RESPUESTA ESPECÍFICOS (para endpoints sin shape en shared)
  * ============================================================ */
@@ -72,6 +77,34 @@ export const userService = {
    */
   activarCuenta: async (payload: ActivarCuentaPayload) => {
     const { data } = await api.post<SuccessResponse>("/users/activar", payload);
+    return data;
+  },
+
+  /**
+   * Solicitar recuperación de contraseña — POST /users/olvide-password
+   *
+   * 🛡️ El backend SIEMPRE responde 200 con mensaje genérico, exista o no
+   * el email (previene enumeración de usuarios). El componente puede tratar
+   * cualquier respuesta exitosa como éxito garantizado.
+   */
+  olvidePassword: async (email: string) => {
+    const { data } = await api.post<SuccessResponse>("/users/olvide-password", {
+      email,
+    });
+    return data;
+  },
+
+  /**
+   * Confirmar reset de contraseña con token — POST /users/reset-password
+   *
+   * Se llama desde la página `/reset-password?token=xxx` con la nueva
+   * contraseña que el usuario ingresó.
+   */
+  resetPassword: async (payload: ResetPasswordPayload) => {
+    const { data } = await api.post<SuccessResponse>(
+      "/users/reset-password",
+      payload
+    );
     return data;
   },
 

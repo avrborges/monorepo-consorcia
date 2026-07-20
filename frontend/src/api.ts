@@ -46,6 +46,10 @@ api.interceptors.request.use(
  * RESPONSE: maneja globalmente los errores 401 (token expirado o inválido).
  * Limpia la sesión y redirige al login, guardando la ruta actual
  * en sessionStorage para volver ahí tras el re-login exitoso.
+ *
+ * 🛡️ Se excluyen las rutas públicas de autenticación (login, activar-cuenta,
+ * olvide-password, reset-password) para evitar loops y no interferir con
+ * los mensajes de error propios de esas páginas.
  */
 api.interceptors.response.use(
   (response) => response,
@@ -53,7 +57,13 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       const rutaActual = window.location.pathname + window.location.search;
 
-      if (!rutaActual.startsWith("/login") && !rutaActual.startsWith("/activar-cuenta")) {
+      const esRutaPublicaAuth =
+        rutaActual.startsWith("/login") ||
+        rutaActual.startsWith("/activar-cuenta") ||
+        rutaActual.startsWith("/olvide-password") ||
+        rutaActual.startsWith("/reset-password");
+
+      if (!esRutaPublicaAuth) {
         // 🎯 Guardamos la ruta destino para volver después del login
         sessionStorage.setItem("redirect_after_login", rutaActual);
 

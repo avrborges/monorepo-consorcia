@@ -11,6 +11,8 @@ import {
   toggleStatus,
   eliminarUsuario,
   updateUser,
+  olvidePassword,
+  resetPassword,
 } from "../controllers/userController";
 
 // 🛡️ Importamos ambos middlewares de protección
@@ -26,6 +28,10 @@ const router: Router = Router();
  * ============================================================ */
 router.post("/login", loginUser);
 router.post("/activar", activarCuenta);
+
+// Recuperación de contraseña — usuario no autenticado
+router.post("/olvide-password", olvidePassword);
+router.post("/reset-password", resetPassword);
 
 /* ============================================================
  * RUTAS ADMINISTRATIVAS

@@ -9,6 +9,8 @@ import SplashScreen from "@/components/SplashScreen";
 // 🟢 LAZY — Páginas post-login o secundarias (chunks separados)
 const Landing = lazy(() => import("@/pages/landing"));
 const ActivarCuenta = lazy(() => import("@/pages/ActivarCuenta"));
+const OlvidePassword = lazy(() => import("@/pages/OlvidePassword"));
+const ResetPassword = lazy(() => import("@/pages/ResetPassword"));
 const DashboardLayout = lazy(() => import("@/components/layout/DashboardLayout"));
 const Overview = lazy(() => import("@/pages/dashboard/Overview"));
 const ListaUsuarios = lazy(() => import("@/pages/dashboard/ListaUsuarios"));
@@ -81,6 +83,8 @@ function App() {
           <Route path="/" element={<RootHandler />} />
           <Route path="/login" element={<Login />} />
           <Route path="/activar-cuenta" element={<ActivarCuenta />} />
+          <Route path="/olvide-password" element={<OlvidePassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
 
           {/* ============================================================
           * RUTAS PROTEGIDAS — cualquier usuario autenticado
