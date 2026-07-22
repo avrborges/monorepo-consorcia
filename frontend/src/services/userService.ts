@@ -20,7 +20,8 @@ export interface CrearUsuarioPayload {
   name: string;
   email: string;
   role: Rol;
-  unidadFuncional?: string;
+  unidadFuncional?: string;   // 🔴 DEPRECADO — se mantiene por compatibilidad
+  unidadId?: string | null;   // 🆕 Nueva referencia a la UF
   telefono?: string;
 }
 
@@ -28,7 +29,8 @@ export interface ActualizarUsuarioPayload {
   name?: string;
   email?: string;
   role?: Rol;
-  unidadFuncional?: string;
+  unidadFuncional?: string;   // 🔴 DEPRECADO
+  unidadId?: string | null;   // 🆕 Nueva referencia (null = desvincular)
   telefono?: string;
 }
 

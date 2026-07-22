@@ -1,11 +1,14 @@
 // backend/src/controllers/userController.ts
 import type { Request, Response } from "express";
+import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 import jwt, { type SignOptions } from "jsonwebtoken";
 import crypto from "crypto";
 
 import User, { type RolUsuario } from "../models/User";
+import UnidadFuncional from "../models/UnidadFuncional";
 import AuditLog from "../models/AuditLog";
+
 import { enviarMailInvitacion, enviarEmailResetPassword } from "../services/emailService";
 import { registrarLog } from "../services/loggerService";
 
@@ -17,7 +20,8 @@ interface CrearUsuarioBody {
   name?: string;
   email?: string;
   role?: RolUsuario;
-  unidadFuncional?: string;
+  unidadFuncional?: string;   // 🔴 DEPRECADO — se mantiene por compatibilidad
+  unidadId?: string | null;   // 🆕 Nueva referencia a la UF
   telefono?: string;
 }
 
@@ -35,7 +39,8 @@ interface UpdateUserBody {
   name?: string;
   email?: string;
   role?: RolUsuario;
-  unidadFuncional?: string;
+  unidadFuncional?: string;   // 🔴 DEPRECADO — se mantiene por compatibilidad
+  unidadId?: string | null;   // 🆕 Nueva referencia (null = desvincular)
   telefono?: string;
 }
 
@@ -54,14 +59,95 @@ interface ParamsId {
 }
 
 /* ============================================================
+ * HELPER: Sincronizar UF ↔ User (bidireccional)
+ * ============================================================
+ *
+ * Cierra el círculo de consistencia cuando desde el ABM de Usuarios
+ * se asigna, cambia o remueve una UF. Actualiza las 2 UF afectadas
+ * (la vieja de la que sale el user, la nueva a la que entra).
+ *
+ * Reglas de negocio:
+ * - Solo `propietario` e `inquilino` ocupan ranura en la UF.
+ *   Los demás roles (admin, superadmin, consejo) tienen unidadId
+ *   informativo pero no ocupan ranura.
+ * - Si la ranura de la UF nueva ya está ocupada por otro usuario,
+ *   ese desplazado queda con `unidadId = null` (sobreescritura silenciosa).
+ * - El estadoOcupacion de cada UF afectada se recalcula automáticamente.
+ */
+interface SincronizarUnidadParams {
+  userId: string;
+  unidadIdAnterior: string | null;
+  unidadIdNueva: string | null;
+  roleAnterior: RolUsuario;
+  roleNueva: RolUsuario;
+}
+
+const rolOcupaRanura = (role: RolUsuario): role is "propietario" | "inquilino" => {
+  return role === "propietario" || role === "inquilino";
+};
+
+const sincronizarUnidadDesdeUser = async ({
+  userId,
+  unidadIdAnterior,
+  unidadIdNueva,
+  roleAnterior,
+  roleNueva,
+}: SincronizarUnidadParams): Promise<void> => {
+  const cambiosDeUnidadId = new Map<string, string | null>();
+
+  // 1️⃣ Si tenía UF anterior con rol apto → liberar la ranura correspondiente
+  if (unidadIdAnterior && rolOcupaRanura(roleAnterior)) {
+    const ufVieja = await UnidadFuncional.findById(unidadIdAnterior);
+    if (ufVieja) {
+      const campo = roleAnterior; // "propietario" o "inquilino"
+      if (ufVieja[campo]?.toString() === userId) {
+        ufVieja[campo] = null;
+        // Recalcular estadoOcupacion
+        if (ufVieja.inquilino) ufVieja.estadoOcupacion = "inquilino";
+        else if (ufVieja.propietario) ufVieja.estadoOcupacion = "propietario";
+        else ufVieja.estadoOcupacion = "vacio";
+        await ufVieja.save();
+      }
+    }
+  }
+
+  // 2️⃣ Si tiene UF nueva con rol apto → ocupar la ranura correspondiente
+  if (unidadIdNueva && rolOcupaRanura(roleNueva)) {
+    const ufNueva = await UnidadFuncional.findById(unidadIdNueva);
+    if (ufNueva) {
+      const campo = roleNueva; // "propietario" o "inquilino"
+      // Si ya había otro usuario en esa ranura → desplazarlo
+      const desplazadoId = ufNueva[campo]?.toString();
+      if (desplazadoId && desplazadoId !== userId) {
+        cambiosDeUnidadId.set(desplazadoId, null);
+      }
+      ufNueva[campo] = new mongoose.Types.ObjectId(userId);
+      // Recalcular estadoOcupacion
+      if (ufNueva.inquilino) ufNueva.estadoOcupacion = "inquilino";
+      else if (ufNueva.propietario) ufNueva.estadoOcupacion = "propietario";
+      else ufNueva.estadoOcupacion = "vacio";
+      await ufNueva.save();
+    }
+  }
+
+  // 3️⃣ Actualizar unidadId Y unidadFuncional de los usuarios desplazados
+  //    (unidadFuncional = "" porque quedan sin unidad tras ser desplazados)
+  if (cambiosDeUnidadId.size > 0) {
+    await Promise.all(
+      Array.from(cambiosDeUnidadId.entries()).map(([uid, value]) =>
+        User.findByIdAndUpdate(uid, {
+          unidadId: value,
+          unidadFuncional: "",
+        })
+      )
+    );
+  }
+};
+
+/* ============================================================
  * HELPER: Resolver URL del frontend para links de activación
  * ============================================================ */
 
-/**
- * Interface mínima que necesita `obtenerFrontendUrl` de la petición.
- * Solo usa `req.get("origin")` y `req.get("referer")`, así que no depende
- * de los generics del tipo `Request` de Express.
- */
 interface RequestConHeaders {
   get(name: string): string | undefined;
 }
@@ -69,27 +155,15 @@ interface RequestConHeaders {
 const obtenerFrontendUrl = (req: RequestConHeaders): string => {
   const frontendUrlEnv = process.env.FRONTEND_URL;
 
-  /*
-   * Caso 1: Si FRONTEND_URL tiene una URL fija real, la usamos.
-   *   FRONTEND_URL=https://consorcia.com
-   *   FRONTEND_URL=http://localhost:5173
-   *   FRONTEND_URL=http://192.168.1.38:5173
-   */
   if (frontendUrlEnv && frontendUrlEnv.toLowerCase() !== "auto") {
     return frontendUrlEnv.replace(/\/$/, "");
   }
 
-  /*
-   * Caso 2: Si FRONTEND_URL=auto, intentamos usar Origin.
-   */
   const origin = req.get("origin");
   if (origin) {
     return origin.replace(/\/$/, "");
   }
 
-  /*
-   * Caso 3: Si no vino Origin, intentamos usar Referer.
-   */
   const referer = req.get("referer");
   if (referer) {
     try {
@@ -99,9 +173,6 @@ const obtenerFrontendUrl = (req: RequestConHeaders): string => {
     }
   }
 
-  /*
-   * Caso 4: Fallback final para desarrollo local.
-   */
   return "http://localhost:5173";
 };
 
@@ -135,7 +206,7 @@ export const crearUsuario = async (
   res: Response
 ) => {
   try {
-    const { name, email, role, unidadFuncional, telefono } = req.body;
+    const { name, email, role, unidadFuncional, unidadId, telefono } = req.body;
 
     if (!name || !name.trim()) {
       return res.status(400).json({
@@ -161,18 +232,32 @@ export const crearUsuario = async (
       });
     }
 
+    // 🎯 Si se envió unidadId, verificar que la UF exista
+    if (unidadId) {
+      const unidadExiste = await UnidadFuncional.findById(unidadId);
+      if (!unidadExiste) {
+        return res.status(400).json({
+          success: false,
+          message: "La unidad funcional seleccionada no existe en el sistema.",
+        });
+      }
+    }
+
     // 1. Generar token de 64 caracteres y vencimiento de 24 hs
     const token = crypto.randomBytes(32).toString("hex");
 
     const expiracion = new Date();
     expiracion.setHours(expiracion.getHours() + 24);
 
+    const roleFinal = role || "propietario";
+
     // 2. Creamos el usuario SIN contraseña
     const nuevoUsuario = new User({
       name: name.trim(),
       email: emailLimpio,
-      role: role || "propietario",
+      role: roleFinal,
       unidadFuncional: unidadFuncional || "",
+      unidadId: unidadId || null,
       telefono: telefono || "",
       estado: "pendiente",
       debeCambiarPassword: true,
@@ -181,6 +266,17 @@ export const crearUsuario = async (
     });
 
     await nuevoUsuario.save();
+
+    // 🎯 Sincronizar UF ↔ User (Fase 3.5)
+    if (nuevoUsuario.unidadId) {
+      await sincronizarUnidadDesdeUser({
+        userId: nuevoUsuario._id.toString(),
+        unidadIdAnterior: null,
+        unidadIdNueva: nuevoUsuario.unidadId.toString(),
+        roleAnterior: roleFinal,
+        roleNueva: roleFinal,
+      });
+    }
 
     // 3. Armar URL de activación dinámica y disparar correo en segundo plano
     const baseUrl = obtenerFrontendUrl(req);
@@ -202,6 +298,7 @@ export const crearUsuario = async (
           email: nuevoUsuario.email,
           role: nuevoUsuario.role,
           unidadFuncional: nuevoUsuario.unidadFuncional,
+          unidadId: nuevoUsuario.unidadId?.toString() || null,
         },
       },
     });
@@ -256,9 +353,6 @@ export const activarCuenta = async (
       });
     }
 
-    /*
-     * El middleware pre("save") del modelo User debería encriptar la clave.
-     */
     usuario.password = password;
     usuario.estado = "activo";
     usuario.debeCambiarPassword = false;
@@ -355,7 +449,6 @@ export const eliminarUsuario = async (req: Request<ParamsId>, res: Response) => 
         },
       },
     });
-
 
     return res.status(200).json({
       success: true,
@@ -483,19 +576,16 @@ export const reenviarInvitacion = async (req: Request<ParamsId>, res: Response) 
       });
     }
 
-    // 1. Generar nuevo token y extender expiración por 24 horas
     const nuevoToken = crypto.randomBytes(32).toString("hex");
 
     const nuevaExpiracion = new Date();
     nuevaExpiracion.setHours(nuevaExpiracion.getHours() + 24);
 
-    // 2. Actualizar token en la base
     usuario.tokenActivacion = nuevoToken;
     usuario.tokenExpiracion = nuevaExpiracion;
 
     await usuario.save();
 
-    // 3. Armar URL dinámica y disparar correo
     const baseUrl = obtenerFrontendUrl(req);
     const urlActivacion = `${baseUrl}/activar-cuenta?token=${encodeURIComponent(nuevoToken)}`;
 
@@ -526,7 +616,7 @@ export const updateUser = async (
 ) => {
   try {
     const { id } = req.params;
-    const { name, email, role, unidadFuncional, telefono } = req.body;
+    const { name, email, role, unidadFuncional, unidadId, telefono } = req.body;
 
     const usuario = await User.findById(id);
 
@@ -536,6 +626,10 @@ export const updateUser = async (
         message: "El usuario que intentás editar no existe.",
       });
     }
+
+    // 🎯 Snapshot del estado ANTERIOR (necesario para sincronización de UF)
+    const roleAnterior = usuario.role;
+    const unidadIdAnterior = usuario.unidadId?.toString() || null;
 
     if (email && email.trim().toLowerCase() !== usuario.email) {
       const emailLimpio = email.trim().toLowerCase();
@@ -561,7 +655,38 @@ export const updateUser = async (
       typeof unidadFuncional === "string" ? unidadFuncional : usuario.unidadFuncional;
     usuario.telefono = typeof telefono === "string" ? telefono : usuario.telefono;
 
+    // 🎯 Manejo de unidadId: si viene undefined, no se toca. Si viene null o "", se desvincula.
+    //    Si viene un string válido, se valida que la UF exista.
+    if (unidadId !== undefined) {
+      if (unidadId === null || unidadId === "") {
+        usuario.unidadId = null;
+      } else {
+        const unidadExiste = await UnidadFuncional.findById(unidadId);
+        if (!unidadExiste) {
+          return res.status(400).json({
+            success: false,
+            message: "La unidad funcional seleccionada no existe en el sistema.",
+          });
+        }
+        usuario.unidadId = unidadExiste._id;
+      }
+    }
+
     const usuarioActualizado = await usuario.save();
+
+    // 🎯 Sincronizar UF ↔ User si cambió unidadId o role (Fase 3.5)
+    const unidadIdNueva = usuarioActualizado.unidadId?.toString() || null;
+    const roleNueva = usuarioActualizado.role;
+
+    if (unidadIdAnterior !== unidadIdNueva || roleAnterior !== roleNueva) {
+      await sincronizarUnidadDesdeUser({
+        userId: usuarioActualizado._id.toString(),
+        unidadIdAnterior,
+        unidadIdNueva,
+        roleAnterior,
+        roleNueva,
+      });
+    }
 
     await registrarLog({
       req,
@@ -575,6 +700,7 @@ export const updateUser = async (
           email: usuarioActualizado.email,
           role: usuarioActualizado.role,
           unidadFuncional: usuarioActualizado.unidadFuncional,
+          unidadId: usuarioActualizado.unidadId?.toString() || null,
           telefono: usuarioActualizado.telefono,
         },
       },
@@ -614,7 +740,6 @@ export const getAuditLogs = async (_req: Request, res: Response) => {
   }
 };
 
-
 /* ============================================================
  * MÉTODO: Solicitar recuperación de contraseña
  * ============================================================
@@ -644,28 +769,19 @@ export const olvidePassword = async (
     const emailLimpio = email.trim().toLowerCase();
     const usuario = await User.findOne({ email: emailLimpio });
 
-    // 🎯 Solo generamos token y enviamos email si el usuario existe Y está activo.
-    //    Un usuario "pendiente" (nunca activó) debe usar el flujo de activación.
-    //    Un usuario "inactivo" (dado de baja) no debe poder resetear.
     if (usuario && usuario.estado === "activo") {
-      // 1. Generar token seguro de 64 caracteres
       const token = crypto.randomBytes(32).toString("hex");
 
-      // 2. Expiración de 1 hora (más estricta que activación por seguridad)
       const expiracion = new Date();
       expiracion.setHours(expiracion.getHours() + 1);
 
-      // 3. Guardar token en el usuario (reutilizamos los mismos campos)
       usuario.tokenActivacion = token;
       usuario.tokenExpiracion = expiracion;
       await usuario.save();
 
-      // 4. Armar URL dinámica y enviar email (fire-and-forget)
       const baseUrl = obtenerFrontendUrl(req);
       const resetLink = `${baseUrl}/reset-password?token=${encodeURIComponent(token)}`;
 
-      // No usamos await ni catch — enviarEmailResetPassword es fire-and-forget
-      // y retorna false silenciosamente si falla (loguea internamente).
       void enviarEmailResetPassword({
         email: usuario.email,
         name: usuario.name,
@@ -673,7 +789,6 @@ export const olvidePassword = async (
       });
     }
 
-    // 🛡️ SIEMPRE respuesta genérica — previene enumeración
     return res.status(200).json({
       success: true,
       message:
@@ -717,7 +832,6 @@ export const resetPassword = async (
       });
     }
 
-    // Buscar usuario con token válido y no expirado
     const usuario = await User.findOne({
       tokenActivacion: token,
       tokenExpiracion: { $gt: new Date() },
@@ -731,9 +845,6 @@ export const resetPassword = async (
       });
     }
 
-    // 🛡️ Guard: solo permitimos reset a usuarios activos.
-    //     Si por algún motivo el usuario pasó a "inactivo" entre la solicitud
-    //     y el reset, no permitimos la operación.
     if (usuario.estado !== "activo") {
       return res.status(403).json({
         success: false,
@@ -742,10 +853,6 @@ export const resetPassword = async (
       });
     }
 
-    /*
-     * El middleware pre("save") del modelo User hashea automáticamente
-     * la contraseña antes de guardar.
-     */
     usuario.password = password;
     usuario.tokenActivacion = null;
     usuario.tokenExpiracion = null;
@@ -753,7 +860,6 @@ export const resetPassword = async (
 
     await usuario.save();
 
-    // 🎯 Registrar en auditoría (auto-registro: el propio usuario es el "admin")
     await registrarLog({
       req: { user: usuario },
       accion: "USUARIO_EDITADO",

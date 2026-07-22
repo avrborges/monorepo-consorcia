@@ -1,5 +1,5 @@
 // backend/src/models/User.ts
-import mongoose, { Schema, Model, HydratedDocument } from "mongoose";
+import mongoose, { Schema, Model, HydratedDocument, Types } from "mongoose";
 import bcrypt from "bcryptjs";
 
 /* ============================================================
@@ -40,7 +40,21 @@ export interface IUser {
   email: string;
   password?: string;
   role: RolUsuario;
+
+  /**
+   * 🔴 DEPRECADO — Campo legacy de texto libre.
+   * Se mantiene por compatibilidad durante la migración.
+   * A eliminar en Fase 6 del sprint "Consistencia Usuarios ↔ Unidades".
+   */
   unidadFuncional: string;
+
+  /**
+   * 🆕 Referencia a la Unidad Funcional a la que está vinculado el usuario.
+   * `null` para usuarios sin unidad asignada (admins, superadmins, o usuarios
+   * propietarios/inquilinos aún no vinculados).
+   */
+  unidadId: Types.ObjectId | null;
+
   telefono: string;
   estado: EstadoUsuario;
   debeCambiarPassword: boolean;
@@ -112,11 +126,26 @@ const userSchema = new Schema<IUser, UserModel, IUserMethods>(
       index: true,
     },
 
+    /*
+     * 🔴 DEPRECADO — Campo legacy de texto libre.
+     * Se mantiene por compatibilidad. Se eliminará en Fase 6.
+     */
     unidadFuncional: {
       type: String,
       trim: true,
       default: "",
       maxlength: [80, "La unidad funcional no puede superar los 80 caracteres"],
+    },
+
+    /*
+     * 🆕 Referencia a la Unidad Funcional vinculada.
+     * `null` en usuarios sin unidad asignada (admins, superadmins, etc.).
+     */
+    unidadId: {
+      type: Schema.Types.ObjectId,
+      ref: "UnidadFuncional",
+      default: null,
+      index: true,
     },
 
     telefono: {

@@ -9,7 +9,7 @@ import {
 } from "react-icons/hi";
 
 // 🎯 Capa de servicios (Fase 3)
-import { userService } from "@/services";
+import { userService, unidadService } from "@/services";
 import type {
   CrearUsuarioPayload,
   ActualizarUsuarioPayload,
@@ -19,7 +19,7 @@ import type {
 import ModalConfirmacion from "@/components/common/ModalConfirmacion";
 
 // 🎯 Tipos de dominio compartidos entre backend y frontend
-import type { Persona, Rol } from "@shared/types";
+import type { Persona, Rol, UnidadFuncional } from "@shared/types";
 
 interface FormAltaUsuarioProps {
   modalAbierto: boolean;
@@ -50,24 +50,12 @@ export default function FormAltaUsuario({
   // 🎯 Estado del modal de confirmación de cierre
   const [mostrarConfirmarCierre, setMostrarConfirmarCierre] = useState(false);
 
-  // Parseo inicial de la Unidad Funcional
-  const [uf, setUf] = useState(() => {
-    const rawUf = usuarioEditando?.unidadFuncional || "";
-    let ufPura = rawUf.replace(/Piso\s+[^\s]+/i, "").replace(/Dto\s+[^\s]+/i, "").trim();
-    if (ufPura.toLowerCase().startsWith("uf")) ufPura = ufPura.replace(/^uf\s*/i, "").trim();
-    return ufPura;
-  });
-
-  const [piso, setPiso] = useState(() => {
-    const rawUf = usuarioEditando?.unidadFuncional || "";
-    const pisoMatch = rawUf.match(/Piso\s+([^\s]+)/i);
-    return pisoMatch ? pisoMatch[1] : "";
-  });
-
-  const [dto, setDto] = useState(() => {
-    const rawUf = usuarioEditando?.unidadFuncional || "";
-    const dtoMatch = rawUf.match(/Dto\s+([^\s]+)/i);
-    return dtoMatch ? dtoMatch[1] : "";
+  // 🎯 Selección de Unidad Funcional (nuevo modelo consistente - Fase 2)
+  const [unidadesDisponibles, setUnidadesDisponibles] = useState<UnidadFuncional[]>([]);
+  const [cargandoUnidades, setCargandoUnidades] = useState<boolean>(false);
+  const [unidadIdSeleccionada, setUnidadIdSeleccionada] = useState<string>(() => {
+    const rawUnidadId = usuarioEditando?.unidadId;
+    return typeof rawUnidadId === "string" ? rawUnidadId : "";
   });
 
   // Parseo inicial del teléfono
@@ -89,26 +77,22 @@ export default function FormAltaUsuario({
    * Detección de cambios sin guardar
    * ------------------------------------------------------------ */
 
-const [valoresIniciales] = useState(() => ({
-  name: usuarioEditando?.name || "",
-  email: usuarioEditando?.email || "",
-  role: (usuarioEditando?.role || "propietario") as Rol,
-  uf,
-  piso,
-  dto,
-  codigoPais,
-  telefonoLocal,
-}));
+  const [valoresIniciales] = useState(() => ({
+    name: usuarioEditando?.name || "",
+    email: usuarioEditando?.email || "",
+    role: (usuarioEditando?.role || "propietario") as Rol,
+    unidadId: unidadIdSeleccionada,
+    codigoPais,
+    telefonoLocal,
+  }));
 
-const tieneCambios =
-  name !== valoresIniciales.name ||
-  email !== valoresIniciales.email ||
-  role !== valoresIniciales.role ||
-  uf !== valoresIniciales.uf ||
-  piso !== valoresIniciales.piso ||
-  dto !== valoresIniciales.dto ||
-  codigoPais !== valoresIniciales.codigoPais ||
-  telefonoLocal !== valoresIniciales.telefonoLocal;
+  const tieneCambios =
+    name !== valoresIniciales.name ||
+    email !== valoresIniciales.email ||
+    role !== valoresIniciales.role ||
+    unidadIdSeleccionada !== valoresIniciales.unidadId ||
+    codigoPais !== valoresIniciales.codigoPais ||
+    telefonoLocal !== valoresIniciales.telefonoLocal;
 
   /**
    * Intenta cerrar el drawer. Si hay cambios sin guardar, muestra el
@@ -166,6 +150,40 @@ const tieneCambios =
     };
   }, [modalAbierto, loading, mostrarConfirmarCierre, intentarCerrar]);
 
+  // 🎯 Cargar unidades disponibles al abrir el modal (Fase 2)
+  useEffect(() => {
+    if (!modalAbierto) return;
+
+    let activo = true;
+    const cargarUnidades = async () => {
+      setCargandoUnidades(true);
+      try {
+        const data = await unidadService.getAll();
+        if (!activo) return;
+        if (data.ok && data.unidades) {
+          // Ordenar por piso (numérico) y luego departamento (alfabético)
+          const ordenadas = [...data.unidades].sort((a, b) => {
+            const pisoA = parseInt(a.piso, 10);
+            const pisoB = parseInt(b.piso, 10);
+            if (!isNaN(pisoA) && !isNaN(pisoB) && pisoA !== pisoB) return pisoA - pisoB;
+            return a.departamento.localeCompare(b.departamento);
+          });
+          setUnidadesDisponibles(ordenadas);
+        }
+      } catch (err) {
+        console.error("Error al cargar unidades:", err);
+      } finally {
+        if (activo) setCargandoUnidades(false);
+      }
+    };
+
+    void cargarUnidades();
+
+    return () => {
+      activo = false;
+    };
+  }, [modalAbierto]);
+
   if (!modalAbierto) return null;
 
   const manejarSubmit = async (e: React.FormEvent) => {
@@ -175,9 +193,6 @@ const tieneCambios =
     setErrorForm(null);
     const nombreLimpio = name.trim();
     const emailLimpio = email.trim().toLowerCase();
-    const ufLimpia = uf.trim();
-    const pisoLimpio = piso.trim();
-    const dtoLimpio = dto.trim();
     const codPaisLimpio = codigoPais.trim();
     const telLocalLimpio = telefonoLocal.trim();
 
@@ -203,11 +218,14 @@ const tieneCambios =
 
     setLoading(true);
 
-    const partesUf: string[] = [];
-    if (ufLimpia) partesUf.push(`UF ${ufLimpia}`);
-    if (pisoLimpio) partesUf.push(`Piso ${pisoLimpio}`);
-    if (dtoLimpio) partesUf.push(`Dto ${dtoLimpio}`);
-    const ufCompuesta = partesUf.join(" ");
+    // 🎯 Derivar el texto legacy de UF a partir de la unidad seleccionada
+    const unidadSeleccionada = unidadIdSeleccionada
+      ? unidadesDisponibles.find((u) => u._id === unidadIdSeleccionada)
+      : null;
+
+    const ufCompuesta = unidadSeleccionada
+      ? `Piso ${unidadSeleccionada.piso} Depto ${unidadSeleccionada.departamento}`
+      : "";
 
     let telUnificado = "";
     if (telLocalLimpio) {
@@ -226,6 +244,7 @@ const tieneCambios =
           email: emailLimpio,
           role,
           unidadFuncional: ufCompuesta,
+          unidadId: unidadIdSeleccionada || null,
           telefono: telUnificado,
         };
         const data = await userService.update(usuarioEditando._id, payload);
@@ -242,6 +261,7 @@ const tieneCambios =
           email: emailLimpio,
           role,
           unidadFuncional: ufCompuesta,
+          unidadId: unidadIdSeleccionada || null,
           telefono: telUnificado,
         };
         const data = await userService.create(payload);
@@ -367,25 +387,43 @@ const tieneCambios =
                   </select>
                 </div>
 
-                {/* Grilla Datos de la Unidad Funcional */}
-                <div className="grid grid-cols-3 gap-3">
-                  <div>
-                    <label htmlFor="uf" className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">U. Funcional</label>
-                    <div className="relative">
-                      <span className="absolute inset-y-0 left-0 flex items-center pl-2.5 text-slate-400"><HiOutlineOfficeBuilding className="w-3.5 h-3.5" /></span>
-                      <input id="uf" disabled={loading} type="text" value={uf} onChange={(e) => setUf(e.target.value)} placeholder="Ej. 12" className="w-full pl-8 pr-2 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:border-slate-900 transition disabled:bg-slate-50 disabled:text-slate-400" />
-                    </div>
+                {/* Selector de Unidad Funcional (Opción B: mostrar todas con estado) */}
+                <div>
+                  <label htmlFor="unidadId" className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Unidad Funcional
+                  </label>
+                  <div className="relative">
+                    <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400 pointer-events-none">
+                      <HiOutlineOfficeBuilding className="w-4 h-4" />
+                    </span>
+                    <select
+                      id="unidadId"
+                      disabled={loading || cargandoUnidades}
+                      value={unidadIdSeleccionada}
+                      onChange={(e) => setUnidadIdSeleccionada(e.target.value)}
+                      className="w-full pl-9 pr-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:border-slate-900 transition appearance-none cursor-pointer disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
+                    >
+                      <option value="">— Sin unidad asignada —</option>
+                      {unidadesDisponibles.map((u) => {
+                        const propietario = typeof u.propietario === "object" && u.propietario !== null ? u.propietario : null;
+                        const inquilino = typeof u.inquilino === "object" && u.inquilino !== null ? u.inquilino : null;
+                        let sufijo = "";
+                        if (inquilino) sufijo = ` — Ocupada por ${inquilino.name}`;
+                        else if (propietario) sufijo = ` — Propietario: ${propietario.name}`;
+                        return (
+                          <option key={u._id} value={u._id}>
+                            Piso {u.piso} — Depto {u.departamento}{sufijo}
+                          </option>
+                        );
+                      })}
+                    </select>
                   </div>
-
-                  <div>
-                    <label htmlFor="piso" className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Piso</label>
-                    <input id="piso" disabled={loading} type="text" value={piso} onChange={(e) => setPiso(e.target.value)} placeholder="Ej. 3" className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:border-slate-900 transition disabled:bg-slate-50 disabled:text-slate-400" />
-                  </div>
-
-                  <div>
-                    <label htmlFor="dto" className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Depto</label>
-                    <input id="dto" disabled={loading} type="text" value={dto} onChange={(e) => setDto(e.target.value)} placeholder="Ej. B" className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:border-slate-900 transition disabled:bg-slate-50 disabled:text-slate-400" />
-                  </div>
+                  {cargandoUnidades && (
+                    <p className="mt-1 text-[10px] text-slate-400 italic">Cargando unidades disponibles...</p>
+                  )}
+                  {!cargandoUnidades && unidadesDisponibles.length === 0 && (
+                    <p className="mt-1 text-[10px] text-amber-600 italic">No hay unidades funcionales cargadas todavía.</p>
+                  )}
                 </div>
 
                 {/* Grilla para Teléfono */}

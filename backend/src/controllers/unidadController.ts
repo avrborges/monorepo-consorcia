@@ -32,10 +32,6 @@ interface ParamsId {
  * HELPER: Serializar mensaje de error de forma segura
  * ============================================================ */
 
-/**
- * `catch (error)` viene tipado como `unknown` en TS strict.
- * Este helper extrae el mensaje de manera segura sin romper el tipado.
- */
 const obtenerMensajeError = (error: unknown): string => {
   if (error instanceof Error) return error.message;
   return String(error);
@@ -74,7 +70,6 @@ export const crearUnidad = async (
   try {
     const { piso, departamento, coeficiente, estadoOcupacion } = req.body;
 
-    // Validación estricta de campos obligatorios
     if (!piso || !departamento) {
       return res.status(400).json({
         ok: false,
@@ -82,7 +77,6 @@ export const crearUnidad = async (
       });
     }
 
-    // Comprobamos duplicados en el mismo piso/departamento para evitar inconsistencias
     const unidadExistente = await UnidadFuncional.findOne({ piso, departamento });
     if (unidadExistente) {
       return res.status(400).json({
@@ -91,7 +85,6 @@ export const crearUnidad = async (
       });
     }
 
-    // Instanciamos el documento
     const nuevaUnidad = new UnidadFuncional({
       piso,
       departamento,
@@ -118,7 +111,6 @@ export const crearUnidad = async (
       },
     });
 
-    // Retornamos la unidad creada con éxito para que impacte directo en el plano del frontend
     return res.status(201).json({
       ok: true,
       msg: "Unidad funcional dada de alta con éxito.",
@@ -200,6 +192,58 @@ export const vincularHabitantes = async (
       .populate("propietario", "name email telefono role")
       .populate("inquilino", "name email telefono role");
 
+    // 🎯 Sincronizar user.unidadId Y user.unidadFuncional (Fase 3 + fix legacy)
+    //    - Los que ahora están vinculados → unidadId = unidad._id + texto derivado
+    //    - Los que estaban vinculados y ya no → unidadId = null + unidadFuncional vacío
+    //    - Los que estaban y siguen → sin cambios
+    const unidadIdStr = unidad._id.toString();
+    const ufTextoDerivado = `Piso ${unidad.piso} Depto ${unidad.departamento}`;
+
+    interface CambioUser {
+      unidadId: string | null;
+      unidadFuncional: string;
+    }
+    const cambiosDeUsers = new Map<string, CambioUser>();
+
+    // Nuevos vinculados apuntan a esta unidad + texto derivado
+    if (propietarioId) {
+      cambiosDeUsers.set(propietarioId, {
+        unidadId: unidadIdStr,
+        unidadFuncional: ufTextoDerivado,
+      });
+    }
+    if (inquilinoId) {
+      cambiosDeUsers.set(inquilinoId, {
+        unidadId: unidadIdStr,
+        unidadFuncional: ufTextoDerivado,
+      });
+    }
+
+    // Set de nuevos IDs para saber quién sigue vinculado
+    const nuevosIds = new Set(
+      [propietarioId, inquilinoId].filter((idStr): idStr is string => Boolean(idStr))
+    );
+
+    // Anteriores que ya no están → limpiar ambos campos
+    if (propietarioAnteriorId && !nuevosIds.has(propietarioAnteriorId)) {
+      cambiosDeUsers.set(propietarioAnteriorId, { unidadId: null, unidadFuncional: "" });
+    }
+    if (inquilinoAnteriorId && !nuevosIds.has(inquilinoAnteriorId)) {
+      cambiosDeUsers.set(inquilinoAnteriorId, { unidadId: null, unidadFuncional: "" });
+    }
+
+    // Ejecutar todos los updates en paralelo
+    if (cambiosDeUsers.size > 0) {
+      await Promise.all(
+        Array.from(cambiosDeUsers.entries()).map(([userId, cambio]) =>
+          User.findByIdAndUpdate(userId, {
+            unidadId: cambio.unidadId,
+            unidadFuncional: cambio.unidadFuncional,
+          })
+        )
+      );
+    }
+
     // 🎯 Registrar acción en el Log de Auditoría con IDs + nombres snapshot (INMUTABLE)
     await registrarLog({
       req,
@@ -250,7 +294,6 @@ export const eliminarUnidad = async (
   try {
     const { id } = req.params;
 
-    // Buscamos si la unidad existe
     const unidad = await UnidadFuncional.findById(id);
     if (!unidad) {
       return res.status(404).json({
@@ -293,6 +336,13 @@ export const eliminarUnidad = async (
         : null,
     };
 
+    // 🎯 Sincronización: limpiar user.unidadId Y user.unidadFuncional de todos
+    //    los usuarios vinculados a esta UF (Fase 3.2 — consistencia bidireccional)
+    await User.updateMany(
+      { unidadId: unidad._id },
+      { $set: { unidadId: null, unidadFuncional: "" } }
+    );
+
     // Eliminamos la unidad
     await UnidadFuncional.findByIdAndDelete(id);
 
@@ -311,7 +361,7 @@ export const eliminarUnidad = async (
     return res.status(200).json({
       ok: true,
       msg: "Unidad funcional eliminada con éxito.",
-      idEliminado: id, // Retornamos el id para facilitar el filtrado del estado en React
+      idEliminado: id,
     });
   } catch (error) {
     return res.status(500).json({
