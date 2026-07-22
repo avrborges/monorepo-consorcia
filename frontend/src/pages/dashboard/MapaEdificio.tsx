@@ -29,15 +29,18 @@ import type { Persona, UnidadFuncional } from "@shared/types";
 
 const STORAGE_KEY_UNIDAD_SELECCIONADA = "consorcia_mapa_unidad_seleccionada";
 
-/**
- * En este contexto SIEMPRE recibimos unidades populadas desde el backend
- * (con `.populate("propietario")` y `.populate("inquilino")`), así que
- * refinamos el tipo para tratar propietario/inquilino como Persona directa.
- */
+// 🎯 Tolerancia para validar coeficiente total (0.01%)
+const COEFICIENTE_TOLERANCIA = 0.0001;
+
 type UnidadPopulada = Omit<UnidadFuncional, "propietario" | "inquilino"> & {
   propietario?: Persona | null;
   inquilino?: Persona | null;
 };
+
+/* ============================================================
+ * HELPERS
+ * ============================================================ */
+
 
 /* ============================================================
  * SUBCOMPONENTE: DetalleUnidad
@@ -178,7 +181,6 @@ DetalleUnidad.displayName = "DetalleUnidad";
  * COMPONENTE PRINCIPAL
  * ============================================================ */
 export default function MapaEdificio() {
-  // 🎯 Título dinámico de la pestaña
   useDocumentTitle("Unidades funcionales");
 
   const [unidades, setUnidades] = useState<UnidadPopulada[]>([]);
@@ -187,26 +189,21 @@ export default function MapaEdificio() {
   const [unidadSeleccionada, setUnidadSeleccionada] = useState<UnidadPopulada | null>(null);
   const [eliminandoUnidad, setEliminandoUnidad] = useState<boolean>(false);
 
-  // Estados para el alta de nueva unidad
   const [mostrarFormAlta, setMostrarFormAlta] = useState<boolean>(false);
   const [nuevoPiso, setNuevoPiso] = useState<string>("");
   const [nuevoDepto, setNuevoDepto] = useState<string>("");
   const [nuevoCoeficiente, setNuevoCoeficiente] = useState<string>("0.05");
   const [creandoUnidad, setCreandoUnidad] = useState<boolean>(false);
 
-  // Estados para el Drawer de asignación de habitantes
   const [drawerAbierto, setDrawerAbierto] = useState<boolean>(false);
   const [nuevoPropietarioId, setNuevoPropietarioId] = useState<string>("");
   const [nuevoInquilinoId, setNuevoInquilinoId] = useState<string>("");
   const [guardando, setGuardando] = useState<boolean>(false);
 
-  // 🎯 Estado del modal de confirmación de cierre del drawer
   const [mostrarConfirmarCierreDrawer, setMostrarConfirmarCierreDrawer] = useState<boolean>(false);
 
-  // 🎯 Snapshot de valores iniciales del drawer para detectar cambios
   const valoresInicialesDrawer = useRef<{ propietarioId: string; inquilinoId: string } | null>(null);
 
-  // Carga de datos
   useEffect(() => {
     const controller = new AbortController();
     let activo = true;
@@ -224,7 +221,6 @@ export default function MapaEdificio() {
           const unidadesPop = dataUnidades.unidades as UnidadPopulada[];
           setUnidades(unidadesPop);
 
-          // 🎯 Restaurar unidad seleccionada desde sessionStorage
           try {
             const idPersistido = sessionStorage.getItem(STORAGE_KEY_UNIDAD_SELECCIONADA);
             if (idPersistido) {
@@ -233,9 +229,7 @@ export default function MapaEdificio() {
                 setUnidadSeleccionada(encontrada);
               }
             }
-          } catch {
-            /* silent */
-          }
+          } catch { /* silent */ }
         }
 
         if (dataUsuarios.success && dataUsuarios.users) {
@@ -257,9 +251,6 @@ export default function MapaEdificio() {
     };
   }, []);
 
-  /* ------------------------------------------------------------
-   * 🎯 Persistencia de la unidad seleccionada en sessionStorage
-   * ------------------------------------------------------------ */
   useEffect(() => {
     try {
       if (unidadSeleccionada) {
@@ -267,9 +258,7 @@ export default function MapaEdificio() {
       } else {
         sessionStorage.removeItem(STORAGE_KEY_UNIDAD_SELECCIONADA);
       }
-    } catch {
-      /* silent */
-    }
+    } catch { /* silent */ }
   }, [unidadSeleccionada]);
 
   const handleCrearUnidad = useCallback(
@@ -323,17 +312,10 @@ export default function MapaEdificio() {
     const inqInicial = unidadSeleccionada.inquilino?._id || "";
     setNuevoPropietarioId(propInicial);
     setNuevoInquilinoId(inqInicial);
-    // 🎯 Guardar snapshot para detectar cambios
-    valoresInicialesDrawer.current = {
-      propietarioId: propInicial,
-      inquilinoId: inqInicial,
-    };
+    valoresInicialesDrawer.current = { propietarioId: propInicial, inquilinoId: inqInicial };
     setDrawerAbierto(true);
   }, [unidadSeleccionada]);
 
-  /**
-   * 🎯 Detecta si hay cambios sin guardar en el drawer de habitantes.
-   */
   const drawerTieneCambios = useCallback((): boolean => {
     if (!valoresInicialesDrawer.current) return false;
     return (
@@ -342,18 +324,12 @@ export default function MapaEdificio() {
     );
   }, [nuevoPropietarioId, nuevoInquilinoId]);
 
-  /**
-   * 🎯 Intenta cerrar el drawer. Si hay cambios sin guardar,
-   * muestra el modal de confirmación.
-   */
   const intentarCerrarDrawer = useCallback(() => {
     if (guardando) return;
-
     if (drawerTieneCambios()) {
       setMostrarConfirmarCierreDrawer(true);
       return;
     }
-
     setDrawerAbierto(false);
   }, [guardando, drawerTieneCambios]);
 
@@ -399,17 +375,11 @@ export default function MapaEdificio() {
     setUnidadSeleccionada(null);
   }, []);
 
-  /* ------------------------------------------------------------
-   * 🎯 Escape para cerrar detalle o drawer (según lo que esté abierto)
-   * ------------------------------------------------------------ */
   useEffect(() => {
     const manejarEscape = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
-
-      // No hacer nada si el modal de confirmación está abierto (tiene su propio Escape)
       if (mostrarConfirmarCierreDrawer) return;
 
-      // Prioridad: drawer > detalle
       if (drawerAbierto) {
         intentarCerrarDrawer();
       } else if (unidadSeleccionada) {
@@ -419,15 +389,8 @@ export default function MapaEdificio() {
 
     document.addEventListener("keydown", manejarEscape);
     return () => document.removeEventListener("keydown", manejarEscape);
-  }, [
-    drawerAbierto,
-    unidadSeleccionada,
-    mostrarConfirmarCierreDrawer,
-    intentarCerrarDrawer,
-    handleCerrarDetalle,
-  ]);
+  }, [drawerAbierto, unidadSeleccionada, mostrarConfirmarCierreDrawer, intentarCerrarDrawer, handleCerrarDetalle]);
 
-  // Bloquear el scroll de forma limpia y responsiva
   useEffect(() => {
     const evaluarScroll = () => {
       const esPantallaPequeña = window.innerWidth < 1024;
@@ -469,9 +432,33 @@ export default function MapaEdificio() {
     });
   }, [unidades]);
 
-  /**
-   * 🎯 Genera un aria-label descriptivo para cada botón de unidad.
-   */
+  // 🎯 Mejora 2: Contadores por estado de ocupación
+  const contadoresEstado = useMemo(() => {
+    const conteo = { propietario: 0, inquilino: 0, vacio: 0 };
+    unidades.forEach((u) => {
+      if (u.inquilino) conteo.inquilino++;
+      else if (u.propietario) conteo.propietario++;
+      else conteo.vacio++;
+    });
+    return conteo;
+  }, [unidades]);
+
+  // 🎯 Mejora 1: Coeficiente total del edificio con validación
+  const coeficienteInfo = useMemo(() => {
+    const total = unidades.reduce((acc, u) => acc + (u.coeficiente || 0), 0);
+    const totalPct = total * 100;
+    const diff = 1 - total;
+    const diffPct = Math.abs(diff) * 100;
+
+    if (Math.abs(diff) < COEFICIENTE_TOLERANCIA) {
+      return { estado: "balanceado" as const, totalPct, diffPct: 0 };
+    }
+    if (diff > 0) {
+      return { estado: "falta" as const, totalPct, diffPct };
+    }
+    return { estado: "excede" as const, totalPct, diffPct };
+  }, [unidades]);
+
   const generarAriaLabelUnidad = (u: UnidadPopulada): string => {
     const ubicacion =
       u.piso === "0" || u.piso.toLowerCase() === "pb"
@@ -574,20 +561,58 @@ export default function MapaEdificio() {
               <h2 className="text-base lg:text-lg font-bold text-slate-900">Mapa de Unidades</h2>
             </div>
 
-            {/* Referencias */}
-            <div className="flex flex-wrap gap-2 mb-6 md:mb-8" role="list" aria-label="Referencias de colores del mapa">
+            {/* Referencias + Contadores + Coeficiente total */}
+            <div className="flex flex-wrap gap-2 mb-6 md:mb-8" role="list" aria-label="Referencias de colores y estado del mapa">
+              {/* 🎯 Mejora 2: Píldoras con contador */}
               <div role="listitem" className="flex items-center gap-1.5 bg-[#ecfdf5] border border-[#a7f3d0] px-2.5 py-1 rounded-full text-[9px] md:text-[10px] font-extrabold text-[#047857] uppercase tracking-wider">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#10b981]" />
-                Propietario
+                Propietario ({contadoresEstado.propietario})
               </div>
               <div role="listitem" className="flex items-center gap-1.5 bg-[#eff6ff] border border-[#bfdbfe] px-2.5 py-1 rounded-full text-[9px] md:text-[10px] font-extrabold text-[#1d4ed8] uppercase tracking-wider">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#3b82f6]" />
-                Inquilino
+                Inquilino ({contadoresEstado.inquilino})
               </div>
               <div role="listitem" className="flex items-center gap-1.5 bg-[#f8fafc] border border-[#e2e8f0] px-2.5 py-1 rounded-full text-[9px] md:text-[10px] font-extrabold text-[#64748b] uppercase tracking-wider">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#cbd5e1]" />
-                Vacío
+                Vacío ({contadoresEstado.vacio})
               </div>
+
+              {/* 🎯 Mejora 1: Coeficiente total con validación */}
+              {unidades.length > 0 && (
+                <div
+                  role="listitem"
+                  aria-label={`Coeficiente total del edificio: ${coeficienteInfo.totalPct.toFixed(2)}%${
+                    coeficienteInfo.estado === "balanceado"
+                      ? ", balanceado"
+                      : coeficienteInfo.estado === "falta"
+                      ? `, falta ${coeficienteInfo.diffPct.toFixed(2)}%`
+                      : `, excede ${coeficienteInfo.diffPct.toFixed(2)}%`
+                  }`}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[9px] md:text-[10px] font-extrabold uppercase tracking-wider border ${
+                    coeficienteInfo.estado === "balanceado"
+                      ? "bg-emerald-50 border-emerald-200 text-emerald-700"
+                      : "bg-amber-50 border-amber-200 text-amber-700"
+                  }`}
+                  title={
+                    coeficienteInfo.estado === "balanceado"
+                      ? "El coeficiente total del edificio suma exactamente 100%."
+                      : coeficienteInfo.estado === "falta"
+                      ? `El coeficiente total es del ${coeficienteInfo.totalPct.toFixed(2)}%. Faltan ${coeficienteInfo.diffPct.toFixed(2)} puntos porcentuales para llegar al 100%.`
+                      : `El coeficiente total es del ${coeficienteInfo.totalPct.toFixed(2)}%. Excede el 100% en ${coeficienteInfo.diffPct.toFixed(2)} puntos porcentuales.`
+                  }
+                >
+                  {coeficienteInfo.estado === "balanceado" ? (
+                    <HiCheck className="w-3 h-3" aria-hidden="true" />
+                  ) : (
+                    <HiOutlineExclamationCircle className="w-3 h-3" aria-hidden="true" />
+                  )}
+                  <span>
+                    Coef. total: {coeficienteInfo.totalPct.toFixed(2)}%
+                    {coeficienteInfo.estado === "falta" && ` (falta ${coeficienteInfo.diffPct.toFixed(2)}%)`}
+                    {coeficienteInfo.estado === "excede" && ` (excede ${coeficienteInfo.diffPct.toFixed(2)}%)`}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -618,17 +643,32 @@ export default function MapaEdificio() {
                           clasesOcupacion = "bg-[#f8fafc] border-[#e2e8f0] text-[#64748b] border-dashed hover:bg-[#f1f5f9]";
                         }
 
+                        // 🎯 Indicador de ocupación (dot sutil en esquina)
+                        const tieneInquilino = !!u.inquilino;
+                        const tienePropietario = !!u.propietario;
+                        const claseDot = tieneInquilino
+                          ? "bg-blue-500"
+                          : tienePropietario
+                          ? "bg-emerald-500"
+                          : "";
+
                         return (
                           <button
                             key={u._id}
                             onClick={() => setUnidadSeleccionada(u)}
                             aria-label={generarAriaLabelUnidad(u)}
                             aria-pressed={esSeleccionada}
-                            className={`px-3 rounded-xl border text-xs lg:text-sm font-extrabold tracking-wide transition-all cursor-pointer flex items-center justify-center min-w-12 md:min-w-16 h-10.5 md:h-12.5 ${clasesOcupacion} ${
+                            className={`relative px-3 rounded-xl border text-xs lg:text-sm font-extrabold tracking-wide transition-all cursor-pointer flex items-center justify-center min-w-12 md:min-w-16 h-10.5 md:h-12.5 ${clasesOcupacion} ${
                               esSeleccionada ? "ring-2 ring-slate-900 ring-offset-2 scale-105" : "hover:scale-[1.02]"
                             }`}
                           >
                             {u.departamento}
+                            {claseDot && (
+                              <span
+                                aria-hidden="true"
+                                className={`absolute top-1 right-1 w-1.5 h-1.5 rounded-full ${claseDot} shadow-sm`}
+                              />
+                            )}
                           </button>
                         );
                       })}
@@ -644,7 +684,6 @@ export default function MapaEdificio() {
         <div className="w-full lg:col-span-1">
           {unidadSeleccionada ? (
             <>
-              {/* Desktop */}
               <div className="hidden lg:block lg:sticky lg:top-6 z-0 w-full shrink-0">
                 <DetalleUnidad
                   key={unidadSeleccionada._id}
@@ -656,7 +695,6 @@ export default function MapaEdificio() {
                 />
               </div>
 
-              {/* Mobile (Portal) */}
               {createPortal(
                 <div
                   className="fixed inset-x-0 bottom-0 z-110 flex items-end justify-center lg:hidden w-screen h-screen pointer-events-none"
