@@ -1,11 +1,23 @@
 // src/lib/session.ts
 
 /**
- * Capa de acceso a la sesión persistente en localStorage.
+ * Capa de acceso a la sesión del usuario.
  *
  * Este módulo es la ÚNICA fuente de verdad para leer/escribir/limpiar
  * la sesión del usuario. Todos los componentes, hooks e interceptors
- * deben consumir estos helpers en vez de acceder a localStorage directo.
+ * deben consumir estos helpers en vez de acceder a los storages directo.
+ *
+ * 🔐 SEGURIDAD (2 storages con propósitos distintos):
+ *
+ * - sessionStorage: guarda el token JWT y el usuario. Se limpia automáticamente
+ *   al cerrar la pestaña del navegador. Cumple el requerimiento de que en PCs
+ *   compartidas la sesión no persista entre reaperturas.
+ *
+ * - localStorage: guarda un flag "had_session" persistente para que el
+ *   RootHandler pueda distinguir entre:
+ *     · Primera visita del usuario → mostrar Landing/SplashScreen
+ *     · Usuario que cerró pestaña sin logout → redirect directo a /login
+ *   El flag se limpia solo con logout manual.
  *
  * ⚠️ Este archivo NO usa React. Es JavaScript puro para poder consumirse
  * desde interceptors, scripts y tests unitarios sin JSDOM.
@@ -19,39 +31,27 @@ import type { Persona, Rol } from "@shared/types";
 
 const TOKEN_KEY = "token";
 const USER_KEY = "user";
+const HAD_SESSION_KEY = "consorcia_had_session";
 
 /* ============================================================
- * TOKEN (JWT)
+ * TOKEN (JWT) — se guarda en sessionStorage
  * ============================================================ */
 
-/**
- * Obtiene el token JWT actual desde localStorage.
- * Retorna null si no hay sesión activa.
- */
 export const getToken = (): string | null => {
-  return localStorage.getItem(TOKEN_KEY);
+  return sessionStorage.getItem(TOKEN_KEY);
 };
 
-/**
- * Guarda el token JWT en localStorage.
- */
 export const setToken = (token: string): void => {
-  localStorage.setItem(TOKEN_KEY, token);
+  sessionStorage.setItem(TOKEN_KEY, token);
 };
 
 /* ============================================================
- * USUARIO (Persona)
+ * USUARIO (Persona) — se guarda en sessionStorage
  * ============================================================ */
 
-/**
- * Obtiene el usuario logueado desde localStorage.
- * Retorna null si no hay sesión o si los datos están corruptos.
- *
- * @returns El objeto `Persona` completo, o `null` si no hay sesión válida.
- */
 export const getUsuarioSesion = (): Persona | null => {
   try {
-    const userString = localStorage.getItem(USER_KEY);
+    const userString = sessionStorage.getItem(USER_KEY);
     if (!userString) return null;
     return JSON.parse(userString) as Persona;
   } catch {
@@ -59,12 +59,49 @@ export const getUsuarioSesion = (): Persona | null => {
   }
 };
 
-/**
- * Guarda el usuario en localStorage.
- * Se serializa como JSON automáticamente.
- */
 export const setUsuarioSesion = (usuario: Persona): void => {
-  localStorage.setItem(USER_KEY, JSON.stringify(usuario));
+  sessionStorage.setItem(USER_KEY, JSON.stringify(usuario));
+};
+
+/* ============================================================
+ * FLAG "HAD SESSION" — se guarda en localStorage (persistente)
+ * ============================================================ */
+
+/**
+ * Marca que el usuario tuvo una sesión activa en este dispositivo.
+ * Se llama automáticamente desde `guardarSesion` después de un login exitoso.
+ */
+export const marcarSesionPrevia = (): void => {
+  try {
+    localStorage.setItem(HAD_SESSION_KEY, "true");
+  } catch {
+    /* silent - modo incógnito puede fallar */
+  }
+};
+
+/**
+ * Limpia el flag de sesión previa.
+ * Se llama al hacer logout manual (para que la próxima vez que entre
+ * a `/` vea la Landing/SplashScreen como primera visita).
+ */
+export const limpiarSesionPrevia = (): void => {
+  try {
+    localStorage.removeItem(HAD_SESSION_KEY);
+  } catch {
+    /* silent */
+  }
+};
+
+/**
+ * Determina si el usuario tuvo sesión previa en este dispositivo.
+ * Uso: el RootHandler decide si mostrar landing/splash o redirigir a /login.
+ */
+export const tuvoSesionPrevia = (): boolean => {
+  try {
+    return localStorage.getItem(HAD_SESSION_KEY) === "true";
+  } catch {
+    return false;
+  }
 };
 
 /* ============================================================
@@ -72,21 +109,24 @@ export const setUsuarioSesion = (usuario: Persona): void => {
  * ============================================================ */
 
 /**
- * Guarda toda la sesión de una vez (token + usuario).
+ * Guarda toda la sesión de una vez (token + usuario + flag persistente).
  * Uso típico: después de un login exitoso.
  */
 export const guardarSesion = (token: string, usuario: Persona): void => {
   setToken(token);
   setUsuarioSesion(usuario);
+  marcarSesionPrevia();
 };
 
 /**
- * Limpia toda la sesión de localStorage.
- * Uso típico: logout manual o interceptor de 401.
+ * Limpia la sesión de sessionStorage (token + usuario).
+ * NO limpia el flag "had_session" — eso se hace explícitamente en el logout manual.
+ *
+ * Uso típico: interceptor de 401 (sesión expiró en backend).
  */
 export const limpiarSesion = (): void => {
-  localStorage.removeItem(TOKEN_KEY);
-  localStorage.removeItem(USER_KEY);
+  sessionStorage.removeItem(TOKEN_KEY);
+  sessionStorage.removeItem(USER_KEY);
 };
 
 /* ============================================================
@@ -126,10 +166,6 @@ export const tieneRolPermitido = (rolesPermitidos: Rol[]): boolean => {
 
 /**
  * Formatea el rol para mostrarlo en la UI (capitaliza + traduce si aplica).
- *
- * @example
- *   formatearRol("superadmin") // "Superadmin"
- *   formatearRol("consejo")    // "Consejo"
  */
 export const formatearRol = (rol: Rol): string => {
   const traducciones: Record<Rol, string> = {

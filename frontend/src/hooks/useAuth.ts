@@ -1,10 +1,11 @@
 // src/hooks/useAuth.ts
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 
 import {
   getUsuarioSesion,
   getToken,
   limpiarSesion,
+  limpiarSesionPrevia,
 } from "@/lib/session";
 
 import type { Persona, Rol } from "@shared/types";
@@ -35,7 +36,7 @@ export interface UseAuthResult {
    */
   tieneRol: (rolesPermitidos: Rol[]) => boolean;
   /**
-   * Cierra la sesión (limpia localStorage) y redirige a /login.
+   * Cierra la sesión (limpia sessionStorage + flag) y redirige a /login.
    */
   logout: () => void;
 }
@@ -50,8 +51,13 @@ export interface UseAuthResult {
  * Consume los helpers puros de `lib/session.ts` y provee estado
  * reactivo listo para usar en componentes React.
  *
- * Se sincroniza automáticamente entre pestañas del navegador
- * escuchando el evento `storage` de la Web API.
+ * 🔐 SEGURIDAD: La sesión se persiste en sessionStorage (no localStorage),
+ * lo que significa que se limpia automáticamente al cerrar la pestaña.
+ *
+ * ⚠️ NOTA: A partir del cambio a sessionStorage, cada pestaña tiene su
+ * propia sesión independiente. El multi-tab sync (evento `storage`) queda
+ * desactivado por diseño del navegador — sessionStorage no dispara ese
+ * evento cross-tab.
  *
  * @example
  *   const { usuario, rol, esAdmin, logout } = useAuth();
@@ -59,31 +65,20 @@ export interface UseAuthResult {
  *   <button onClick={logout}>Cerrar sesión</button>
  */
 export function useAuth(): UseAuthResult {
-  // Estado reactivo inicializado desde localStorage
+  // Estado reactivo inicializado desde sessionStorage
   const [usuario, setUsuario] = useState<Persona | null>(() => getUsuarioSesion());
   const [token, setTokenState] = useState<string | null>(() => getToken());
 
   /**
-   * Sincroniza el estado con localStorage.
-   * Se dispara al abrir/cerrar sesión en otra pestaña del navegador.
-   */
-  useEffect(() => {
-    const sincronizar = () => {
-      setUsuario(getUsuarioSesion());
-      setTokenState(getToken());
-    };
-
-    window.addEventListener("storage", sincronizar);
-    return () => window.removeEventListener("storage", sincronizar);
-  }, []);
-
-  /**
    * Cierra la sesión limpiamente y redirige a /login.
    *
-   * Uso: <button onClick={logout}>Cerrar sesión</button>
+   * Además de limpiar la sesión activa, borra el flag "had_session" para que
+   * si el usuario vuelve a entrar a `/`, vea la Landing/SplashScreen como
+   * primera visita (empieza de cero).
    */
   const logout = useCallback(() => {
     limpiarSesion();
+    limpiarSesionPrevia();
     setUsuario(null);
     setTokenState(null);
     window.location.href = "/login";

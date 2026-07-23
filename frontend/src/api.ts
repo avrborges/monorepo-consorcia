@@ -29,11 +29,11 @@ const api = axios.create({
  * ============================================================ */
 
 /**
- * REQUEST: adjunta el token JWT si está disponible en localStorage.
+ * REQUEST: adjunta el token JWT si está disponible en sessionStorage.
  */
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem("token");
+    const token = sessionStorage.getItem("token");
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -64,7 +64,7 @@ api.interceptors.response.use(
         rutaActual.startsWith("/reset-password");
 
       if (!esRutaPublicaAuth) {
-        // 🎯 Guardamos la ruta destino para volver después del login
+        // 🎯 Guardamos la ruta destino para volver después del re-login
         sessionStorage.setItem("redirect_after_login", rutaActual);
 
         limpiarSesion();
