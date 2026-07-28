@@ -38,11 +38,43 @@ const obtenerMensajeError = (error: unknown): string => {
 };
 
 /* ============================================================
- * MÉTODO: Obtener todas las unidades funcionales populando habitantes
+ * HELPER: Validar que exista un consorcio activo en la sesión
+ * ============================================================
+ *
+ * Todos los handlers de unidades operan dentro del consorcio activo
+ * (incluido el super_admin_global, que opera sobre el consorcio que
+ * eligió en el selector — Opción A del diseño multi-tenant).
+ *
+ * Recibe una interface mínima (solo `activeConsorcioId`) para no depender
+ * de los generics del tipo `Request` de Express. Esto evita conflictos
+ * cuando los handlers tipan `Request<ParamsId, ...>` o `Request<unknown, ...>`.
+ *
+ * Retorna el consorcioId como string, o null si no está presente.
+ */
+interface RequestConConsorcio {
+  activeConsorcioId?: string;
+}
+
+const obtenerConsorcioActivo = (req: RequestConConsorcio): string | null => {
+  return req.activeConsorcioId || null;
+};
+
+/* ============================================================
+ * MÉTODO: Obtener las unidades funcionales del consorcio activo
  * ============================================================ */
-export const getUnidades = async (_req: Request, res: Response) => {
+export const getUnidades = async (req: Request, res: Response) => {
   try {
-    const unidades = await UnidadFuncional.find()
+    const consorcioId = obtenerConsorcioActivo(req);
+
+    if (!consorcioId) {
+      return res.status(403).json({
+        ok: false,
+        msg: "No hay un consorcio activo en tu sesión.",
+      });
+    }
+
+    // 🆕 Scope multi-tenant (Fase M2.8.2): solo UF del consorcio activo
+    const unidades = await UnidadFuncional.find({ consorcioId })
       .populate("propietario", "name email telefono")
       .populate("inquilino", "name email telefono")
       .sort({ piso: 1, departamento: 1 });
@@ -70,6 +102,14 @@ export const crearUnidad = async (
   try {
     const { piso, departamento, coeficiente, estadoOcupacion } = req.body;
 
+    const consorcioId = obtenerConsorcioActivo(req);
+    if (!consorcioId) {
+      return res.status(403).json({
+        ok: false,
+        msg: "No hay un consorcio activo en tu sesión.",
+      });
+    }
+
     if (!piso || !departamento) {
       return res.status(400).json({
         ok: false,
@@ -77,15 +117,21 @@ export const crearUnidad = async (
       });
     }
 
-    const unidadExistente = await UnidadFuncional.findOne({ piso, departamento });
+    // 🆕 Scope multi-tenant: la unicidad de "Piso X Depto Y" es POR CONSORCIO
+    const unidadExistente = await UnidadFuncional.findOne({
+      consorcioId,
+      piso,
+      departamento,
+    });
     if (unidadExistente) {
       return res.status(400).json({
         ok: false,
-        msg: `La unidad ${piso}° "${departamento}" ya se encuentra registrada.`,
+        msg: `La unidad ${piso}° "${departamento}" ya se encuentra registrada en este consorcio.`,
       });
     }
 
     const nuevaUnidad = new UnidadFuncional({
+      consorcioId, // 🆕 obligatorio (Fase M2.5)
       piso,
       departamento,
       coeficiente: coeficiente || 0,
@@ -136,12 +182,42 @@ export const vincularHabitantes = async (
   const { propietarioId, inquilinoId } = req.body;
 
   try {
+    const consorcioId = obtenerConsorcioActivo(req);
+    if (!consorcioId) {
+      return res.status(403).json({
+        ok: false,
+        msg: "No hay un consorcio activo en tu sesión.",
+      });
+    }
+
+    // 🛡️ Validación defensiva de ObjectIds
+    if (propietarioId && !Types.ObjectId.isValid(propietarioId)) {
+      return res.status(400).json({
+        ok: false,
+        msg: "El ID del propietario no tiene un formato válido.",
+      });
+    }
+    if (inquilinoId && !Types.ObjectId.isValid(inquilinoId)) {
+      return res.status(400).json({
+        ok: false,
+        msg: "El ID del inquilino no tiene un formato válido.",
+      });
+    }
+
     const unidad = await UnidadFuncional.findById(id);
 
     if (!unidad) {
       return res.status(404).json({
         ok: false,
         msg: "Unidad funcional no encontrada.",
+      });
+    }
+
+    // 🆕 Scope multi-tenant: la UF debe pertenecer al consorcio activo
+    if (unidad.consorcioId?.toString() !== consorcioId) {
+      return res.status(403).json({
+        ok: false,
+        msg: "Esta unidad funcional no pertenece a tu consorcio activo.",
       });
     }
 
@@ -193,9 +269,6 @@ export const vincularHabitantes = async (
       .populate("inquilino", "name email telefono role");
 
     // 🎯 Sincronizar user.unidadId Y user.unidadFuncional (Fase 3 + fix legacy)
-    //    - Los que ahora están vinculados → unidadId = unidad._id + texto derivado
-    //    - Los que estaban vinculados y ya no → unidadId = null + unidadFuncional vacío
-    //    - Los que estaban y siguen → sin cambios
     const unidadIdStr = unidad._id.toString();
     const ufTextoDerivado = `Piso ${unidad.piso} Depto ${unidad.departamento}`;
 
@@ -294,11 +367,27 @@ export const eliminarUnidad = async (
   try {
     const { id } = req.params;
 
+    const consorcioId = obtenerConsorcioActivo(req);
+    if (!consorcioId) {
+      return res.status(403).json({
+        ok: false,
+        msg: "No hay un consorcio activo en tu sesión.",
+      });
+    }
+
     const unidad = await UnidadFuncional.findById(id);
     if (!unidad) {
       return res.status(404).json({
         ok: false,
         msg: "La unidad funcional no existe o ya fue eliminada.",
+      });
+    }
+
+    // 🆕 Scope multi-tenant: la UF debe pertenecer al consorcio activo
+    if (unidad.consorcioId?.toString() !== consorcioId) {
+      return res.status(403).json({
+        ok: false,
+        msg: "Esta unidad funcional no pertenece a tu consorcio activo.",
       });
     }
 

@@ -2,6 +2,8 @@
 import mongoose, { Schema, Model, HydratedDocument, Types } from "mongoose";
 import bcrypt from "bcryptjs";
 
+import type { RolGlobal } from "@shared/types";
+
 /* ============================================================
  * TIPOS Y CONSTANTES
  * ============================================================ */
@@ -25,6 +27,9 @@ const ROLES_VALIDOS: RolUsuario[] = [
 
 const ESTADOS_VALIDOS: EstadoUsuario[] = ["activo", "inactivo", "pendiente"];
 
+// 🆕 Fase M2.1: roles globales del sistema
+const ROLES_GLOBALES_VALIDOS: RolGlobal[] = ["user", "super_admin_global"];
+
 const REGEX_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /* ============================================================
@@ -42,6 +47,17 @@ export interface IUser {
   role: RolUsuario;
 
   /**
+   * 🆕 Rol GLOBAL del sistema (Fase M2.5 - obligatorio).
+   *
+   * - `user`: usuario normal, cuyo acceso depende de sus Membresias activas.
+   * - `super_admin_global`: dueño de la administradora, bypasea el scope
+   *   de consorcio y puede ver todos los tenants. Se crea solo por seed manual.
+   *
+   * Default: `"user"`.
+   */
+  rolGlobal: RolGlobal;
+
+  /**
    * 🔴 DEPRECADO — Campo legacy de texto libre.
    * Se mantiene por compatibilidad durante la migración.
    * A eliminar en Fase 6 del sprint "Consistencia Usuarios ↔ Unidades".
@@ -49,9 +65,12 @@ export interface IUser {
   unidadFuncional: string;
 
   /**
-   * 🆕 Referencia a la Unidad Funcional a la que está vinculado el usuario.
-   * `null` para usuarios sin unidad asignada (admins, superadmins, o usuarios
-   * propietarios/inquilinos aún no vinculados).
+   * 🔴 DEPRECADO en multi-tenant — Referencia a UF única.
+   *
+   * Con multi-tenant (Fase M5), un usuario podrá tener múltiples ocupaciones
+   * en distintos consorcios. Se migrará al modelo `Ocupacion` con historial.
+   *
+   * `null` en usuarios sin unidad asignada (admins, superadmins, etc.).
    */
   unidadId: Types.ObjectId | null;
 
@@ -127,6 +146,21 @@ const userSchema = new Schema<IUser, UserModel, IUserMethods>(
     },
 
     /*
+     * 🆕 Rol GLOBAL del sistema (Fase M2.5 - obligatorio).
+     * Default "user". Solo `super_admin_global` se crea por seed manual.
+     */
+    rolGlobal: {
+      type: String,
+      required: [true, "El rol global es obligatorio."],
+      enum: {
+        values: ROLES_GLOBALES_VALIDOS,
+        message: "El rol global no es válido",
+      },
+      default: "user",
+      index: true,
+    },
+
+    /*
      * 🔴 DEPRECADO — Campo legacy de texto libre.
      * Se mantiene por compatibilidad. Se eliminará en Fase 6.
      */
@@ -138,8 +172,9 @@ const userSchema = new Schema<IUser, UserModel, IUserMethods>(
     },
 
     /*
-     * 🆕 Referencia a la Unidad Funcional vinculada.
-     * `null` en usuarios sin unidad asignada (admins, superadmins, etc.).
+     * 🔴 DEPRECADO en multi-tenant — Referencia a UF única.
+     * Se migrará al modelo Ocupacion en Fase M5.
+     * `null` en usuarios sin unidad asignada.
      */
     unidadId: {
       type: Schema.Types.ObjectId,

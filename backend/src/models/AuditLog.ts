@@ -40,6 +40,14 @@ export interface IAuditLogDetalles extends AuditLogDetalles {}
  * Sirve como contrato del dominio para el resto del backend.
  */
 export interface IAuditLog {
+  /**
+   * 🆕 Referencia al Consorcio al que pertenece este log (Fase M2.3).
+   *
+   * Actualmente OPCIONAL para no romper logs existentes.
+   * Se hace REQUIRED en Fase M2.5 después de la migración.
+   */
+  consorcioId?: Types.ObjectId;
+
   adminId: Types.ObjectId;
   adminName: string;
   accion: AccionAuditoria;
@@ -64,6 +72,17 @@ export type AuditLogDocument = HydratedDocument<IAuditLog>;
  * ============================================================ */
 const auditLogSchema = new Schema<IAuditLog, AuditLogModel>(
   {
+    /**
+     * 🆕 Referencia al Consorcio (Fase M2.3).
+     * required: false por ahora, se cambia a true en M2.5.
+     */
+    consorcioId: {
+      type: Schema.Types.ObjectId,
+      ref: "Consorcio",
+      required: false,
+      index: true,
+    },
+
     adminId: {
       type: Schema.Types.ObjectId,
       ref: "User",
@@ -142,7 +161,7 @@ const auditLogSchema = new Schema<IAuditLog, AuditLogModel>(
 auditLogSchema.index({ timestamp: -1 });
 
 /**
- * Optimiza filtros por tipo de entidad + fecha (nuevo caso de uso).
+ * Optimiza filtros por tipo de entidad + fecha.
  * Ej: "Últimas modificaciones sobre UNIDADES en el último mes".
  */
 auditLogSchema.index({ tipoEntidad: 1, timestamp: -1 });
@@ -161,6 +180,19 @@ auditLogSchema.index({ entidadId: 1, timestamp: -1 });
  * Optimiza búsquedas por administrador.
  */
 auditLogSchema.index({ adminId: 1, timestamp: -1 });
+
+/**
+ * 🆕 Optimiza el historial scopado por consorcio (Fase M2.3).
+ * Query típica: "Últimos movimientos del consorcio X ordenados por fecha".
+ * AuditLog.find({ consorcioId }).sort({ timestamp: -1 })
+ */
+auditLogSchema.index({ consorcioId: 1, timestamp: -1 });
+
+/**
+ * 🆕 Optimiza el filtro combinado más frecuente en el HistorialAuditoria:
+ * "Logs de UNIDADES del consorcio X, ordenados por fecha reciente".
+ */
+auditLogSchema.index({ consorcioId: 1, tipoEntidad: 1, timestamp: -1 });
 
 /* ============================================================
  * EXPORT

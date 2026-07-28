@@ -20,8 +20,11 @@ import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 // 🎯 Modal de confirmación estilizado (usado en drawer habitantes)
 import ModalConfirmacion from "@/components/common/ModalConfirmacion";
 
+// 🎯 Formulario de alta de usuarios (para creación contextual desde el drawer de habitantes - Fase 4)
+import FormAltaUsuario from "./FormAltaUsuario";
+
 // 🎯 Tipos de dominio compartidos entre backend y frontend
-import type { Persona, UnidadFuncional } from "@shared/types";
+import type { Persona, Rol, UnidadFuncional } from "@shared/types";
 
 /* ============================================================
  * CONSTANTES
@@ -36,11 +39,6 @@ type UnidadPopulada = Omit<UnidadFuncional, "propietario" | "inquilino"> & {
   propietario?: Persona | null;
   inquilino?: Persona | null;
 };
-
-/* ============================================================
- * HELPERS
- * ============================================================ */
-
 
 /* ============================================================
  * SUBCOMPONENTE: DetalleUnidad
@@ -204,6 +202,10 @@ export default function MapaEdificio() {
 
   const valoresInicialesDrawer = useRef<{ propietarioId: string; inquilinoId: string } | null>(null);
 
+  // 🎯 Fase 4: Creación contextual de usuarios desde el drawer de habitantes
+  const [mostrarFormAltaUsuario, setMostrarFormAltaUsuario] = useState<boolean>(false);
+  const [rolContextoAlta, setRolContextoAlta] = useState<Rol>("propietario");
+
   useEffect(() => {
     const controller = new AbortController();
     let activo = true;
@@ -341,6 +343,50 @@ export default function MapaEdificio() {
   const cancelarCierreDrawer = useCallback(() => {
     setMostrarConfirmarCierreDrawer(false);
   }, []);
+
+  /**
+   * 🎯 Fase 4: Abre el FormAltaUsuario para crear un habitante contextual.
+   * El rol viene predeterminado según qué slot está creando el admin.
+   */
+  const abrirFormAltaUsuario = useCallback((rol: Rol) => {
+    setRolContextoAlta(rol);
+    setMostrarFormAltaUsuario(true);
+  }, []);
+
+  /**
+   * 🎯 Fase 4: Se llama cuando el FormAltaUsuario crea exitosamente un usuario.
+   * Refresca la lista + auto-selecciona en el select correspondiente.
+   */
+  const manejarUsuarioCreadoDesdeContexto = useCallback((nuevoUsuario?: Persona) => {
+    if (!nuevoUsuario) return;
+
+    // 🎯 Fase 4 fix: el backend devuelve el usuario con la propiedad `id` (no `_id`),
+    //    normalizamos aquí para que el select funcione correctamente.
+    //    Esto es un cast defensivo — el objeto real tiene `id` desde el backend.
+    const userRaw = nuevoUsuario as unknown as (Persona & { id?: string });
+    const userId = nuevoUsuario._id || userRaw.id;
+
+    if (!userId) {
+      console.error("El usuario creado no tiene ID válido:", nuevoUsuario);
+      return;
+    }
+
+    // Normalizar el usuario para que tenga _id correcto (para consistencia interna)
+    const usuarioNormalizado: Persona = {
+      ...nuevoUsuario,
+      _id: userId,
+    };
+
+    // Refrescar la lista de usuarios del sistema
+    setUsuariosSistema((prev) => [...prev, usuarioNormalizado]);
+
+    // Auto-seleccionar en el select correspondiente según el rol contexto
+    if (rolContextoAlta === "propietario") {
+      setNuevoPropietarioId(userId);
+    } else if (rolContextoAlta === "inquilino") {
+      setNuevoInquilinoId(userId);
+    }
+  }, [rolContextoAlta]);
 
   const guardarHabitantes = useCallback(
     async (e: React.FormEvent) => {
@@ -792,38 +838,60 @@ export default function MapaEdificio() {
                     <label htmlFor="drawer-propietario" className="block text-slate-700 font-bold text-xs mb-1.5 uppercase tracking-wider">
                       Propietario de la Unidad
                     </label>
-                    <select
-                      id="drawer-propietario"
-                      value={nuevoPropietarioId}
-                      onChange={(e) => setNuevoPropietarioId(e.target.value)}
-                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-900 shadow-xs"
-                    >
-                      <option value="">-- Sin Propietario / Vacío --</option>
-                      {usuariosSistema.map((user) => (
-                        <option key={user._id} value={user._id}>
-                          {user.name} ({user.email})
-                        </option>
-                      ))}
-                    </select>
+                    <div className="flex gap-2">
+                      <select
+                        id="drawer-propietario"
+                        value={nuevoPropietarioId}
+                        onChange={(e) => setNuevoPropietarioId(e.target.value)}
+                        className="flex-1 min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-900 shadow-xs"
+                      >
+                        <option value="">-- Sin Propietario / Vacío --</option>
+                        {usuariosSistema.map((user) => (
+                          <option key={user._id} value={user._id}>
+                            {user.name} ({user.email})
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => abrirFormAltaUsuario("propietario")}
+                        title="Crear un nuevo propietario"
+                        aria-label="Crear un nuevo propietario"
+                        className="shrink-0 px-3 py-2.5 text-xs font-bold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 hover:border-slate-300 rounded-xl transition cursor-pointer shadow-xs whitespace-nowrap"
+                      >
+                        + Nuevo
+                      </button>
+                    </div>
                   </div>
 
                   <div>
                     <label htmlFor="drawer-inquilino" className="block text-slate-700 font-bold text-xs mb-1.5 uppercase tracking-wider">
                       Inquilino / Ocupante (Opcional)
                     </label>
-                    <select
-                      id="drawer-inquilino"
-                      value={nuevoInquilinoId}
-                      onChange={(e) => setNuevoInquilinoId(e.target.value)}
-                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-900 shadow-xs"
-                    >
-                      <option value="">-- Sin Inquilino --</option>
-                      {usuariosSistema.map((user) => (
-                        <option key={user._id} value={user._id}>
-                          {user.name} ({user.email})
-                        </option>
-                      ))}
-                    </select>
+                    <div className="flex gap-2">
+                      <select
+                        id="drawer-inquilino"
+                        value={nuevoInquilinoId}
+                        onChange={(e) => setNuevoInquilinoId(e.target.value)}
+                        className="flex-1 min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-slate-900 shadow-xs"
+                      >
+                        <option value="">-- Sin Inquilino --</option>
+                        {usuariosSistema.map((user) => (
+                          <option key={user._id} value={user._id}>
+                            {user.name} ({user.email})
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => abrirFormAltaUsuario("inquilino")}
+                        title="Crear un nuevo inquilino"
+                        aria-label="Crear un nuevo inquilino"
+                        className="shrink-0 px-3 py-2.5 text-xs font-bold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 hover:border-slate-300 rounded-xl transition cursor-pointer shadow-xs whitespace-nowrap"
+                      >
+                        + Nuevo
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -849,6 +917,17 @@ export default function MapaEdificio() {
           </div>,
           document.body
         )}
+
+      {/* 🎯 Fase 4: FormAltaUsuario para creación contextual desde el drawer.
+          Aparece encima del drawer (z-999 > z-120) sin cambios de layout.
+          El `key` fuerza el remount al abrir para que el state interno se resetee. */}
+      <FormAltaUsuario
+        key={mostrarFormAltaUsuario ? `alta-contextual-${rolContextoAlta}` : "cerrado"}
+        modalAbierto={mostrarFormAltaUsuario}
+        onCerrar={() => setMostrarFormAltaUsuario(false)}
+        onUsuarioCreado={manejarUsuarioCreadoDesdeContexto}
+        rolPredeterminado={rolContextoAlta}
+      />  
 
       {/* Modal de confirmación de cierre del drawer con cambios sin guardar */}
       <ModalConfirmacion

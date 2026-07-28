@@ -22,6 +22,12 @@ export type EstadoOcupacion = "propietario" | "inquilino" | "vacio";
  *  - `null` cuando la unidad está vacía o sin habitante asignado.
  */
 export interface IUnidadFuncional {
+  /**
+   * 🆕 Referencia al Consorcio al que pertenece esta UF (Fase M2.5).
+   * Obligatorio — toda UF pertenece a un consorcio (tenant).
+   */
+  consorcioId: Types.ObjectId;
+
   piso: string;
   departamento: string;
   coeficiente: number;
@@ -51,6 +57,17 @@ export type UnidadFuncionalDocument = HydratedDocument<IUnidadFuncional>;
  * ============================================================ */
 const UnidadFuncionalSchema = new Schema<IUnidadFuncional, UnidadFuncionalModel>(
   {
+    /**
+     * 🆕 Referencia al Consorcio (Fase M2.5 - obligatorio).
+     * Toda UF DEBE pertenecer a un consorcio.
+     */
+    consorcioId: {
+      type: Schema.Types.ObjectId,
+      ref: "Consorcio",
+      required: [true, "El consorcio de la unidad es obligatorio."],
+      index: true,
+    },
+
     piso: {
       type: String,
       required: [true, "El piso es obligatorio."],
@@ -100,8 +117,21 @@ const UnidadFuncionalSchema = new Schema<IUnidadFuncional, UnidadFuncionalModel>
  * ÍNDICES
  * ============================================================ */
 
-// Índice compuesto único: no puede existir dos veces, por ejemplo, "Piso 2 Dpto A"
-UnidadFuncionalSchema.index({ piso: 1, departamento: 1 }, { unique: true });
+/**
+ * 🆕 Índice único scopado por consorcio (Fase M2.5).
+ *
+ * Reemplaza al índice legacy { piso, departamento } que era único
+ * globalmente. Ahora la unicidad es POR CONSORCIO: dos edificios
+ * distintos pueden tener ambos "Piso 2 Depto A" sin conflicto,
+ * pero dentro del mismo edificio no puede haber duplicados.
+ *
+ * Este índice también acelera el query más frecuente del MapaEdificio:
+ *   UnidadFuncional.find({ consorcioId }).sort({ piso: 1, departamento: 1 })
+ */
+UnidadFuncionalSchema.index(
+  { consorcioId: 1, piso: 1, departamento: 1 },
+  { unique: true }
+);
 
 /* ============================================================
  * EXPORT

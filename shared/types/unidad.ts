@@ -17,6 +17,16 @@ export type EstadoOcupacion = "propietario" | "inquilino" | "vacio";
  */
 export interface UnidadFuncional {
   _id: string;
+
+  /**
+   * 🆕 Referencia al Consorcio al que pertenece esta UF (Fase M2.2).
+   *
+   * Actualmente opcional para no romper el sistema durante la migración.
+   * Se hace obligatorio en Fase M2.5 después de que el script de
+   * migración #2 pueble este campo en todas las unidades existentes.
+   */
+  consorcioId?: string;
+
   piso: string;
   departamento: string;
   coeficiente: number;

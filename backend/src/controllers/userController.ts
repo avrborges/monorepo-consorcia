@@ -8,6 +8,8 @@ import crypto from "crypto";
 import User, { type RolUsuario } from "../models/User";
 import UnidadFuncional from "../models/UnidadFuncional";
 import AuditLog from "../models/AuditLog";
+import Membresia from "../models/Membresia";
+import Consorcio from "../models/Consorcio";
 
 import { enviarMailInvitacion, enviarEmailResetPassword } from "../services/emailService";
 import { registrarLog } from "../services/loggerService";
@@ -20,8 +22,8 @@ interface CrearUsuarioBody {
   name?: string;
   email?: string;
   role?: RolUsuario;
-  unidadFuncional?: string;   // 🔴 DEPRECADO — se mantiene por compatibilidad
-  unidadId?: string | null;   // 🆕 Nueva referencia a la UF
+  unidadFuncional?: string;
+  unidadId?: string | null;
   telefono?: string;
 }
 
@@ -39,8 +41,8 @@ interface UpdateUserBody {
   name?: string;
   email?: string;
   role?: RolUsuario;
-  unidadFuncional?: string;   // 🔴 DEPRECADO — se mantiene por compatibilidad
-  unidadId?: string | null;   // 🆕 Nueva referencia (null = desvincular)
+  unidadFuncional?: string;
+  unidadId?: string | null;
   telefono?: string;
 }
 
@@ -53,27 +55,32 @@ interface ResetPasswordBody {
   password?: string;
 }
 
+interface CambiarConsorcioBody {
+  consorcioId?: string;
+  marcarComoDefault?: boolean;
+}
+
 interface ParamsId {
   id: string;
   [key: string]: string;
 }
 
 /* ============================================================
+ * HELPER: Obtener consorcio activo de la sesión (interface mínima)
+ * ============================================================ */
+
+interface RequestConConsorcio {
+  activeConsorcioId?: string;
+}
+
+const obtenerConsorcioActivo = (req: RequestConConsorcio): string | null => {
+  return req.activeConsorcioId || null;
+};
+
+/* ============================================================
  * HELPER: Sincronizar UF ↔ User (bidireccional)
- * ============================================================
- *
- * Cierra el círculo de consistencia cuando desde el ABM de Usuarios
- * se asigna, cambia o remueve una UF. Actualiza las 2 UF afectadas
- * (la vieja de la que sale el user, la nueva a la que entra).
- *
- * Reglas de negocio:
- * - Solo `propietario` e `inquilino` ocupan ranura en la UF.
- *   Los demás roles (admin, superadmin, consejo) tienen unidadId
- *   informativo pero no ocupan ranura.
- * - Si la ranura de la UF nueva ya está ocupada por otro usuario,
- *   ese desplazado queda con `unidadId = null` (sobreescritura silenciosa).
- * - El estadoOcupacion de cada UF afectada se recalcula automáticamente.
- */
+ * ============================================================ */
+
 interface SincronizarUnidadParams {
   userId: string;
   unidadIdAnterior: string | null;
@@ -95,14 +102,12 @@ const sincronizarUnidadDesdeUser = async ({
 }: SincronizarUnidadParams): Promise<void> => {
   const cambiosDeUnidadId = new Map<string, string | null>();
 
-  // 1️⃣ Si tenía UF anterior con rol apto → liberar la ranura correspondiente
   if (unidadIdAnterior && rolOcupaRanura(roleAnterior)) {
     const ufVieja = await UnidadFuncional.findById(unidadIdAnterior);
     if (ufVieja) {
-      const campo = roleAnterior; // "propietario" o "inquilino"
+      const campo = roleAnterior;
       if (ufVieja[campo]?.toString() === userId) {
         ufVieja[campo] = null;
-        // Recalcular estadoOcupacion
         if (ufVieja.inquilino) ufVieja.estadoOcupacion = "inquilino";
         else if (ufVieja.propietario) ufVieja.estadoOcupacion = "propietario";
         else ufVieja.estadoOcupacion = "vacio";
@@ -111,18 +116,15 @@ const sincronizarUnidadDesdeUser = async ({
     }
   }
 
-  // 2️⃣ Si tiene UF nueva con rol apto → ocupar la ranura correspondiente
   if (unidadIdNueva && rolOcupaRanura(roleNueva)) {
     const ufNueva = await UnidadFuncional.findById(unidadIdNueva);
     if (ufNueva) {
-      const campo = roleNueva; // "propietario" o "inquilino"
-      // Si ya había otro usuario en esa ranura → desplazarlo
+      const campo = roleNueva;
       const desplazadoId = ufNueva[campo]?.toString();
       if (desplazadoId && desplazadoId !== userId) {
         cambiosDeUnidadId.set(desplazadoId, null);
       }
       ufNueva[campo] = new mongoose.Types.ObjectId(userId);
-      // Recalcular estadoOcupacion
       if (ufNueva.inquilino) ufNueva.estadoOcupacion = "inquilino";
       else if (ufNueva.propietario) ufNueva.estadoOcupacion = "propietario";
       else ufNueva.estadoOcupacion = "vacio";
@@ -130,8 +132,6 @@ const sincronizarUnidadDesdeUser = async ({
     }
   }
 
-  // 3️⃣ Actualizar unidadId Y unidadFuncional de los usuarios desplazados
-  //    (unidadFuncional = "" porque quedan sin unidad tras ser desplazados)
   if (cambiosDeUnidadId.size > 0) {
     await Promise.all(
       Array.from(cambiosDeUnidadId.entries()).map(([uid, value]) =>
@@ -177,17 +177,143 @@ const obtenerFrontendUrl = (req: RequestConHeaders): string => {
 };
 
 /* ============================================================
- * MÉTODO: Obtener la nómina completa de usuarios para el Administrador
+ * HELPER: Generar JWT multi-tenant (Fase M2.6.3)
  * ============================================================ */
-export const getUsers = async (_req: Request, res: Response) => {
+interface GenerarJwtParams {
+  userId: string;
+  rolGlobal: "user" | "super_admin_global";
+  activeConsorcioId: string;
+  roleEnConsorcioActivo: "superadmin" | "admin" | "consejo" | "propietario" | "inquilino";
+}
+
+const generarJwtMultiTenant = ({
+  userId,
+  rolGlobal,
+  activeConsorcioId,
+  roleEnConsorcioActivo,
+}: GenerarJwtParams): string => {
+  if (!process.env.JWT_SECRET) {
+    throw new Error("JWT_SECRET no está configurado en las variables de entorno.");
+  }
+
+  const signOptions: SignOptions = { expiresIn: "24h" };
+
+  return jwt.sign(
+    {
+      id: userId,
+      rolGlobal,
+      activeConsorcioId,
+      roleEnConsorcioActivo,
+    },
+    process.env.JWT_SECRET,
+    signOptions
+  );
+};
+
+/* ============================================================
+ * HELPER: Mapear membresía a shape del selector post-login
+ * ============================================================ */
+
+interface MembresiaConConsorcioPopulado {
+  _id: mongoose.Types.ObjectId;
+  role: string;
+  esDefault: boolean;
+  consorcioId: {
+    _id: mongoose.Types.ObjectId;
+    nombre: string;
+    direccion: string;
+    activo: boolean;
+  } | null;
+}
+
+const mapearMembresiaParaSelector = (m: MembresiaConConsorcioPopulado) => {
+  const consorcio = m.consorcioId;
+  if (!consorcio) {
+    throw new Error("Membresía sin consorcio populado (bug de datos).");
+  }
+  return {
+    _id: m._id.toString(),
+    role: m.role,
+    esDefault: m.esDefault,
+    consorcio: {
+      _id: consorcio._id.toString(),
+      nombre: consorcio.nombre,
+      direccion: consorcio.direccion,
+    },
+  };
+};
+
+/* ============================================================
+ * MÉTODO: Obtener usuarios del consorcio activo (multi-tenant)
+ * ============================================================
+ *
+ * 🆕 Fase M2.8.3: en vez de devolver todos los usuarios, devuelve solo
+ * los que tienen membresía ACTIVA en el consorcio activo. Además,
+ * sobreescribe el `role` de cada usuario con el rol de SU membresía en
+ * este consorcio (Opción A: el rol es contextual al consorcio).
+ */
+export const getUsers = async (req: Request, res: Response) => {
   try {
-    const users = await User.find({})
+    const consorcioId = obtenerConsorcioActivo(req);
+    if (!consorcioId) {
+      return res.status(403).json({
+        success: false,
+        message: "No hay un consorcio activo en tu sesión.",
+      });
+    }
+
+    // 1. Traer membresías activas del consorcio activo
+    const membresias = await Membresia.find({
+      consorcioId,
+      estado: "activa",
+    });
+
+    if (membresias.length === 0) {
+      return res.status(200).json({
+        success: true,
+        users: [],
+      });
+    }
+
+    // 2. Map de userId → rol en ESTE consorcio (Opción A)
+    //    Si un usuario tiene múltiples membresías en el mismo consorcio,
+    //    se prioriza el rol "mayor" según jerarquía.
+    const jerarquia: Record<string, number> = {
+      superadmin: 5,
+      admin: 4,
+      consejo: 3,
+      propietario: 2,
+      inquilino: 1,
+    };
+
+    const rolePorUserId = new Map<string, RolUsuario>();
+    membresias.forEach((m) => {
+      const uid = m.userId.toString();
+      const rolExistente = rolePorUserId.get(uid);
+      if (!rolExistente || jerarquia[m.role] > jerarquia[rolExistente]) {
+        rolePorUserId.set(uid, m.role);
+      }
+    });
+
+    // 3. Traer los usuarios correspondientes
+    const userIds = Array.from(rolePorUserId.keys());
+    const users = await User.find({ _id: { $in: userIds } })
       .select("-password")
       .sort({ createdAt: -1 });
 
+    // 4. Sobreescribir el role de cada user con el de su membresía (Opción A)
+    const usersConRolContextual = users.map((u) => {
+      const rolEnConsorcio = rolePorUserId.get(u._id.toString());
+      const userObj = u.toObject();
+      return {
+        ...userObj,
+        role: rolEnConsorcio || userObj.role,
+      };
+    });
+
     return res.status(200).json({
       success: true,
-      users,
+      users: usersConRolContextual,
     });
   } catch (error) {
     console.error("Error en getUsers:", error);
@@ -199,14 +325,26 @@ export const getUsers = async (_req: Request, res: Response) => {
 };
 
 /* ============================================================
- * MÉTODO: Registrar un nuevo usuario desde el Panel de Administración
- * ============================================================ */
+ * MÉTODO: Registrar un nuevo usuario (multi-tenant)
+ * ============================================================
+ *
+ * 🆕 Fase M2.8.3: además de crear el User, crea una Membresia activa
+ * en el consorcio activo con el rol dado (MVP simple: email único global).
+ */
 export const crearUsuario = async (
   req: Request<unknown, unknown, CrearUsuarioBody>,
   res: Response
 ) => {
   try {
     const { name, email, role, unidadFuncional, unidadId, telefono } = req.body;
+
+    const consorcioId = obtenerConsorcioActivo(req as RequestConConsorcio);
+    if (!consorcioId) {
+      return res.status(403).json({
+        success: false,
+        message: "No hay un consorcio activo en tu sesión.",
+      });
+    }
 
     if (!name || !name.trim()) {
       return res.status(400).json({
@@ -225,6 +363,7 @@ export const crearUsuario = async (
     const emailLimpio = email.trim().toLowerCase();
     const usuarioExistente = await User.findOne({ email: emailLimpio });
 
+    // MVP simple: email único global. Si ya existe → error.
     if (usuarioExistente) {
       return res.status(400).json({
         success: false,
@@ -232,7 +371,6 @@ export const crearUsuario = async (
       });
     }
 
-    // 🎯 Si se envió unidadId, verificar que la UF exista
     if (unidadId) {
       const unidadExiste = await UnidadFuncional.findById(unidadId);
       if (!unidadExiste) {
@@ -243,15 +381,12 @@ export const crearUsuario = async (
       }
     }
 
-    // 1. Generar token de 64 caracteres y vencimiento de 24 hs
     const token = crypto.randomBytes(32).toString("hex");
-
     const expiracion = new Date();
     expiracion.setHours(expiracion.getHours() + 24);
 
     const roleFinal = role || "propietario";
 
-    // 2. Creamos el usuario SIN contraseña
     const nuevoUsuario = new User({
       name: name.trim(),
       email: emailLimpio,
@@ -267,7 +402,15 @@ export const crearUsuario = async (
 
     await nuevoUsuario.save();
 
-    // 🎯 Sincronizar UF ↔ User (Fase 3.5)
+    // 🆕 Crear la membresía en el consorcio activo (Fase M2.8.3)
+    await Membresia.create({
+      userId: nuevoUsuario._id,
+      consorcioId,
+      role: roleFinal,
+      estado: "activa",
+      esDefault: false,
+    });
+
     if (nuevoUsuario.unidadId) {
       await sincronizarUnidadDesdeUser({
         userId: nuevoUsuario._id.toString(),
@@ -278,7 +421,6 @@ export const crearUsuario = async (
       });
     }
 
-    // 3. Armar URL de activación dinámica y disparar correo en segundo plano
     const baseUrl = obtenerFrontendUrl(req);
     const urlActivacion = `${baseUrl}/activar-cuenta?token=${encodeURIComponent(token)}`;
 
@@ -286,7 +428,6 @@ export const crearUsuario = async (
       console.error("Error al enviar mail de invitación:", err)
     );
 
-    // 4. Registrar acción en el Log de Auditoría
     await registrarLog({
       req,
       accion: "USUARIO_CREADO",
@@ -380,7 +521,6 @@ export const activarCuenta = async (
 export const toggleStatus = async (req: Request<ParamsId>, res: Response) => {
   try {
     const { id } = req.params;
-
     const usuario = await User.findById(id);
 
     if (!usuario) {
@@ -392,7 +532,6 @@ export const toggleStatus = async (req: Request<ParamsId>, res: Response) => {
 
     const nuevoEstado = usuario.estado === "inactivo" ? "activo" : "inactivo";
     usuario.estado = nuevoEstado;
-
     await usuario.save();
 
     await registrarLog({
@@ -426,7 +565,6 @@ export const toggleStatus = async (req: Request<ParamsId>, res: Response) => {
 export const eliminarUsuario = async (req: Request<ParamsId>, res: Response) => {
   try {
     const { id } = req.params;
-
     const usuarioEliminado = await User.findByIdAndDelete(id);
 
     if (!usuarioEliminado) {
@@ -464,8 +602,16 @@ export const eliminarUsuario = async (req: Request<ParamsId>, res: Response) => 
 };
 
 /* ============================================================
- * MÉTODO: Inicio de sesión
- * ============================================================ */
+ * MÉTODO: Inicio de sesión (multi-tenant)
+ * ============================================================
+ *
+ * Maneja 5 escenarios según las membresías del usuario:
+ *
+ *   A) 0 membresías activas → 403 ErrorSinMembresias
+ *   B) 1 membresía activa → 200 LoginConToken con esa membresía
+ *   C1/D1) N membresías, sin default → 200 RequiereSeleccionConsorcio
+ *   C2/D2) N membresías, con default → 200 LoginConToken con la default
+ */
 export const loginUser = async (
   req: Request<unknown, unknown, LoginBody>,
   res: Response
@@ -519,30 +665,120 @@ export const loginUser = async (
       });
     }
 
-    const signOptions: SignOptions = { expiresIn: "24h" };
+    /* ============================================================
+     * 🆕 LÓGICA MULTI-TENANT: Detectar caso A/B/C1/C2
+     * ============================================================ */
 
-    const token = jwt.sign(
-      {
-        id: userFound._id.toString(),
-        role: userFound.role,
-      },
-      process.env.JWT_SECRET,
-      signOptions
+    const membresiasRaw = await Membresia.find({
+      userId: userFound._id,
+      estado: "activa",
+    }).populate("consorcioId", "nombre direccion activo");
+
+    const membresiasValidas = membresiasRaw.filter((m) => {
+      const consorcio = m.consorcioId as unknown as {
+        _id: mongoose.Types.ObjectId;
+        activo: boolean;
+      } | null;
+      return consorcio && consorcio.activo === true;
+    });
+
+    const userPayload = {
+      _id: userFound._id.toString(),
+      name: userFound.name,
+      email: userFound.email,
+      role: userFound.role,
+      rolGlobal: userFound.rolGlobal,
+      unidadFuncional: userFound.unidadFuncional,
+      telefono: userFound.telefono,
+      estado: userFound.estado,
+      debeCambiarPassword: userFound.debeCambiarPassword,
+    };
+
+    /* CASO A: Usuario sin membresías activas */
+    if (membresiasValidas.length === 0) {
+      return res.status(403).json({
+        success: false,
+        motivo: "SIN_MEMBRESIAS",
+        message:
+          "Tu cuenta no tiene acceso a ningún consorcio activo. Contactá al administrador.",
+      });
+    }
+
+    /* CASO B: Una única membresía activa */
+    if (membresiasValidas.length === 1) {
+      const membresia = membresiasValidas[0];
+      const consorcio = membresia.consorcioId as unknown as {
+        _id: mongoose.Types.ObjectId;
+        nombre: string;
+        direccion: string;
+      };
+
+      const token = generarJwtMultiTenant({
+        userId: userFound._id.toString(),
+        rolGlobal: userFound.rolGlobal,
+        activeConsorcioId: consorcio._id.toString(),
+        roleEnConsorcioActivo: membresia.role,
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: `¡Inicio de sesión exitoso! Bienvenido, ${userFound.name}`,
+        token,
+        user: userPayload,
+        activeConsorcio: {
+          _id: consorcio._id.toString(),
+          nombre: consorcio.nombre,
+          direccion: consorcio.direccion,
+        },
+        roleEnConsorcioActivo: membresia.role,
+        rolGlobal: userFound.rolGlobal,
+      });
+    }
+
+    /* CASOS C/D: Múltiples membresías activas */
+    const membresiaDefault = membresiasValidas.find((m) => m.esDefault === true);
+
+    if (membresiaDefault) {
+      /* CASO C2/D2: Tiene default → entrar directo */
+      const consorcio = membresiaDefault.consorcioId as unknown as {
+        _id: mongoose.Types.ObjectId;
+        nombre: string;
+        direccion: string;
+      };
+
+      const token = generarJwtMultiTenant({
+        userId: userFound._id.toString(),
+        rolGlobal: userFound.rolGlobal,
+        activeConsorcioId: consorcio._id.toString(),
+        roleEnConsorcioActivo: membresiaDefault.role,
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: `¡Inicio de sesión exitoso! Bienvenido, ${userFound.name}`,
+        token,
+        user: userPayload,
+        activeConsorcio: {
+          _id: consorcio._id.toString(),
+          nombre: consorcio.nombre,
+          direccion: consorcio.direccion,
+        },
+        roleEnConsorcioActivo: membresiaDefault.role,
+        rolGlobal: userFound.rolGlobal,
+      });
+    }
+
+    /* CASO C1/D1: Sin default → mostrar selector */
+    const membresiasDisponibles = membresiasValidas.map((m) =>
+      mapearMembresiaParaSelector(m as unknown as MembresiaConConsorcioPopulado)
     );
 
     return res.status(200).json({
       success: true,
-      message: `¡Inicio de sesión exitoso! Bienvenido, ${userFound.name}`,
-      token,
-      user: {
-        name: userFound.name,
-        email: userFound.email,
-        role: userFound.role,
-        unidadFuncional: userFound.unidadFuncional,
-        telefono: userFound.telefono,
-        estado: userFound.estado,
-        debeCambiarPassword: userFound.debeCambiarPassword,
-      },
+      requiereSeleccionConsorcio: true,
+      user: userPayload,
+      rolGlobal: userFound.rolGlobal,
+      membresiasDisponibles,
     });
   } catch (error) {
     console.error("Error en loginUser:", error);
@@ -554,12 +790,11 @@ export const loginUser = async (
 };
 
 /* ============================================================
- * MÉTODO: Reenviar link de invitación a usuario pendiente
+ * MÉTODO: Reenviar link de invitación
  * ============================================================ */
 export const reenviarInvitacion = async (req: Request<ParamsId>, res: Response) => {
   try {
     const { id } = req.params;
-
     const usuario = await User.findById(id);
 
     if (!usuario) {
@@ -577,13 +812,11 @@ export const reenviarInvitacion = async (req: Request<ParamsId>, res: Response) 
     }
 
     const nuevoToken = crypto.randomBytes(32).toString("hex");
-
     const nuevaExpiracion = new Date();
     nuevaExpiracion.setHours(nuevaExpiracion.getHours() + 24);
 
     usuario.tokenActivacion = nuevoToken;
     usuario.tokenExpiracion = nuevaExpiracion;
-
     await usuario.save();
 
     const baseUrl = obtenerFrontendUrl(req);
@@ -601,8 +834,7 @@ export const reenviarInvitacion = async (req: Request<ParamsId>, res: Response) 
     console.error("Error en reenviarInvitacion:", error);
     return res.status(500).json({
       success: false,
-      message:
-        "Hubo un error interno en el servidor al intentar reenviar la invitación.",
+      message: "Hubo un error interno en el servidor al intentar reenviar la invitación.",
     });
   }
 };
@@ -627,13 +859,11 @@ export const updateUser = async (
       });
     }
 
-    // 🎯 Snapshot del estado ANTERIOR (necesario para sincronización de UF)
     const roleAnterior = usuario.role;
     const unidadIdAnterior = usuario.unidadId?.toString() || null;
 
     if (email && email.trim().toLowerCase() !== usuario.email) {
       const emailLimpio = email.trim().toLowerCase();
-
       const emailDuplicado = await User.findOne({
         email: emailLimpio,
         _id: { $ne: usuario._id },
@@ -645,7 +875,6 @@ export const updateUser = async (
           message: "El correo electrónico ya está registrado por otro usuario.",
         });
       }
-
       usuario.email = emailLimpio;
     }
 
@@ -655,8 +884,6 @@ export const updateUser = async (
       typeof unidadFuncional === "string" ? unidadFuncional : usuario.unidadFuncional;
     usuario.telefono = typeof telefono === "string" ? telefono : usuario.telefono;
 
-    // 🎯 Manejo de unidadId: si viene undefined, no se toca. Si viene null o "", se desvincula.
-    //    Si viene un string válido, se valida que la UF exista.
     if (unidadId !== undefined) {
       if (unidadId === null || unidadId === "") {
         usuario.unidadId = null;
@@ -674,7 +901,6 @@ export const updateUser = async (
 
     const usuarioActualizado = await usuario.save();
 
-    // 🎯 Sincronizar UF ↔ User si cambió unidadId o role (Fase 3.5)
     const unidadIdNueva = usuarioActualizado.unidadId?.toString() || null;
     const roleNueva = usuarioActualizado.role;
 
@@ -721,11 +947,24 @@ export const updateUser = async (
 };
 
 /* ============================================================
- * MÉTODO: Obtener historial de auditoría
- * ============================================================ */
-export const getAuditLogs = async (_req: Request, res: Response) => {
+ * MÉTODO: Obtener historial de auditoría (multi-tenant)
+ * ============================================================
+ *
+ * 🆕 Fase M2.8.3: filtra los logs por el consorcio activo.
+ */
+export const getAuditLogs = async (req: Request, res: Response) => {
   try {
-    const logs = await AuditLog.find({}).sort({ timestamp: -1 }).limit(100);
+    const consorcioId = obtenerConsorcioActivo(req);
+    if (!consorcioId) {
+      return res.status(403).json({
+        success: false,
+        message: "No hay un consorcio activo en tu sesión.",
+      });
+    }
+
+    const logs = await AuditLog.find({ consorcioId })
+      .sort({ timestamp: -1 })
+      .limit(100);
 
     return res.status(200).json({
       success: true,
@@ -743,13 +982,6 @@ export const getAuditLogs = async (_req: Request, res: Response) => {
 /* ============================================================
  * MÉTODO: Solicitar recuperación de contraseña
  * ============================================================
- *
- * Genera un token de reset y envía un email con el link.
- *
- * 🛡️ SIEMPRE responde con mensaje genérico de éxito, exista o no el email.
- *     Esto previene enumeración de usuarios (un atacante no puede
- *     distinguir "email registrado" de "email no registrado").
- *
  * Ruta pública: POST /users/olvide-password
  */
 export const olvidePassword = async (
@@ -771,7 +1003,6 @@ export const olvidePassword = async (
 
     if (usuario && usuario.estado === "activo") {
       const token = crypto.randomBytes(32).toString("hex");
-
       const expiracion = new Date();
       expiracion.setHours(expiracion.getHours() + 1);
 
@@ -806,9 +1037,6 @@ export const olvidePassword = async (
 /* ============================================================
  * MÉTODO: Confirmar reset de contraseña
  * ============================================================
- *
- * Valida el token de reset y actualiza la contraseña del usuario.
- *
  * Ruta pública: POST /users/reset-password
  */
 export const resetPassword = async (
@@ -857,11 +1085,17 @@ export const resetPassword = async (
     usuario.tokenActivacion = null;
     usuario.tokenExpiracion = null;
     usuario.debeCambiarPassword = false;
-
     await usuario.save();
 
+    // 🎯 Auditoría del reset (auto-servicio). Buscamos una membresía del
+    //    usuario para scopear el log al consorcio correspondiente.
+    const membresiaDelUser = await Membresia.findOne({
+      userId: usuario._id,
+      estado: "activa",
+    });
+
     await registrarLog({
-      req: { user: usuario },
+      req: { user: usuario, activeConsorcioId: membresiaDelUser?.consorcioId?.toString() },
       accion: "USUARIO_EDITADO",
       tipoEntidad: "USUARIO",
       entidadId: usuario._id,
@@ -880,6 +1114,119 @@ export const resetPassword = async (
     return res.status(500).json({
       success: false,
       message: "Hubo un error al intentar restablecer la contraseña.",
+    });
+  }
+};
+
+/* ============================================================
+ * MÉTODO: Cambiar consorcio activo (multi-tenant)
+ * ============================================================
+ *
+ * Permite a un usuario autenticado cambiar el consorcio con el que
+ * está trabajando, generando un JWT nuevo con `activeConsorcioId`
+ * actualizado. Opcionalmente marca ese consorcio como default.
+ *
+ * Ruta protegida: POST /users/cambiar-consorcio (cualquier user autenticado)
+ */
+export const cambiarConsorcio = async (
+  req: Request<unknown, unknown, CambiarConsorcioBody>,
+  res: Response
+) => {
+  try {
+    const { consorcioId, marcarComoDefault } = req.body;
+
+    const usuario = req.user;
+    if (!usuario) {
+      return res.status(401).json({
+        success: false,
+        message: "No autorizado. Iniciá sesión nuevamente.",
+      });
+    }
+
+    if (!consorcioId) {
+      return res.status(400).json({
+        success: false,
+        message: "El ID del consorcio es obligatorio.",
+      });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(consorcioId)) {
+      return res.status(400).json({
+        success: false,
+        message: "El ID del consorcio no tiene un formato válido.",
+      });
+    }
+
+    const userId = usuario._id.toString();
+
+    const membresia = await Membresia.findOne({
+      userId,
+      consorcioId,
+      estado: "activa",
+    }).populate("consorcioId", "nombre direccion activo");
+
+    if (!membresia) {
+      return res.status(403).json({
+        success: false,
+        message: "No tenés acceso a ese consorcio.",
+      });
+    }
+
+    const consorcio = membresia.consorcioId as unknown as {
+      _id: mongoose.Types.ObjectId;
+      nombre: string;
+      direccion: string;
+      activo: boolean;
+    };
+
+    if (!consorcio || !consorcio.activo) {
+      return res.status(403).json({
+        success: false,
+        message: "El consorcio seleccionado no está activo.",
+      });
+    }
+
+    if (marcarComoDefault === true) {
+      await Membresia.updateMany({ userId }, { esDefault: false });
+      membresia.esDefault = true;
+      await membresia.save();
+    }
+
+    const token = generarJwtMultiTenant({
+      userId,
+      rolGlobal: usuario.rolGlobal,
+      activeConsorcioId: consorcio._id.toString(),
+      roleEnConsorcioActivo: membresia.role,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: `Consorcio activo cambiado a "${consorcio.nombre}".`,
+      token,
+      user: {
+        _id: usuario._id.toString(),
+        name: usuario.name,
+        email: usuario.email,
+        role: usuario.role,
+        rolGlobal: usuario.rolGlobal,
+        unidadFuncional: usuario.unidadFuncional,
+        telefono: usuario.telefono,
+        estado: usuario.estado,
+        debeCambiarPassword: usuario.debeCambiarPassword,
+      },
+      activeConsorcio: {
+        _id: consorcio._id.toString(),
+        nombre: consorcio.nombre,
+        direccion: consorcio.direccion,
+      },
+      roleEnConsorcioActivo: membresia.role,
+      rolGlobal: usuario.rolGlobal,
+    });
+  } catch (error) {
+    console.error("Error en cambiarConsorcio:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Hubo un error al cambiar de consorcio.",
     });
   }
 };

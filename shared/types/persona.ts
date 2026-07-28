@@ -11,6 +11,8 @@
  * internos del backend (backend/src/models/User.ts).
  */
 
+import type { RolGlobal } from "./membresia";
+
 export type Rol =
   | "superadmin"
   | "admin"
@@ -43,16 +45,30 @@ export interface Persona {
   unidadFuncional?: string;
 
   /**
-   * 🆕 Referencia a la Unidad Funcional a la que está vinculado el usuario.
+   * 🔴 DEPRECADO en multi-tenant — Referencia a UF única.
    *
-   * - `null` o `undefined`: usuario sin unidad asignada (admins, superadmins,
-   *   o usuarios propietarios/inquilinos aún no vinculados)
-   * - `string`: ObjectId de la Unidad Funcional (serializado como string
-   *   por el backend antes de enviar al frontend)
+   * Se agregó en la Fase 1 del sprint mono-tenant "Consistencia
+   * Usuarios ↔ Unidades" y funciona hoy. Con el refactor multi-tenant
+   * (Fase M5), un usuario podrá tener múltiples ocupaciones en distintos
+   * consorcios, por lo que se migrará al modelo `Ocupacion`.
    *
-   * La validación de existencia se hace en el backend al crear/editar.
+   * - `null` o `undefined`: usuario sin unidad asignada.
+   * - `string`: ObjectId de la Unidad Funcional (serializado como string).
    */
   unidadId?: string | null;
+
+  /**
+   * 🆕 Rol GLOBAL del usuario en el sistema (Fase M2.1).
+   *
+   * - `user`: usuario normal — su acceso depende de sus `Membresia`s
+   *   activas en consorcios específicos.
+   * - `super_admin_global`: dueño de la administradora, ve todos los
+   *   consorcios y puede realizar ABM sobre ellos. Se crea solo por
+   *   seed manual (no desde la UI).
+   *
+   * Default: `"user"`.
+   */
+  rolGlobal?: RolGlobal;
 
   telefono?: string;
   debeCambiarPassword?: boolean;

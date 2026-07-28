@@ -39,9 +39,23 @@ export interface AuditLogDetalles {
  *
  * @field entidadId - ID de la entidad afectada (usuario o unidad)
  * @field tipoEntidad - Discriminador del tipo de entidad
+ * @field consorcioId - Consorcio al que pertenece el registro (Fase M2.3)
  */
 export interface AuditLog {
   _id: string;
+
+  /**
+   * 🆕 Consorcio al que pertenece este registro de auditoría (Fase M2.3).
+   *
+   * Actualmente opcional para no romper el sistema durante la migración.
+   * Se hace obligatorio en Fase M2.5 después de que el script de
+   * migración #2 pueble este campo en todos los logs existentes.
+   *
+   * Los superadmins solo pueden ver logs de SU consorcio.
+   * El `super_admin_global` puede ver logs de cualquier consorcio.
+   */
+  consorcioId?: string;
+
   adminId: string;
   adminName: string;
   accion: AccionAuditoria;

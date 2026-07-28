@@ -24,8 +24,21 @@ import type { Persona, Rol, UnidadFuncional } from "@shared/types";
 interface FormAltaUsuarioProps {
   modalAbierto: boolean;
   onCerrar: () => void;
-  onUsuarioCreado: () => void;
+  /**
+   * Callback tras alta o edición exitosa.
+   * En modo alta, recibe el usuario recién creado (útil para auto-seleccionarlo
+   * en contextos externos como el drawer de habitantes del MapaEdificio).
+   * En modo edición, se llama sin argumentos.
+   */
+  onUsuarioCreado: (nuevoUsuario?: Persona) => void;
   usuarioEditando?: Persona | null;
+  /**
+   * 🎯 Rol preseteado al abrir en modo alta.
+   * Útil para contextos donde ya se sabe qué rol tendrá el usuario
+   * (ej: crear propietario/inquilino desde el drawer de habitantes).
+   * En modo edición, esta prop se ignora (gana el rol del usuario existente).
+   */
+  rolPredeterminado?: Rol;
 }
 
 /* ============================================================
@@ -37,13 +50,17 @@ export default function FormAltaUsuario({
   onCerrar,
   onUsuarioCreado,
   usuarioEditando,
+  rolPredeterminado,
 }: FormAltaUsuarioProps) {
   // 🧠 Parseo inicial de datos directamente en la fase de inicialización de estados (Evita el useEffect)
   const esEdicion = Boolean(usuarioEditando);
 
   const [name, setName] = useState(() => usuarioEditando?.name || "");
   const [email, setEmail] = useState(() => usuarioEditando?.email || "");
-  const [role, setRole] = useState<Rol>(() => usuarioEditando?.role || "propietario");
+  // 🎯 Prioridad del rol inicial: usuario existente (edición) > rolPredeterminado (contexto) > default
+  const [role, setRole] = useState<Rol>(() =>
+    usuarioEditando?.role || rolPredeterminado || "propietario"
+  );
   const [errorForm, setErrorForm] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -80,7 +97,7 @@ export default function FormAltaUsuario({
   const [valoresIniciales] = useState(() => ({
     name: usuarioEditando?.name || "",
     email: usuarioEditando?.email || "",
-    role: (usuarioEditando?.role || "propietario") as Rol,
+    role: (usuarioEditando?.role || rolPredeterminado || "propietario") as Rol,
     unidadId: unidadIdSeleccionada,
     codigoPais,
     telefonoLocal,
@@ -266,8 +283,10 @@ export default function FormAltaUsuario({
         };
         const data = await userService.create(payload);
 
-        if (data.success) {
-          onUsuarioCreado();
+        if (data.success && data.user) {
+          // 🎯 Pasar el usuario creado al padre para que pueda auto-seleccionarlo
+          //    (útil en contextos como MapaEdificio → drawer de habitantes)
+          onUsuarioCreado(data.user as Persona);
           onCerrar();
         } else {
           setErrorForm("Ocurrió un error en la solicitud.");
@@ -382,6 +401,7 @@ export default function FormAltaUsuario({
                     className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:outline-none focus:border-slate-900 transition appearance-none cursor-pointer disabled:bg-slate-50 disabled:text-slate-400"
                   >
                     <option value="propietario">Propietario</option>
+                    <option value="inquilino">Inquilino</option>
                     <option value="consejo">Consejo de Administración</option>
                     <option value="admin">Administrador</option>
                   </select>
