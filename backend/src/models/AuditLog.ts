@@ -19,9 +19,13 @@ const ACCIONES_AUDITORIA: AccionAuditoria[] = [
   "UNIDAD_EDITADA",
   "UNIDAD_ELIMINADA",
   "HABITANTES_VINCULADOS",
+  "OCUPACION_CREADA",
+  "OCUPACION_CERRADA",
+  // 🆕 M6.0 — Acciones sobre consorcios
+  "CONSORCIO_EDITADO",
 ];
 
-const TIPOS_ENTIDAD: TipoEntidad[] = ["USUARIO", "UNIDAD"];
+const TIPOS_ENTIDAD: TipoEntidad[] = ["USUARIO", "UNIDAD", "CONSORCIO"];
 
 /* ============================================================
  * INTERFACES
@@ -107,7 +111,7 @@ const auditLogSchema = new Schema<IAuditLog, AuditLogModel>(
       index: true,
     },
 
-    // 🆕 Tipo de entidad afectada (USUARIO o UNIDAD)
+    // 🆕 Tipo de entidad afectada (USUARIO, UNIDAD o CONSORCIO)
     tipoEntidad: {
       type: String,
       required: [true, "El tipo de entidad es obligatorio."],
@@ -118,7 +122,7 @@ const auditLogSchema = new Schema<IAuditLog, AuditLogModel>(
       index: true,
     },
 
-    // 🔄 Renombrado de targetUserId — ahora es genérico (usuario o unidad)
+    // 🔄 Renombrado de targetUserId — ahora es genérico (usuario, unidad o consorcio)
     entidadId: {
       type: Schema.Types.ObjectId,
       required: [true, "El ID de la entidad afectada es obligatorio."],

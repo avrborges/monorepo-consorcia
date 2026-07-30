@@ -8,6 +8,7 @@ import {
   HiOutlineUserGroup,
   HiOutlineOfficeBuilding,
   HiOutlineClipboardList,
+  HiOutlineCog, // 🆕 M6.0 — Configuración del consorcio
 } from "react-icons/hi";
 import { FaSignOutAlt } from "react-icons/fa";
 
@@ -16,6 +17,9 @@ import { useAuth } from "@/hooks/useAuth";
 
 // 🎯 Hook para título dinámico de pestaña (Tanda 1 UX)
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
+
+// 🎯 Selector de consorcio del topbar (Fase M3.5)
+import SelectorConsorcio from "@/components/layout/SelectorConsorcio";
 
 /* ============================================================
  * PREFETCH AL HOVER
@@ -31,6 +35,7 @@ const CHUNK_PREFETCHERS: Record<string, () => Promise<unknown>> = {
   "/dashboard/unidades": () => import("@/pages/dashboard/MapaEdificio"),
   "/dashboard/usuarios": () => import("@/pages/dashboard/ListaUsuarios"),
   "/dashboard/auditoria": () => import("@/pages/dashboard/Auditoria"),
+  "/dashboard/configuracion": () => import("@/pages/dashboard/ConfiguracionConsorcio"), // 🆕 M6.0
 };
 
 /* ============================================================
@@ -93,12 +98,19 @@ export default function DashboardLayout() {
     });
   }
 
-  // Item exclusivo para superadmin — auditoría del sistema
+  // Items exclusivos para superadmin — auditoría del sistema y configuración
   if (esSuperAdmin) {
     menuItems.push({
       name: "Auditoría",
       path: "/dashboard/auditoria",
       icon: <HiOutlineClipboardList className="w-5 h-5" />,
+    });
+
+    // 🆕 M6.0 — Configuración / Datos del Consorcio
+    menuItems.push({
+      name: "Configuración",
+      path: "/dashboard/configuracion",
+      icon: <HiOutlineCog className="w-5 h-5" />,
     });
   }
 
@@ -225,9 +237,10 @@ export default function DashboardLayout() {
                 CONSOR<span className="text-[#fca311]">CIA</span>
               </span>
               <div className="h-4 w-px bg-slate-200 hidden sm:block" />
-              <h2 className="text-xs font-bold tracking-wider text-slate-400 uppercase hidden sm:block">
-                Panel de Control
-              </h2>
+              {/* 🆕 Selector de consorcio activo (Fase M3.5) */}
+              <div className="hidden sm:block">
+                <SelectorConsorcio />
+              </div>
             </div>
           </div>
         </header>

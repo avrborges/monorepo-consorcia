@@ -6,6 +6,7 @@ import {
   HiOutlineSearch,
   HiOutlineFilter,
   HiOutlineEye,
+  HiOutlineOfficeBuilding,
   HiChevronDown,
   HiPlus,
   HiRefresh,
@@ -16,6 +17,9 @@ import { userService } from "@/services";
 
 // 🎯 Hook de sesión centralizado (Fase 4)
 import { useAuth } from "@/hooks/useAuth";
+
+// 🎯 Hook multi-tenant (Fase M3.6 / M4) — consorcio activo, rol contextual y rol global
+import { useConsorcio } from "@/hooks/useConsorcio";
 
 // 🎯 Hook para título dinámico de pestaña (Tanda 1 UX)
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
@@ -119,6 +123,14 @@ export default function ListaUsuarios() {
   // 🎯 Sesión centralizada via useAuth
   const { esAdmin } = useAuth();
 
+  // 🎯 Multi-tenant (M4): consorcio activo. El backend ya filtra por consorcio
+  //    vía scopeConsorcio; en el frontend usamos el id del consorcio activo
+  //    como "clave de recarga" para re-fetchear cuando el usuario cambia de
+  //    consorcio desde la topbar, y su nombre para el badge del encabezado.
+  const { consorcioActivo, esSuperAdminGlobal } = useConsorcio();
+  const consorcioId = consorcioActivo?._id ?? null;
+  const consorcioNombre = consorcioActivo?.nombre ?? null;
+
   const [loading, setLoading] = useState<boolean>(esAdmin);
   const [usuarios, setUsuarios] = useState<Persona[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -177,6 +189,10 @@ export default function ListaUsuarios() {
 
   /* ------------------------------------------------------------
    * Carga inicial (usando userService con AbortController)
+   *
+   * 🎯 M4: se re-ejecuta cuando cambia `consorcioId`. Al seleccionar otro
+   *    consorcio desde la topbar, el JWT/sesión ya apunta al nuevo consorcio
+   *    y el backend devuelve únicamente los usuarios de ese consorcio.
    * ------------------------------------------------------------ */
   useEffect(() => {
     if (!esAdmin) return;
@@ -184,6 +200,11 @@ export default function ListaUsuarios() {
     const controller = new AbortController();
 
     const cargar = async () => {
+      // Al cambiar de consorcio mostramos el overlay de carga sobre la tabla
+      // (evita "parpadeos" mostrando datos del consorcio anterior).
+      // Se hace dentro de la función async para no invocar setState de forma
+      // síncrona en el cuerpo del effect (regla react-hooks/set-state-in-effect).
+      setLoading(true);
       try {
         const data = await userService.getAll(controller.signal);
 
@@ -205,7 +226,7 @@ export default function ListaUsuarios() {
     void cargar();
 
     return () => controller.abort();
-  }, [esAdmin]);
+  }, [esAdmin, consorcioId]);
 
   /* ------------------------------------------------------------
    * Recarga manual
@@ -485,6 +506,24 @@ export default function ListaUsuarios() {
             Visualizá, filtrá y controlá las cuentas activas que tienen acceso
             al ecosistema del consorcio.
           </p>
+
+          {/* 🎯 M4: Indicador del consorcio activo (contexto multi-tenant) */}
+          {consorcioNombre && (
+            <div className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-200/70 rounded-lg">
+              <HiOutlineOfficeBuilding className="w-4 h-4 text-slate-400 shrink-0" />
+              <span className="text-xs font-medium text-slate-500">
+                Consorcio activo:
+              </span>
+              <span className="text-xs font-bold text-slate-800 truncate max-w-[16rem]">
+                {consorcioNombre}
+              </span>
+              {esSuperAdminGlobal && (
+                <span className="text-[10px] font-bold uppercase tracking-wide text-teal-700 bg-teal-50 border border-teal-100 rounded px-1.5 py-0.5">
+                  Global
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-3 shrink-0 self-stretch sm:self-start lg:self-center w-full lg:w-auto justify-end">

@@ -1,5 +1,6 @@
 // src/pages/dashboard/Overview.tsx
 import { useEffect, useState } from "react";
+
 import { useAuth } from "@/hooks/useAuth";
 import { formatearRol } from "@/lib/session";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
@@ -43,6 +44,10 @@ const formatearFechaDescriptiva = (fecha: Date): string => {
 export default function Overview() {
   useDocumentTitle("Panel de Control");
   const { usuario, rol } = useAuth();
+
+  // 🎯 Nota: el contexto de consorcio activo se muestra en el topbar
+  //    (SelectorConsorcio), no aquí, para evitar redundancia y dejar el
+  //    dashboard despejado de cara a futuros widgets.
 
   // 🎯 Fecha reactiva: se actualiza si el usuario deja la app abierta
   //    y cambia el día (por ejemplo, cruza la medianoche).

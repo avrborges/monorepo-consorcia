@@ -1230,3 +1230,64 @@ export const cambiarConsorcio = async (
     });
   }
 };
+
+
+/* ============================================================
+ * MÉTODO: Obtener los consorcios del usuario autenticado
+ * ============================================================
+ *
+ * Devuelve las membresías activas del usuario con el consorcio populado.
+ * Lo consume el selector de consorcio del topbar (Fase M3.5).
+ *
+ * Ruta protegida: GET /users/mis-consorcios (cualquier user autenticado)
+ */
+export const misConsorcios = async (req: Request, res: Response) => {
+  try {
+    const usuario = req.user;
+    if (!usuario) {
+      return res.status(401).json({
+        success: false,
+        message: "No autorizado. Iniciá sesión nuevamente.",
+      });
+    }
+
+    const membresias = await Membresia.find({
+      userId: usuario._id,
+      estado: "activa",
+    }).populate("consorcioId", "nombre direccion activo");
+
+    // Mapear a shape simple, filtrando consorcios inactivos
+    const consorcios = membresias
+      .map((m) => {
+        const c = m.consorcioId as unknown as {
+          _id: mongoose.Types.ObjectId;
+          nombre: string;
+          direccion: string;
+          activo: boolean;
+        } | null;
+        if (!c || !c.activo) return null;
+        return {
+          membresiaId: m._id.toString(),
+          role: m.role,
+          esDefault: m.esDefault,
+          consorcio: {
+            _id: c._id.toString(),
+            nombre: c.nombre,
+            direccion: c.direccion,
+          },
+        };
+      })
+      .filter((x): x is NonNullable<typeof x> => x !== null);
+
+    return res.status(200).json({
+      success: true,
+      consorcios,
+    });
+  } catch (error) {
+    console.error("Error en misConsorcios:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Hubo un error al obtener tus consorcios.",
+    });
+  }
+};

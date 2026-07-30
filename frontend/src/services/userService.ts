@@ -5,7 +5,8 @@ import type {
   Persona,
   Rol,
   EstadoUsuario,
-  LoginResponse,
+  LoginResponseMultiTenant,
+  CambiarConsorcioResponse,
   ErrorResponse,
   SuccessResponse,
   UsuariosListResponse,
@@ -54,23 +55,73 @@ interface ToggleStatusResponse {
   estado: EstadoUsuario;
 }
 
+/**
+ * 🆕 Respuesta de GET /users/mis-consorcios (Fase M3.5.2).
+ * Lista los consorcios donde el usuario tiene membresía activa.
+ */
+export interface MisConsorciosResponse {
+  success: true;
+  consorcios: {
+    membresiaId: string;
+    role: string;
+    esDefault: boolean;
+    consorcio: {
+      _id: string;
+      nombre: string;
+      direccion: string;
+    };
+  }[];
+}
+
 /* ============================================================
  * SERVICIO DE USUARIOS
  * ============================================================ */
 
 export const userService = {
   /**
-   * Autenticación — POST /users/login
+   * Autenticación — POST /users/login (multi-tenant)
    *
-   * Nota: en el proyecto ya existe `loginRequest` en `api.ts`.
-   * Este método está aquí para consolidar la interfaz, pero
-   * `loginRequest` sigue funcionando durante la migración.
+   * 🆕 Fase M3.1: retorna una discriminated union con 3 shapes posibles:
+   *   - LoginConToken (casos B/C2/D2): sesión lista con token + activeConsorcio
+   *   - RequiereSeleccionConsorcio (casos C1/D1): hay que elegir consorcio
+   *   - ErrorSinMembresias (caso A): usuario sin acceso a ningún consorcio
+   *
+   * El componente hace narrowing con `success` y `"requiereSeleccionConsorcio" in data`.
    */
   login: async (email: string, password: string) => {
-    const { data } = await api.post<LoginResponse>("/users/login", {
+    const { data } = await api.post<LoginResponseMultiTenant>("/users/login", {
       email,
       password,
     });
+    return data;
+  },
+
+  /**
+   * 🆕 Cambiar consorcio activo — POST /users/cambiar-consorcio (Fase M3.1)
+   *
+   * Genera un JWT nuevo con el consorcio activo actualizado. Se usa en:
+   * 1. La pantalla de selección de consorcio (casos C1/D1 del login).
+   * 2. El selector de consorcio del topbar (cambio temporal).
+   * 3. El cambio del consorcio default desde configuración.
+   *
+   * @param consorcioId - ID del consorcio al que se quiere cambiar.
+   * @param marcarComoDefault - Si true, marca ese consorcio como default
+   *                            del usuario para próximos logins.
+   */
+  cambiarConsorcio: async (consorcioId: string, marcarComoDefault?: boolean) => {
+    const { data } = await api.post<CambiarConsorcioResponse>(
+      "/users/cambiar-consorcio",
+      { consorcioId, marcarComoDefault }
+    );
+    return data;
+  },
+
+  /**
+   * 🆕 Listar los consorcios del usuario autenticado — GET /users/mis-consorcios
+   * Usado por el selector de consorcio del topbar (Fase M3.5).
+   */
+  misConsorcios: async () => {
+    const { data } = await api.get<MisConsorciosResponse>("/users/mis-consorcios");
     return data;
   },
 

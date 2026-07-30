@@ -6,7 +6,40 @@ import UnidadFuncional, {
   type EstadoOcupacion,
 } from "../models/UnidadFuncional";
 import User from "../models/User";
+// 🆕 M5.1: modelo de Ocupación con historial (creado en M1.3)
+import Ocupacion from "../models/Ocupacion";
 import { registrarLog } from "../services/loggerService";
+
+/* ============================================================
+ * ⚠️ SUPUESTOS SOBRE EL MODELO Ocupacion (M1.3) — M5.1
+ * ============================================================
+ *
+ * Este controlador asume la siguiente forma del modelo `Ocupacion`.
+ * Si alguno difiere en tu models/Ocupacion.ts, es un fix de 1 línea:
+ *
+ *   1. Export default llamado `Ocupacion` en "../models/Ocupacion".
+ *   2. Campos: { unidadId: ObjectId, userId: ObjectId,
+ *                tipo: "propietario" | "inquilino",
+ *                desde: Date, hasta: Date | null }.
+ *   3. Ocupación ACTIVA ⇔ `hasta === null`.
+ *
+ * NO se asume que Ocupacion tenga `consorcioId`: el scope multi-tenant
+ * se garantiza porque la UF ya fue validada contra el consorcio activo
+ * antes de tocar sus ocupaciones (scope vía `unidadId`).
+ * ============================================================ */
+
+/**
+ * Tipo local de ocupación. Debe coincidir con el enum `tipo` del modelo.
+ */
+type TipoOcupacion = "propietario" | "inquilino";
+
+/**
+ * 🆕 M5.4.2 — Tipo del `req` esperado por `registrarLog`, extraído de su
+ * propia firma. Evita conflictos entre los distintos generics de `Request`
+ * de Express (Request<ParamsId>, Request<unknown, ...>, etc.) al pasar `req`
+ * a los helpers de ocupación instrumentados con auditoría.
+ */
+type LoggerReq = Parameters<typeof registrarLog>[0]["req"];
 
 /* ============================================================
  * TIPOS DE PAYLOAD
@@ -60,6 +93,164 @@ const obtenerConsorcioActivo = (req: RequestConConsorcio): string | null => {
 };
 
 /* ============================================================
+ * 🆕 HELPERS DE OCUPACIÓN (M5.1 — dual-write con historial)
+ *      + AUDITORÍA GRANULAR (M5.4.2)
+ * ============================================================
+ *
+ * Estos helpers son la base de la migración a `Ocupacion`. En M5.1 se
+ * ejecutan EN PARALELO a la sincronización legacy (propietario/inquilino
+ * en UnidadFuncional) para no romper el frontend actual.
+ *
+ * M5.4.2 — Auditoría granular (granularidad A, TipoEntidad "UNIDAD"):
+ *   - Cada apertura de ocupación emite OCUPACION_CREADA.
+ *   - Cada cierre de ocupación emite OCUPACION_CERRADA (una por ocupación).
+ *   - Los helpers reciben `req` + `nombreEntidad` para autocontener su
+ *     auditoría (cubre vincularHabitantes y eliminarUnidad sin duplicar).
+ *   - Los nombres de ocupantes se resuelven en el momento del evento y se
+ *     guardan como snapshot INMUTABLE (sobreviven al borrado del usuario).
+ */
+
+/**
+ * Cierra (setea `hasta = new Date()`) todas las ocupaciones ACTIVAS de una
+ * unidad, opcionalmente filtrando por tipo. NO borra registros: preserva el
+ * historial para trazabilidad legal.
+ *
+ * M5.4.2 (Opción 2A): antes de cerrar en bulk (`updateMany`, eficiente),
+ * se hace un `find` previo para saber QUÉ ocupaciones se cierran y poder
+ * auditar cada una individualmente (granularidad A).
+ */
+const cerrarOcupacionesActivas = async (
+  unidadId: Types.ObjectId,
+  tipo: TipoOcupacion | undefined,
+  req: LoggerReq,
+  nombreEntidad: string
+): Promise<void> => {
+  const filtro: Record<string, unknown> = { unidadId, hasta: null };
+  if (tipo) filtro.tipo = tipo;
+
+  // 2A — find previo: necesitamos los documentos para auditar cada cierre.
+  const activas = await Ocupacion.find(filtro).select("_id userId tipo desde");
+
+  // Nada activo → nada que cerrar ni auditar (evita un updateMany no-op).
+  if (activas.length === 0) return;
+
+  const hasta = new Date();
+
+  // Cierre en bulk (eficiente).
+  await Ocupacion.updateMany(filtro, { $set: { hasta } });
+
+  // Resolución de nombres INMUTABLE en una sola query $in.
+  const userIds = activas.map((oc) => oc.userId);
+  const usuarios = await User.find({ _id: { $in: userIds } }).select("name");
+  const nombrePorId = new Map<string, string>();
+  usuarios.forEach((u) => {
+    nombrePorId.set(u._id.toString(), u.name);
+  });
+
+  // Log por cada ocupación cerrada (granularidad A).
+  await Promise.all(
+    activas.map((oc) =>
+      registrarLog({
+        req,
+        accion: "OCUPACION_CERRADA",
+        tipoEntidad: "UNIDAD",
+        entidadId: unidadId,
+        detalles: {
+          nombreEntidad,
+          cambios: {
+            ocupacionId: oc._id.toString(),
+            userId: oc.userId.toString(),
+            userNombre: nombrePorId.get(oc.userId.toString()) || null,
+            tipo: oc.tipo,
+            desde: oc.desde,
+            hasta,
+          },
+        },
+      })
+    )
+  );
+};
+
+/**
+ * Crea una ocupación ACTIVA (`hasta = null`) desde el momento actual.
+ *
+ * M5.4.2: emite OCUPACION_CREADA con snapshot inmutable del ocupante.
+ */
+const crearOcupacion = async (
+  unidadId: Types.ObjectId,
+  userId: Types.ObjectId,
+  tipo: TipoOcupacion,
+  req: LoggerReq,
+  nombreEntidad: string
+): Promise<void> => {
+  const desde = new Date();
+
+  const ocupacion = await Ocupacion.create({
+    unidadId,
+    userId,
+    tipo,
+    desde,
+    hasta: null,
+  });
+
+  // Resolución de nombre INMUTABLE del ocupante recién vinculado.
+  const user = await User.findById(userId).select("name");
+  const userNombre = user?.name || null;
+
+  await registrarLog({
+    req,
+    accion: "OCUPACION_CREADA",
+    tipoEntidad: "UNIDAD",
+    entidadId: unidadId,
+    detalles: {
+      nombreEntidad,
+      cambios: {
+        ocupacionId: ocupacion._id.toString(),
+        userId: userId.toString(),
+        userNombre,
+        tipo,
+        desde,
+      },
+    },
+  });
+};
+
+/**
+ * Sincroniza la ocupación de un `tipo` para una unidad, comparando el
+ * ocupante anterior con el nuevo:
+ *   - Si NO cambió, no hace nada (evita cerrar/reabrir innecesariamente).
+ *   - Si cambió, cierra las ocupaciones activas de ese tipo y, si hay
+ *     ocupante nuevo, crea la ocupación correspondiente.
+ *
+ * M5.4.2: propaga `req` + `nombreEntidad` a los helpers para su auditoría.
+ */
+const sincronizarOcupacion = async (
+  unidadId: Types.ObjectId,
+  tipo: TipoOcupacion,
+  ocupanteAnteriorId: string | null,
+  ocupanteNuevoId: string | null,
+  req: LoggerReq,
+  nombreEntidad: string
+): Promise<void> => {
+  // Sin cambios → no tocamos el historial
+  if (ocupanteAnteriorId === ocupanteNuevoId) return;
+
+  // Cerramos la(s) ocupación(es) activa(s) de este tipo
+  await cerrarOcupacionesActivas(unidadId, tipo, req, nombreEntidad);
+
+  // Si hay un ocupante nuevo, abrimos su ocupación
+  if (ocupanteNuevoId) {
+    await crearOcupacion(
+      unidadId,
+      new Types.ObjectId(ocupanteNuevoId),
+      tipo,
+      req,
+      nombreEntidad
+    );
+  }
+};
+
+/* ============================================================
  * MÉTODO: Obtener las unidades funcionales del consorcio activo
  * ============================================================ */
 export const getUnidades = async (req: Request, res: Response) => {
@@ -87,6 +278,76 @@ export const getUnidades = async (req: Request, res: Response) => {
     return res.status(500).json({
       ok: false,
       msg: "Error al obtener las unidades funcionales.",
+      error: obtenerMensajeError(error),
+    });
+  }
+};
+
+/* ============================================================
+ * 🆕 MÉTODO: Historial de ocupaciones de una unidad (Fase M5.3.1)
+ * ============================================================
+ *
+ * Devuelve el historial completo de ocupaciones de una UF (activas e
+ * históricas). El scope multi-tenant se garantiza validando que la UF
+ * pertenezca al consorcio activo ANTES de leer `Ocupacion` (que no tiene
+ * consorcioId propio — el scope va vía `unidadId`, diseño M5.1).
+ *
+ * Orden: activas (hasta: null) primero, luego por `desde` descendente,
+ * dejando arriba lo más reciente para el timeline del DetalleUnidad.
+ */
+export const getOcupacionesUnidad = async (
+  req: Request<ParamsId>,
+  res: Response
+) => {
+  try {
+    const consorcioId = obtenerConsorcioActivo(req);
+
+    if (!consorcioId) {
+      return res.status(403).json({
+        ok: false,
+        msg: "No hay un consorcio activo en tu sesión.",
+      });
+    }
+
+    const { id } = req.params;
+
+    // 🛡️ Validación defensiva del ObjectId antes de tocar la base
+    if (!Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        ok: false,
+        msg: "El identificador de la unidad no tiene un formato válido.",
+      });
+    }
+
+    // 🔒 Scope multi-tenant: validar que la UF pertenezca al consorcio activo
+    //    ANTES de leer su historial (Ocupacion no tiene consorcioId propio).
+    const unidad = await UnidadFuncional.findOne({
+      _id: id,
+      consorcioId,
+    }).select("_id");
+
+    if (!unidad) {
+      return res.status(404).json({
+        ok: false,
+        msg: "La unidad no existe o no pertenece a tu consorcio activo.",
+      });
+    }
+
+    // Historial completo:
+    //   - `hasta: 1` → los null (activas) preceden a las fechas.
+    //   - `desde: -1` → dentro de cada grupo, lo más reciente arriba.
+    const ocupaciones = await Ocupacion.find({ unidadId: unidad._id })
+      .populate("userId", "name email telefono")
+      .sort({ hasta: 1, desde: -1 });
+
+    return res.status(200).json({
+      ok: true,
+      ocupaciones,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      msg: "Error al obtener el historial de ocupaciones de la unidad.",
       error: obtenerMensajeError(error),
     });
   }
@@ -317,6 +578,31 @@ export const vincularHabitantes = async (
       );
     }
 
+    // 🆕 M5.1 — DUAL-WRITE al modelo Ocupacion (historial con desde/hasta).
+    //     Se ejecuta DESPUÉS de la sincronización legacy para no alterar el
+    //     comportamiento actual del frontend. Solo toca el historial cuando
+    //     el ocupante de un tipo efectivamente cambió.
+    //     M5.4.2 — cada apertura/cierre queda auditado dentro de los helpers.
+    const nombreEntidadUnidad = `Piso ${unidad.piso} Depto ${unidad.departamento}`;
+    await Promise.all([
+      sincronizarOcupacion(
+        unidad._id,
+        "propietario",
+        propietarioAnteriorId,
+        propietarioId || null,
+        req,
+        nombreEntidadUnidad
+      ),
+      sincronizarOcupacion(
+        unidad._id,
+        "inquilino",
+        inquilinoAnteriorId,
+        inquilinoId || null,
+        req,
+        nombreEntidadUnidad
+      ),
+    ]);
+
     // 🎯 Registrar acción en el Log de Auditoría con IDs + nombres snapshot (INMUTABLE)
     await registrarLog({
       req,
@@ -430,6 +716,17 @@ export const eliminarUnidad = async (
     await User.updateMany(
       { unidadId: unidad._id },
       { $set: { unidadId: null, unidadFuncional: "" } }
+    );
+
+    // 🆕 M5.1 — Cerrar TODAS las ocupaciones activas de la unidad antes de
+    //     borrarla. NO se eliminan los registros de Ocupacion: quedan con
+    //     `hasta` seteado, preservando el historial (trazabilidad legal).
+    //     M5.4.2 — cada cierre emite su OCUPACION_CERRADA dentro del helper.
+    await cerrarOcupacionesActivas(
+      unidad._id,
+      undefined,
+      req,
+      `Piso ${snapshotUnidad.piso} Depto ${snapshotUnidad.departamento}`
     );
 
     // Eliminamos la unidad

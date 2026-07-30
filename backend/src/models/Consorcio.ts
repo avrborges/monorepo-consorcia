@@ -119,13 +119,9 @@ const consorcioSchema = new Schema<IConsorcio, ConsorcioModel>(
  * ============================================================ */
 
 /**
- * Búsqueda por nombre (ordenado alfabéticamente).
- * Útil para el selector post-login.
- */
-consorcioSchema.index({ nombre: 1 });
-
-/**
  * Búsqueda por estado + nombre (para listar consorcios activos ordenados).
+ * Nota: el índice simple de `nombre` ya está declarado con `index: true`
+ * en la definición del campo, por eso no lo repetimos acá.
  */
 consorcioSchema.index({ activo: 1, nombre: 1 });
 

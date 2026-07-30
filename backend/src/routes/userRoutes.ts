@@ -14,6 +14,7 @@ import {
   olvidePassword,
   resetPassword,
   cambiarConsorcio,
+  misConsorcios
 } from "../controllers/userController";
 
 // 🛡️ Middlewares de protección + scope multi-tenant
@@ -40,9 +41,11 @@ router.post("/reset-password", resetPassword);
  * RUTAS DE USUARIO AUTENTICADO (cualquier rol)
  * ============================================================ */
 
-// 🔄 Cambiar consorcio activo — NO lleva scopeConsorcio porque justamente
-//    cambia el consorcio activo (no puede requerir uno previo válido).
+// 🔄 Cambiar consorcio activo (multi-tenant)
 router.post("/cambiar-consorcio", protegerAutenticado, cambiarConsorcio);
+
+// 🏢 Listar consorcios del usuario (para el selector del topbar)
+router.get("/mis-consorcios", protegerAutenticado, misConsorcios);
 
 /* ============================================================
  * RUTAS ADMINISTRATIVAS (con scope de consorcio)

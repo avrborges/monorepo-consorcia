@@ -44,3 +44,28 @@ export interface Consorcio {
   createdAt?: string;
   updatedAt?: string;
 }
+
+/* ============================================================
+ * 🆕 M6.0 — RESPUESTAS DE LA API DE CONSORCIOS
+ * ============================================================ */
+
+/**
+ * Respuesta de GET /consorcios/:id (M6.0) — precarga del formulario
+ * de la pantalla "Configuración del Consorcio".
+ */
+export interface GetConsorcioResponse {
+  ok: boolean;
+  consorcio?: Consorcio;
+  msg?: string;
+  error?: string;
+}
+
+/**
+ * Respuesta de PUT /consorcios/:id (M6.0) — resultado de la edición.
+ */
+export interface ConsorcioResponse {
+  ok: boolean;
+  consorcio?: Consorcio;
+  msg?: string;
+  error?: string;
+}

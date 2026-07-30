@@ -10,8 +10,21 @@ import cors from "cors";
 import mongoose from "mongoose";
 import os from "os";
 
+// 🛡️ Registro central de modelos Mongoose (Fase M2.8 fix).
+//    Importamos todos los modelos acá para garantizar que se registren en
+//    Mongoose al arrancar. Sin esto, los transpiladores (ts-node/tsx/swc)
+//    hacen tree-shaking de los imports "no usados directamente", lo que
+//    rompe los .populate() de referencias (ej: populate("consorcioId")).
+import "./models/User";
+import "./models/Consorcio";
+import "./models/Membresia";
+import "./models/Ocupacion";
+import "./models/UnidadFuncional";
+import "./models/AuditLog";
+
 import userRoutes from "./routes/userRoutes";
 import unidadRoutes from "./routes/unidadRoutes";
+import consorcioRoutes from "./routes/consorcioRoutes"; // 🆕 M6.0
 
 const app: Application = express();
 const PORT: number = Number(process.env.PORT) || 5000;
@@ -27,6 +40,7 @@ app.use(express.json());
  * ============================================================ */
 app.use("/api/users", userRoutes);
 app.use("/api/unidades", unidadRoutes);
+app.use("/api/consorcios", consorcioRoutes); // 🆕 M6.0 — Configuración del consorcio
 
 /* ============================================================
  * HELPER: Detectar la IP local para mostrar la URL de acceso en red

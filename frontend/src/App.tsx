@@ -11,11 +11,13 @@ const Landing = lazy(() => import("@/pages/landing"));
 const ActivarCuenta = lazy(() => import("@/pages/ActivarCuenta"));
 const OlvidePassword = lazy(() => import("@/pages/OlvidePassword"));
 const ResetPassword = lazy(() => import("@/pages/ResetPassword"));
+const SeleccionConsorcio = lazy(() => import("@/pages/SeleccionConsorcio"));
 const DashboardLayout = lazy(() => import("@/components/layout/DashboardLayout"));
 const Overview = lazy(() => import("@/pages/dashboard/Overview"));
 const ListaUsuarios = lazy(() => import("@/pages/dashboard/ListaUsuarios"));
 const MapaEdificio = lazy(() => import("@/pages/dashboard/MapaEdificio"));
 const Auditoria = lazy(() => import("@/pages/dashboard/Auditoria"));
+const ConfiguracionConsorcio = lazy(() => import("@/pages/dashboard/ConfiguracionConsorcio")); // 🆕 M6.0
 
 // 🔴 EAGER — ProtectedRoute es un guard chico, sin costo mantenerlo eager
 import ProtectedRoute from "@/components/layout/ProtectedRoute";
@@ -26,12 +28,7 @@ import { useIsMobile } from "@/hooks/useIsMobile";
 
 /* ============================================================
  * SCROLL TO TOP EN CADA CAMBIO DE RUTA
- * ============================================================
- *
- * Al navegar entre páginas, si el usuario estaba scrolleado hacia abajo,
- * la nueva página se abre en el mismo scroll (comportamiento default de SPAs).
- * Este componente resetea el scroll al top con cada cambio de pathname.
- */
+ * ============================================================ */
 function ScrollToTop() {
   const { pathname } = useLocation();
 
@@ -73,7 +70,6 @@ function App() {
       {/*
         🎯 Suspense boundary global.
         Mientras un chunk lazy se descarga, se muestra SplashScreen.
-        Esto evita pantalla en blanco durante la transición.
       */}
       <Suspense fallback={<SplashScreen />}>
         <Routes>
@@ -85,6 +81,9 @@ function App() {
           <Route path="/activar-cuenta" element={<ActivarCuenta />} />
           <Route path="/olvide-password" element={<OlvidePassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
+
+          {/* 🆕 Selección de consorcio (casos C1/D1 del login multi-tenant) */}
+          <Route path="/seleccionar-consorcio" element={<SeleccionConsorcio />} />
 
           {/* ============================================================
           * RUTAS PROTEGIDAS — cualquier usuario autenticado
@@ -103,13 +102,15 @@ function App() {
                 <Route path="unidades" element={<MapaEdificio />} />
               </Route>
 
-              {/* Sub-ruta exclusiva de auditoría (solo superadmin) */}
+              {/* Sub-rutas exclusivas de superadmin — auditoría y configuración */}
               <Route
                 element={
                   <ProtectedRoute rolesPermitidos={["superadmin"]} />
                 }
               >
                 <Route path="auditoria" element={<Auditoria />} />
+                {/* 🆕 M6.0 — Configuración / Datos del Consorcio */}
+                <Route path="configuracion" element={<ConfiguracionConsorcio />} />
               </Route>
             </Route>
           </Route>

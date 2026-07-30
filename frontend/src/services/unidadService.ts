@@ -7,6 +7,7 @@ import type {
   UnidadesListResponse,
   UnidadResponse,
   EliminarUnidadResponse,
+  GetOcupacionesResponse, // 🆕 M5.3.1
 } from "@shared/types";
 
 /* ============================================================
@@ -41,6 +42,27 @@ export const unidadService = {
     const { data } = await api.get<UnidadesListResponse>("/unidades", {
       signal,
     });
+    return data;
+  },
+
+  /**
+   * 🆕 M5.3.1: Historial de ocupaciones de una unidad — GET /unidades/:id/ocupaciones
+   *
+   * Devuelve todas las ocupaciones (activas e históricas) de la UF, con el
+   * usuario populado (name/email/telefono). Activas (hasta: null) primero,
+   * luego por fecha `desde` descendente.
+   *
+   * @param unidadId - ID de la unidad funcional
+   * @param signal   - AbortSignal opcional para cancelar el request
+   */
+  getOcupaciones: async (
+    unidadId: string,
+    signal?: AbortSignal
+  ) => {
+    const { data } = await api.get<GetOcupacionesResponse>(
+      `/unidades/${unidadId}/ocupaciones`,
+      { signal }
+    );
     return data;
   },
 

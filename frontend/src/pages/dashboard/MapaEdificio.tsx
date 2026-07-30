@@ -9,6 +9,7 @@ import {
   HiX,
   HiCheck,
   HiOutlineTrash,
+  HiOutlineClock, // 🆕 M5.3.1
 } from "react-icons/hi";
 
 // 🎯 Capa de servicios (Fase 3)
@@ -23,8 +24,11 @@ import ModalConfirmacion from "@/components/common/ModalConfirmacion";
 // 🎯 Formulario de alta de usuarios (para creación contextual desde el drawer de habitantes - Fase 4)
 import FormAltaUsuario from "./FormAltaUsuario";
 
+// 🎯 Hook de contexto de consorcio activo (Fase M4.2)
+import { useConsorcio } from "@/hooks/useConsorcio";
+
 // 🎯 Tipos de dominio compartidos entre backend y frontend
-import type { Persona, Rol, UnidadFuncional } from "@shared/types";
+import type { Persona, Rol, UnidadFuncional, OcupacionPopulada } from "@shared/types";
 
 /* ============================================================
  * CONSTANTES
@@ -41,7 +45,20 @@ type UnidadPopulada = Omit<UnidadFuncional, "propietario" | "inquilino"> & {
 };
 
 /* ============================================================
- * SUBCOMPONENTE: DetalleUnidad
+ * HELPER: Formateo de fecha corto (es-AR) para el timeline (M5.3.1)
+ * ============================================================ */
+const formatearFechaCorta = (iso: string): string => {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("es-AR", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+};
+
+/* ============================================================
+ * SUBCOMPONENTE: DetalleUnidad  (M5.3.1 — con historial de ocupaciones)
  * ============================================================ */
 const DetalleUnidad = memo(
   ({
@@ -58,6 +75,42 @@ const DetalleUnidad = memo(
     eliminando: boolean;
   }) => {
     const [confirmandoBorrado, setConfirmandoBorrado] = useState(false);
+
+    // 🆕 M5.3.1: Historial de ocupaciones de la unidad
+    const [ocupaciones, setOcupaciones] = useState<OcupacionPopulada[]>([]);
+    const [cargandoHistorial, setCargandoHistorial] = useState<boolean>(true);
+    const [errorHistorial, setErrorHistorial] = useState<boolean>(false);
+
+    useEffect(() => {
+      const controller = new AbortController();
+      let activo = true;
+
+      const cargarHistorial = async () => {
+        setCargandoHistorial(true);
+        setErrorHistorial(false);
+        try {
+          const data = await unidadService.getOcupaciones(unidad._id, controller.signal);
+          if (!activo) return;
+          if (data.ok && data.ocupaciones) {
+            setOcupaciones(data.ocupaciones);
+          } else {
+            setErrorHistorial(true);
+          }
+        } catch (error) {
+          if ((error as { code?: string })?.code === "ERR_CANCELED") return;
+          if (activo) setErrorHistorial(true);
+        } finally {
+          if (activo) setCargandoHistorial(false);
+        }
+      };
+
+      void cargarHistorial();
+
+      return () => {
+        activo = false;
+        controller.abort();
+      };
+    }, [unidad._id]);
 
     const handleIntentarEliminar = () => {
       if (confirmandoBorrado) {
@@ -130,6 +183,72 @@ const DetalleUnidad = memo(
               )}
             </div>
           )}
+
+          {/* 🆕 M5.3.1: HISTORIAL DE OCUPACIONES */}
+          <div className="h-px bg-slate-100" />
+
+          <div>
+            <label className="text-slate-400 text-[11px] font-bold uppercase tracking-wider flex items-center gap-1">
+              <HiOutlineClock className="w-3.5 h-3.5" /> Historial de Ocupaciones
+            </label>
+
+            {cargandoHistorial ? (
+              <p className="text-slate-400 font-medium text-xs mt-2 italic" role="status" aria-live="polite">
+                Cargando historial...
+              </p>
+            ) : errorHistorial ? (
+              <p className="text-red-500 font-medium text-xs mt-2 italic flex items-center gap-1">
+                <HiOutlineExclamationCircle className="w-3.5 h-3.5" /> No se pudo cargar el historial.
+              </p>
+            ) : ocupaciones.length === 0 ? (
+              <p className="text-slate-400 font-medium text-xs mt-2 italic">
+                Sin ocupaciones registradas.
+              </p>
+            ) : (
+              <ul className="mt-2 space-y-2.5 border-l-2 border-slate-100 pl-3.5" aria-label="Línea de tiempo de ocupaciones">
+                {ocupaciones.map((oc) => {
+                  const activa = oc.hasta === null;
+                  const esInquilino = oc.tipo === "inquilino";
+
+                  // Colores por tipo, coherentes con el mapa (emerald/blue).
+                  const colorDot = esInquilino ? "bg-blue-500" : "bg-emerald-500";
+                  const colorTipo = esInquilino ? "text-blue-700" : "text-emerald-700";
+
+                  return (
+                    <li key={oc._id} className="relative">
+                      {/* Dot del timeline */}
+                      <span
+                        aria-hidden="true"
+                        className={`absolute -left-[1.30rem] top-1 w-2 h-2 rounded-full ring-2 ring-white ${colorDot}`}
+                      />
+                      <div className="flex items-center justify-between gap-2">
+                        <span className={`text-xs font-black uppercase tracking-wide ${colorTipo}`}>
+                          {oc.tipo}
+                        </span>
+                        {activa ? (
+                          <span className="text-[9px] font-black uppercase tracking-wider text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-md">
+                            Activa
+                          </span>
+                        ) : (
+                          <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded-md">
+                            Cerrada
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-slate-800 font-bold text-xs mt-0.5 truncate">
+                        {oc.userId?.name ?? "Usuario eliminado"}
+                      </p>
+                      <p className="text-slate-400 text-[11px] mt-0.5">
+                        {formatearFechaCorta(oc.desde)}
+                        {" → "}
+                        {oc.hasta ? formatearFechaCorta(oc.hasta) : "Presente"}
+                      </p>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
         </div>
 
         <div className="mt-6 pt-4 border-t border-slate-100 space-y-2">
@@ -180,6 +299,14 @@ DetalleUnidad.displayName = "DetalleUnidad";
  * ============================================================ */
 export default function MapaEdificio() {
   useDocumentTitle("Unidades funcionales");
+
+  // 🎯 Consorcio activo (Fase M4.2 / alineado en M5.3)
+  //    El hook expone `consorcioActivo` (ConsorcioActivoSesion: _id, nombre, direccion),
+  //    contrato unificado con Overview, ListaUsuarios y Auditoría.
+  const { consorcioActivo } = useConsorcio();
+
+  // 🎯 Fallback defensivo del nombre del consorcio (edge case multi-tenant).
+  const nombreConsorcioVisible = consorcioActivo?.nombre || "Sin consorcio seleccionado";
 
   const [unidades, setUnidades] = useState<UnidadPopulada[]>([]);
   const [usuariosSistema, setUsuariosSistema] = useState<Persona[]>([]);
@@ -541,8 +668,12 @@ export default function MapaEdificio() {
           <h1 className="text-2xl md:text-[32px] font-extrabold tracking-tight text-[#0f172a]">
             Unidades Funcionales
           </h1>
-          <p className="text-[#64748b] text-xs md:text-sm mt-1">
-            Visualizá, filtrá y controlá la distribución y habitabilidad de las unidades del consorcio.
+          <p className="text-[#64748b] text-xs md:text-sm mt-1 flex items-center gap-1.5 flex-wrap">
+            <span>Distribución y habitabilidad de las unidades de</span>
+            <span className="inline-flex items-center gap-1 font-bold text-slate-700">
+              <HiOutlineOfficeBuilding className="w-3.5 h-3.5 text-slate-400" />
+              {nombreConsorcioVisible}
+            </span>
           </p>
         </div>
 
@@ -927,7 +1058,7 @@ export default function MapaEdificio() {
         onCerrar={() => setMostrarFormAltaUsuario(false)}
         onUsuarioCreado={manejarUsuarioCreadoDesdeContexto}
         rolPredeterminado={rolContextoAlta}
-      />  
+      />
 
       {/* Modal de confirmación de cierre del drawer con cambios sin guardar */}
       <ModalConfirmacion

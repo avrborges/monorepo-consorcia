@@ -12,8 +12,8 @@ import AuthLayout from "@/components/layout/AuthLayout";
 // 🎯 Capa de servicios (Fase 3)
 import { userService } from "@/services";
 
-// 🎯 Helpers de sesión (Fase 4)
-import { guardarSesion } from "@/lib/session";
+// 🎯 Helpers de sesión (Fase 4 + M3)
+import { guardarSesion, guardarSeleccionPendiente } from "@/lib/session";
 
 // 🎯 Hook para título dinámico de pestaña (Tanda 1 UX)
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
@@ -34,12 +34,8 @@ const REMEMBER_EMAIL_KEY = "consorcia_remember_email";
 /**
  * Precarga en paralelo los chunks del dashboard mientras el usuario
  * ve el mensaje "Redirigiendo..." tras un login exitoso.
- *
- * Cuando navegue a /dashboard, los chunks ya estarán en la caché
- * del navegador → transición sin flash del SplashScreen.
  */
 const prefetchDashboardChunks = (): void => {
-  // Fire-and-forget: no await, ignoramos errores intencionalmente
   void import("@/components/layout/DashboardLayout");
   void import("@/pages/dashboard/Overview");
 };
@@ -49,12 +45,10 @@ const prefetchDashboardChunks = (): void => {
  * ============================================================ */
 
 export default function Login() {
-  // 🎯 Título dinámico de la pestaña
   useDocumentTitle("Iniciar sesión");
 
   const navigate = useNavigate();
 
-  // 🎯 Recuperar email guardado si existe (feature "Recordarme")
   const emailGuardado = localStorage.getItem(REMEMBER_EMAIL_KEY) || "";
 
   const [email, setEmail] = useState(emailGuardado);
@@ -75,6 +69,17 @@ export default function Login() {
     };
   }, []);
 
+  /**
+   * 🎯 Persiste o limpia el email según el checkbox "Recordarme".
+   */
+  const persistirEmailRecordado = (): void => {
+    if (rememberMe) {
+      localStorage.setItem(REMEMBER_EMAIL_KEY, email.trim());
+    } else {
+      localStorage.removeItem(REMEMBER_EMAIL_KEY);
+    }
+  };
+
   const handleSubmit = async (
     e: SyntheticEvent<HTMLFormElement>
   ): Promise<void> => {
@@ -89,35 +94,60 @@ export default function Login() {
     try {
       const result = await userService.login(email.trim(), password);
 
-      setSuccessMsg(result.message);
-      guardarSesion(result.token, result.user);
+      /* ============================================================
+       * 🆕 CASO C1/D1: Múltiples membresías sin default → elegir consorcio
+       * ============================================================ */
+      if ("requiereSeleccionConsorcio" in result && result.requiereSeleccionConsorcio) {
+        persistirEmailRecordado();
 
-      // 🎯 Persistir o limpiar email según checkbox "Recordarme"
-      if (rememberMe) {
-        localStorage.setItem(REMEMBER_EMAIL_KEY, email.trim());
-      } else {
-        localStorage.removeItem(REMEMBER_EMAIL_KEY);
+        // Guardar temporalmente las membresías para la pantalla de selección
+        guardarSeleccionPendiente({
+          user: result.user,
+          rolGlobal: result.rolGlobal,
+          membresiasDisponibles: result.membresiasDisponibles,
+        });
+
+        redirectTimeoutRef.current = window.setTimeout(() => {
+          navigate("/seleccionar-consorcio");
+        }, 300);
+        return;
       }
 
-      // 🚀 Precargar los chunks del dashboard en paralelo
-      prefetchDashboardChunks();
+      /* ============================================================
+       * 🎯 CASO B/C2/D2: Sesión lista con token → dashboard
+       * ============================================================ */
+      // En este punto TypeScript sabe que `result` es LoginConToken
+      if (result.success && "token" in result) {
+        setSuccessMsg(result.message);
 
-      // 🎯 Redirect inteligente: volver a la ruta original (si venía de un 401)
-      const rutaOriginal = sessionStorage.getItem("redirect_after_login");
-      sessionStorage.removeItem("redirect_after_login");
+        // Guardar sesión completa (token + user + consorcio activo)
+        guardarSesion(result.token, result.user, {
+          activeConsorcio: result.activeConsorcio,
+          roleEnConsorcioActivo: result.roleEnConsorcioActivo,
+          rolGlobal: result.rolGlobal,
+        });
 
-      const destino = rutaOriginal && !rutaOriginal.startsWith("/login")
-        ? rutaOriginal
-        : "/dashboard";
+        persistirEmailRecordado();
 
-      redirectTimeoutRef.current = window.setTimeout(() => {
-        navigate(destino);
-      }, 1500);
+        prefetchDashboardChunks();
+
+        const rutaOriginal = sessionStorage.getItem("redirect_after_login");
+        sessionStorage.removeItem("redirect_after_login");
+
+        const destino = rutaOriginal && !rutaOriginal.startsWith("/login")
+          ? rutaOriginal
+          : "/dashboard";
+
+        redirectTimeoutRef.current = window.setTimeout(() => {
+          navigate(destino);
+        }, 1500);
+      }
     } catch (error: unknown) {
       console.error("Error durante el inicio de sesión:", error);
 
       if (error instanceof AxiosError && error.response?.data) {
-        const errorData = error.response.data as ErrorResponse;
+        const errorData = error.response.data as ErrorResponse & { motivo?: string };
+        // 🆕 Caso A: usuario sin membresías → mensaje específico
         setErrorMsg(errorData.message || "Credenciales inválidas.");
       } else {
         setErrorMsg(

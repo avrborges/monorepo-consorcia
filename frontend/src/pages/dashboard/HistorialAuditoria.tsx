@@ -13,6 +13,9 @@ import {
   HiOutlineOfficeBuilding,
   HiOutlineUserGroup,
   HiOutlineHome,
+  HiOutlineLogin, // 🆕 M5.4.3 — OCUPACION_CREADA
+  HiOutlineLogout, // 🆕 M5.4.3 — OCUPACION_CERRADA
+  HiOutlineCog, // 🆕 M6.0.4 — CONSORCIO_EDITADO
 } from "react-icons/hi";
 
 // 🎯 Capa de servicios (Fase 3)
@@ -44,13 +47,24 @@ const VALORES_ACCION_VALIDOS: readonly (AccionAuditoria | "TODOS")[] = [
   "UNIDAD_EDITADA",
   "UNIDAD_ELIMINADA",
   "HABITANTES_VINCULADOS",
+  // 🆕 M5.4.3 — Ocupaciones (auditadas bajo TipoEntidad "UNIDAD")
+  "OCUPACION_CREADA",
+  "OCUPACION_CERRADA",
+  // 🆕 M6.0.4 — Consorcios
+  "CONSORCIO_EDITADO",
 ];
 
 const VALORES_ENTIDAD_VALIDOS: readonly (TipoEntidad | "TODOS")[] = [
   "TODOS",
   "USUARIO",
   "UNIDAD",
+  "CONSORCIO", // 🆕 M6.0.4
 ];
+
+// 🆕 M5.4.3 — Campos técnicos (IDs) que nunca se muestran en la traducción.
+// El snapshot de ocupaciones trae `ocupacionId` y `userId`, que son ruido
+// técnico: preferimos el nombre legible (`userNombre`).
+const CAMPOS_TECNICOS_OCULTOS = new Set<string>(["ocupacionId", "userId"]);
 
 /* ============================================================
  * HELPERS
@@ -78,6 +92,17 @@ function leerStringPersistido(key: string, defaultValue: string): string {
   } catch {
     return defaultValue;
   }
+}
+
+// 🆕 M5.4.3 — Formateo de fecha corto (es-AR) para los campos desde/hasta.
+function formatearFechaAuditoria(val: unknown): string {
+  const d = new Date(val as string | number | Date);
+  if (isNaN(d.getTime())) return String(val);
+  return d.toLocaleDateString("es-AR", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
 }
 
 /* ============================================================
@@ -279,6 +304,14 @@ export default function HistorialAuditoria() {
         return <HiOutlineTrash className="w-4 h-4 text-rose-600 shrink-0" />;
       case "HABITANTES_VINCULADOS":
         return <HiOutlineUserGroup className="w-4 h-4 text-indigo-600 shrink-0" />;
+      // 🆕 M5.4.3 — Ocupaciones
+      case "OCUPACION_CREADA":
+        return <HiOutlineLogin className="w-4 h-4 text-green-600 shrink-0" />;
+      case "OCUPACION_CERRADA":
+        return <HiOutlineLogout className="w-4 h-4 text-slate-500 shrink-0" />;
+      // 🆕 M6.0.4 — Consorcio
+      case "CONSORCIO_EDITADO":
+        return <HiOutlineCog className="w-4 h-4 text-violet-600 shrink-0" />;
       default:
         return <HiOutlineChip className="w-4 h-4 text-slate-600 shrink-0" />;
     }
@@ -303,6 +336,14 @@ export default function HistorialAuditoria() {
         return "bg-rose-50 border-rose-200 text-rose-600";
       case "HABITANTES_VINCULADOS":
         return "bg-indigo-50 border-indigo-200 text-indigo-600";
+      // 🆕 M5.4.3 — Ocupaciones
+      case "OCUPACION_CREADA":
+        return "bg-green-50 border-green-200 text-green-600";
+      case "OCUPACION_CERRADA":
+        return "bg-slate-100 border-slate-200 text-slate-500";
+      // 🆕 M6.0.4 — Consorcio
+      case "CONSORCIO_EDITADO":
+        return "bg-violet-50 border-violet-200 text-violet-600";
       default:
         return "bg-slate-50 border-slate-200 text-slate-600";
     }
@@ -327,6 +368,14 @@ export default function HistorialAuditoria() {
         return "Eliminó la unidad: ";
       case "HABITANTES_VINCULADOS":
         return "Modificó los habitantes de: ";
+      // 🆕 M5.4.3 — Ocupaciones
+      case "OCUPACION_CREADA":
+        return "Registró una ocupación en: ";
+      case "OCUPACION_CERRADA":
+        return "Finalizó una ocupación en: ";
+      // 🆕 M6.0.4 — Consorcio
+      case "CONSORCIO_EDITADO":
+        return "Editó los datos del consorcio: ";
       default:
         return "Acción sobre: ";
     }
@@ -369,6 +418,26 @@ export default function HistorialAuditoria() {
       inquilinoNuevoNombre: "Inquilino nuevo",
       estadoAnterior: "Estado anterior",
       estadoNuevo: "Estado nuevo",
+      // 🆕 M5.4.3 — Ocupaciones
+      userNombre: "Ocupante",
+      tipo: "Tipo",
+      desde: "Desde",
+      hasta: "Hasta",
+      // 🆕 M6.0.4 — Consorcio (pares anterior/nuevo por campo editable)
+      nombreAnterior: "Nombre anterior",
+      nombreNuevo: "Nombre nuevo",
+      direccionAnterior: "Dirección anterior",
+      direccionNuevo: "Dirección nueva",
+      cuitAnterior: "CUIT anterior",
+      cuitNuevo: "CUIT nuevo",
+      localidadAnterior: "Localidad anterior",
+      localidadNuevo: "Localidad nueva",
+      provinciaAnterior: "Provincia anterior",
+      provinciaNuevo: "Provincia nueva",
+      codigoPostalAnterior: "Cód. Postal anterior",
+      codigoPostalNuevo: "Cód. Postal nuevo",
+      notasAnterior: "Notas anteriores",
+      notasNuevo: "Notas nuevas",
     };
 
     // 🎯 Filtrado inteligente:
@@ -385,6 +454,8 @@ export default function HistorialAuditoria() {
 
     return Object.entries(cambios)
       .filter(([key, val]) => {
+        // 🆕 M5.4.3 — Ocultamos IDs técnicos (ocupacionId, userId)
+        if (CAMPOS_TECNICOS_OCULTOS.has(key)) return false;
         // Si este campo tiene un `xxxNombre` correspondiente, lo ocultamos
         if (camposConNombreDisponible.has(key)) return false;
         // Ocultamos valores null (sin información útil)
@@ -397,6 +468,12 @@ export default function HistorialAuditoria() {
         let valorFormateado: string;
         if (val === "") {
           valorFormateado = "(vacío)";
+        } else if (key === "desde" || key === "hasta") {
+          // 🆕 M5.4.3 — Fechas de ocupación en formato legible es-AR
+          valorFormateado = formatearFechaAuditoria(val);
+        } else if (key === "tipo" && typeof val === "string") {
+          // 🆕 M5.4.3 — Capitalizar el tipo de ocupación
+          valorFormateado = val.charAt(0).toUpperCase() + val.slice(1);
         } else {
           valorFormateado = String(val);
         }
@@ -456,6 +533,31 @@ export default function HistorialAuditoria() {
     filtroEntidad !== "TODOS" ||
     fechaDesde ||
     fechaHasta;
+
+  /* ------------------------------------------------------------
+   * 🎨 Chip de tipo de entidad (ícono + estilo por tipo)
+   * ------------------------------------------------------------ */
+  const getIconoTipoEntidad = (tipo: TipoEntidad) => {
+    switch (tipo) {
+      case "UNIDAD":
+        return <HiOutlineHome className="w-3 h-3" />;
+      case "CONSORCIO":
+        return <HiOutlineOfficeBuilding className="w-3 h-3" />;
+      default:
+        return <HiOutlineUserAdd className="w-3 h-3" />;
+    }
+  };
+
+  const getEstiloChipEntidad = (tipo: TipoEntidad): string => {
+    switch (tipo) {
+      case "UNIDAD":
+        return "bg-teal-50 text-teal-700 border border-teal-100";
+      case "CONSORCIO":
+        return "bg-violet-50 text-violet-700 border border-violet-100";
+      default:
+        return "bg-slate-50 text-slate-700 border border-slate-100";
+    }
+  };
 
   return (
     <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm w-full animate-in fade-in duration-200">
@@ -528,6 +630,7 @@ export default function HistorialAuditoria() {
             <option value="TODOS">Todas las entidades</option>
             <option value="USUARIO">Usuarios</option>
             <option value="UNIDAD">Unidades</option>
+            <option value="CONSORCIO">Consorcio</option>
           </select>
         </div>
 
@@ -550,6 +653,15 @@ export default function HistorialAuditoria() {
               <option value="UNIDAD_EDITADA">Modif. unidades</option>
               <option value="UNIDAD_ELIMINADA">Bajas de unidad</option>
               <option value="HABITANTES_VINCULADOS">Vinculación habitantes</option>
+            </optgroup>
+            {/* 🆕 M5.4.3 — Ocupaciones */}
+            <optgroup label="Ocupaciones">
+              <option value="OCUPACION_CREADA">Ocupaciones registradas</option>
+              <option value="OCUPACION_CERRADA">Ocupaciones finalizadas</option>
+            </optgroup>
+            {/* 🆕 M6.0.4 — Consorcio */}
+            <optgroup label="Consorcio">
+              <option value="CONSORCIO_EDITADO">Edición de datos</option>
             </optgroup>
           </select>
         </div>
@@ -623,12 +735,6 @@ export default function HistorialAuditoria() {
       <div className="relative space-y-4 max-h-150 overflow-y-auto pr-3 scrollbar-thin">
         {logsFiltrados.map((log) => {
           const logCopiado = logCopiadoId === log._id;
-          const iconoTipoEntidad =
-            log.tipoEntidad === "UNIDAD" ? (
-              <HiOutlineHome className="w-3 h-3" />
-            ) : (
-              <HiOutlineUserAdd className="w-3 h-3" />
-            );
 
           return (
             <div key={log._id} className="flex items-start gap-4 group animate-in fade-in slide-in-from-bottom-2 duration-150">
@@ -653,12 +759,8 @@ export default function HistorialAuditoria() {
                       {log.adminName}
                     </span>
                     {/* 🆕 Chip pequeño indicando tipo de entidad */}
-                    <span className={`inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-full ${
-                      log.tipoEntidad === "UNIDAD"
-                        ? "bg-teal-50 text-teal-700 border border-teal-100"
-                        : "bg-slate-50 text-slate-700 border border-slate-100"
-                    }`}>
-                      {iconoTipoEntidad}
+                    <span className={`inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-full ${getEstiloChipEntidad(log.tipoEntidad)}`}>
+                      {getIconoTipoEntidad(log.tipoEntidad)}
                       {log.tipoEntidad}
                     </span>
                   </div>

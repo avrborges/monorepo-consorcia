@@ -4,7 +4,7 @@
  * Tipo de entidad sobre la que se ejecutó la acción auditada.
  * Permite filtrar y agrupar logs en el frontend.
  */
-export type TipoEntidad = "USUARIO" | "UNIDAD";
+export type TipoEntidad = "USUARIO" | "UNIDAD" | "CONSORCIO";
 
 /**
  * Tipos de acciones que se registran en el historial de auditoría.
@@ -20,7 +20,12 @@ export type AccionAuditoria =
   | "UNIDAD_CREADA"
   | "UNIDAD_EDITADA"
   | "UNIDAD_ELIMINADA"
-  | "HABITANTES_VINCULADOS";
+  | "HABITANTES_VINCULADOS"
+  // 🎯 Acciones sobre ocupaciones (auditadas bajo TipoEntidad "UNIDAD")
+  | "OCUPACION_CREADA"
+  | "OCUPACION_CERRADA"
+  // 🆕 M6.0 — Acciones sobre consorcios
+  | "CONSORCIO_EDITADO";
 
 /**
  * Detalles del registro de auditoría.
@@ -79,8 +84,24 @@ export type AccionUsuario = Extract<
 
 /**
  * Acciones específicas de la entidad "UNIDAD".
+ *
+ * Incluye las acciones de ocupación, que se auditan bajo
+ * TipoEntidad "UNIDAD" (entidadId = unidadId).
  */
 export type AccionUnidad = Extract<
   AccionAuditoria,
-  "UNIDAD_CREADA" | "UNIDAD_EDITADA" | "UNIDAD_ELIMINADA" | "HABITANTES_VINCULADOS"
+  | "UNIDAD_CREADA"
+  | "UNIDAD_EDITADA"
+  | "UNIDAD_ELIMINADA"
+  | "HABITANTES_VINCULADOS"
+  | "OCUPACION_CREADA"
+  | "OCUPACION_CERRADA"
+>;
+
+/**
+ * 🆕 M6.0 — Acciones específicas de la entidad "CONSORCIO".
+ */
+export type AccionConsorcio = Extract<
+  AccionAuditoria,
+  "CONSORCIO_EDITADO"
 >;
