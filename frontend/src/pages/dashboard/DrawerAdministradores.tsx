@@ -210,7 +210,7 @@ export default function DrawerAdministradores({
       />
 
       {/* Panel */}
-      <div className="relative w-full lg:w-[28rem] h-[88vh] lg:h-screen bg-white shadow-2xl rounded-t-3xl lg:rounded-none flex flex-col animate-in slide-in-from-bottom lg:slide-in-from-right duration-300 z-10">
+      <div className="relative w-full lg:w-md h-[88vh] lg:h-screen bg-white shadow-2xl rounded-t-3xl lg:rounded-none flex flex-col animate-in slide-in-from-bottom lg:slide-in-from-right duration-300 z-10">
         {/* Handle mobile */}
         <div
           className="w-12 h-1 bg-slate-200 rounded-full mx-auto my-4 lg:hidden cursor-pointer"
