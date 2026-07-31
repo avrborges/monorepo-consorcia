@@ -219,7 +219,7 @@ const DetalleUnidad = memo(
                       {/* Dot del timeline */}
                       <span
                         aria-hidden="true"
-                        className={`absolute -left-[1.30rem] top-1 w-2 h-2 rounded-full ring-2 ring-white ${colorDot}`}
+                        className={`absolute left-[-1.3rem] top-1 w-2 h-2 rounded-full ring-2 ring-white ${colorDot}`}
                       />
                       <div className="flex items-center justify-between gap-2">
                         <span className={`text-xs font-black uppercase tracking-wide ${colorTipo}`}>

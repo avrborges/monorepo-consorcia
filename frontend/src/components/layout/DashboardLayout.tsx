@@ -9,6 +9,7 @@ import {
   HiOutlineOfficeBuilding,
   HiOutlineClipboardList,
   HiOutlineCog, // 🆕 M6.0 — Configuración del consorcio
+  HiOutlineViewGrid, // 🆕 M6.4b — Gestión de consorcios (ABM)
 } from "react-icons/hi";
 import { FaSignOutAlt } from "react-icons/fa";
 
@@ -17,6 +18,9 @@ import { useAuth } from "@/hooks/useAuth";
 
 // 🎯 Hook para título dinámico de pestaña (Tanda 1 UX)
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
+
+// 🎯 Contexto de consorcio activo / rol global (Fase M4 / M6.4b)
+import { useConsorcio } from "@/hooks/useConsorcio";
 
 // 🎯 Selector de consorcio del topbar (Fase M3.5)
 import SelectorConsorcio from "@/components/layout/SelectorConsorcio";
@@ -36,6 +40,7 @@ const CHUNK_PREFETCHERS: Record<string, () => Promise<unknown>> = {
   "/dashboard/usuarios": () => import("@/pages/dashboard/ListaUsuarios"),
   "/dashboard/auditoria": () => import("@/pages/dashboard/Auditoria"),
   "/dashboard/configuracion": () => import("@/pages/dashboard/ConfiguracionConsorcio"), // 🆕 M6.0
+  "/dashboard/consorcios": () => import("@/pages/dashboard/ConsorciosABM"), // 🆕 M6.4b
 };
 
 /* ============================================================
@@ -51,6 +56,9 @@ export default function DashboardLayout() {
 
   // 🎯 Todo lo de sesión pasa por useAuth
   const { usuario, rol, esAdmin, esSuperAdmin, logout } = useAuth();
+
+  // 🎯 Rol global (super_admin_global) para el ABM de consorcios (M6.4b)
+  const { esSuperAdminGlobal } = useConsorcio();
 
   // Fallbacks defensivos si por algún motivo la sesión no está cargada aún
   const nombreCompleto = usuario?.name || "Usuario";
@@ -111,6 +119,15 @@ export default function DashboardLayout() {
       name: "Configuración",
       path: "/dashboard/configuracion",
       icon: <HiOutlineCog className="w-5 h-5" />,
+    });
+  }
+
+  // 🆕 M6.4b — ABM de consorcios: EXCLUSIVO del super_admin_global
+  if (esSuperAdminGlobal) {
+    menuItems.push({
+      name: "Consorcios",
+      path: "/dashboard/consorcios",
+      icon: <HiOutlineViewGrid className="w-5 h-5" />,
     });
   }
 

@@ -2,18 +2,42 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { HiOutlineOfficeBuilding, HiChevronDown, HiCheck } from "react-icons/hi";
 
-import { userService } from "@/services";
-import type { MisConsorciosResponse } from "@/services/userService";
+import { userService, consorcioService } from "@/services";
 import {
   getConsorcioActivo,
   guardarSesion,
   type ConsorcioActivoSesion,
 } from "@/lib/session";
 
-type ConsorcioItem = MisConsorciosResponse["consorcios"][number];
+// 🎯 Rol global (super_admin_global) para decidir qué consorcios listar (M6.6)
+import { useConsorcio } from "@/hooks/useConsorcio";
+
+/* ============================================================
+ * TIPOS
+ * ============================================================ */
+
+/**
+ * 🆕 M6.6 — Shape común normalizado para el selector.
+ *
+ * Unifica las 2 fuentes de datos:
+ *   - misConsorcios() → { membresiaId, consorcio: {_id, nombre, direccion} }  (usuario normal)
+ *   - getAll()        → Consorcio[] con {_id, nombre, direccion, activo}       (super_admin_global)
+ */
+interface ConsorcioSeleccionable {
+  _id: string;
+  nombre: string;
+  direccion: string;
+}
+
+/* ============================================================
+ * COMPONENTE
+ * ============================================================ */
 
 export default function SelectorConsorcio() {
-  const [consorcios, setConsorcios] = useState<ConsorcioItem[]>([]);
+  // 🆕 M6.6 — el super global ve TODOS los consorcios; el resto solo los suyos.
+  const { esSuperAdminGlobal } = useConsorcio();
+
+  const [consorcios, setConsorcios] = useState<ConsorcioSeleccionable[]>([]);
   const [activo] = useState<ConsorcioActivoSesion | null>(() => getConsorcioActivo());
   const [abierto, setAbierto] = useState(false);
   const [cambiando, setCambiando] = useState<string | null>(null);
@@ -21,27 +45,47 @@ export default function SelectorConsorcio() {
 
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // 🎯 Cargar los consorcios del usuario al montar
+  // 🎯 Cargar los consorcios disponibles al montar (según el rol global)
   useEffect(() => {
-    let activo = true;
+    let vivo = true;
+
     const cargar = async () => {
       try {
-        const data = await userService.misConsorcios();
-        if (!activo) return;
-        if (data.success) {
-          setConsorcios(data.consorcios);
+        if (esSuperAdminGlobal) {
+          // 🆕 M6.6 — Super global: todos los consorcios ACTIVOS del sistema.
+          const data = await consorcioService.getAll();
+          if (!vivo) return;
+          if (data.ok && data.consorcios) {
+            const seleccionables: ConsorcioSeleccionable[] = data.consorcios
+              .filter((c) => c.activo)
+              .map((c) => ({ _id: c._id, nombre: c.nombre, direccion: c.direccion }));
+            setConsorcios(seleccionables);
+          }
+        } else {
+          // Usuario normal: solo los consorcios donde tiene membresía activa.
+          const data = await userService.misConsorcios();
+          if (!vivo) return;
+          if (data.success) {
+            const seleccionables: ConsorcioSeleccionable[] = data.consorcios.map((c) => ({
+              _id: c.consorcio._id,
+              nombre: c.consorcio.nombre,
+              direccion: c.consorcio.direccion,
+            }));
+            setConsorcios(seleccionables);
+          }
         }
       } catch (err) {
         console.error("Error al cargar consorcios:", err);
       } finally {
-        if (activo) setCargado(true);
+        if (vivo) setCargado(true);
       }
     };
+
     void cargar();
     return () => {
-      activo = false;
+      vivo = false;
     };
-  }, []);
+  }, [esSuperAdminGlobal]);
 
   // 🎯 Cerrar el dropdown al hacer click afuera
   useEffect(() => {
@@ -132,23 +176,23 @@ export default function SelectorConsorcio() {
         >
           <div className="px-3 py-2 border-b border-slate-100">
             <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
-              Cambiar de consorcio
+              {esSuperAdminGlobal ? "Consorcios (Super Admin)" : "Cambiar de consorcio"}
             </p>
           </div>
 
           <div className="max-h-72 overflow-y-auto py-1">
             {consorcios.map((c) => {
-              const esActivo = activo?._id === c.consorcio._id;
-              const estaCambiando = cambiando === c.consorcio._id;
+              const esActivo = activo?._id === c._id;
+              const estaCambiando = cambiando === c._id;
 
               return (
                 <button
-                  key={c.membresiaId}
+                  key={c._id}
                   type="button"
                   role="option"
                   aria-selected={esActivo}
                   disabled={Boolean(cambiando)}
-                  onClick={() => handleCambiar(c.consorcio._id)}
+                  onClick={() => handleCambiar(c._id)}
                   className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition ${
                     esActivo ? "bg-teal-50" : "hover:bg-slate-50"
                   } disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer`}
@@ -158,10 +202,10 @@ export default function SelectorConsorcio() {
                   </span>
                   <span className="flex-1 min-w-0">
                     <span className="block text-xs font-bold text-slate-800 truncate">
-                      {c.consorcio.nombre}
+                      {c.nombre}
                     </span>
                     <span className="block text-[10px] text-slate-400 truncate">
-                      {c.consorcio.direccion}
+                      {c.direccion}
                     </span>
                   </span>
                   {estaCambiando ? (

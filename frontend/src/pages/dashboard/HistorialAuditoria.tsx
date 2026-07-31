@@ -16,6 +16,10 @@ import {
   HiOutlineLogin, // 🆕 M5.4.3 — OCUPACION_CREADA
   HiOutlineLogout, // 🆕 M5.4.3 — OCUPACION_CERRADA
   HiOutlineCog, // 🆕 M6.0.4 — CONSORCIO_EDITADO
+  HiOutlinePlusCircle, // 🆕 M6.7 — CONSORCIO_CREADO
+  HiOutlineCheckCircle, // 🆕 M6.7 — CONSORCIO_ACTIVADO
+  HiOutlineBan, // 🆕 M6.7 — CONSORCIO_DESACTIVADO
+  HiOutlineUserRemove, // 🆕 M6.7b — ADMIN_REVOCADO
 } from "react-icons/hi";
 
 // 🎯 Capa de servicios (Fase 3)
@@ -52,6 +56,13 @@ const VALORES_ACCION_VALIDOS: readonly (AccionAuditoria | "TODOS")[] = [
   "OCUPACION_CERRADA",
   // 🆕 M6.0.4 — Consorcios
   "CONSORCIO_EDITADO",
+  // 🆕 M6.7 — ABM de consorcios
+  "CONSORCIO_CREADO",
+  "CONSORCIO_ACTIVADO",
+  "CONSORCIO_DESACTIVADO",
+  // 🆕 M6.7b — Administradores de consorcio
+  "ADMIN_ASIGNADO",
+  "ADMIN_REVOCADO",
 ];
 
 const VALORES_ENTIDAD_VALIDOS: readonly (TipoEntidad | "TODOS")[] = [
@@ -64,7 +75,8 @@ const VALORES_ENTIDAD_VALIDOS: readonly (TipoEntidad | "TODOS")[] = [
 // 🆕 M5.4.3 — Campos técnicos (IDs) que nunca se muestran en la traducción.
 // El snapshot de ocupaciones trae `ocupacionId` y `userId`, que son ruido
 // técnico: preferimos el nombre legible (`userNombre`).
-const CAMPOS_TECNICOS_OCULTOS = new Set<string>(["ocupacionId", "userId"]);
+// 🆕 M6.7b — se agrega `membresiaId` (ruido técnico del snapshot de admins).
+const CAMPOS_TECNICOS_OCULTOS = new Set<string>(["ocupacionId", "userId", "membresiaId"]);
 
 /* ============================================================
  * HELPERS
@@ -309,9 +321,21 @@ export default function HistorialAuditoria() {
         return <HiOutlineLogin className="w-4 h-4 text-green-600 shrink-0" />;
       case "OCUPACION_CERRADA":
         return <HiOutlineLogout className="w-4 h-4 text-slate-500 shrink-0" />;
-      // 🆕 M6.0.4 — Consorcio
+      // 🆕 M6.0.4 — Consorcio (edición)
       case "CONSORCIO_EDITADO":
         return <HiOutlineCog className="w-4 h-4 text-violet-600 shrink-0" />;
+      // 🆕 M6.7 — Consorcio (ABM)
+      case "CONSORCIO_CREADO":
+        return <HiOutlinePlusCircle className="w-4 h-4 text-green-600 shrink-0" />;
+      case "CONSORCIO_ACTIVADO":
+        return <HiOutlineCheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />;
+      case "CONSORCIO_DESACTIVADO":
+        return <HiOutlineBan className="w-4 h-4 text-rose-600 shrink-0" />;
+      // 🆕 M6.7b — Administradores de consorcio
+      case "ADMIN_ASIGNADO":
+        return <HiOutlineUserAdd className="w-4 h-4 text-emerald-600 shrink-0" />;
+      case "ADMIN_REVOCADO":
+        return <HiOutlineUserRemove className="w-4 h-4 text-rose-600 shrink-0" />;
       default:
         return <HiOutlineChip className="w-4 h-4 text-slate-600 shrink-0" />;
     }
@@ -341,9 +365,21 @@ export default function HistorialAuditoria() {
         return "bg-green-50 border-green-200 text-green-600";
       case "OCUPACION_CERRADA":
         return "bg-slate-100 border-slate-200 text-slate-500";
-      // 🆕 M6.0.4 — Consorcio
+      // 🆕 M6.0.4 — Consorcio (edición)
       case "CONSORCIO_EDITADO":
         return "bg-violet-50 border-violet-200 text-violet-600";
+      // 🆕 M6.7 — Consorcio (ABM)
+      case "CONSORCIO_CREADO":
+        return "bg-green-50 border-green-200 text-green-600";
+      case "CONSORCIO_ACTIVADO":
+        return "bg-emerald-50 border-emerald-200 text-emerald-600";
+      case "CONSORCIO_DESACTIVADO":
+        return "bg-rose-50 border-rose-200 text-rose-600";
+      // 🆕 M6.7b — Administradores de consorcio
+      case "ADMIN_ASIGNADO":
+        return "bg-emerald-50 border-emerald-200 text-emerald-600";
+      case "ADMIN_REVOCADO":
+        return "bg-rose-50 border-rose-200 text-rose-600";
       default:
         return "bg-slate-50 border-slate-200 text-slate-600";
     }
@@ -373,9 +409,21 @@ export default function HistorialAuditoria() {
         return "Registró una ocupación en: ";
       case "OCUPACION_CERRADA":
         return "Finalizó una ocupación en: ";
-      // 🆕 M6.0.4 — Consorcio
+      // 🆕 M6.0.4 — Consorcio (edición)
       case "CONSORCIO_EDITADO":
         return "Editó los datos del consorcio: ";
+      // 🆕 M6.7 — Consorcio (ABM)
+      case "CONSORCIO_CREADO":
+        return "Creó el consorcio: ";
+      case "CONSORCIO_ACTIVADO":
+        return "Activó el consorcio: ";
+      case "CONSORCIO_DESACTIVADO":
+        return "Desactivó el consorcio: ";
+      // 🆕 M6.7b — Administradores de consorcio
+      case "ADMIN_ASIGNADO":
+        return "Asignó un administrador en: ";
+      case "ADMIN_REVOCADO":
+        return "Revocó un administrador en: ";
       default:
         return "Acción sobre: ";
     }
@@ -438,11 +486,24 @@ export default function HistorialAuditoria() {
       codigoPostalNuevo: "Cód. Postal nuevo",
       notasAnterior: "Notas anteriores",
       notasNuevo: "Notas nuevas",
+      // 🆕 M6.7 — Consorcio (alta: campos simples del snapshot inicial)
+      nombre: "Nombre",
+      direccion: "Dirección",
+      cuit: "CUIT",
+      localidad: "Localidad",
+      provincia: "Provincia",
+      codigoPostal: "Código Postal",
+      // 🆕 M6.7b — Administradores (userId/membresiaId ocultos como técnicos)
+      userEmail: "Email",
     };
 
     // 🎯 Filtrado inteligente:
     // Si existe un campo `xxxNombre`, ocultamos su versión ID correspondiente.
     // Ejemplo: si hay `propietarioNuevoNombre`, ocultamos `propietarioNuevo` (el ID crudo).
+    //
+    // ⚠️ M6.7b — excepción: `userNombre` (admin) NO tiene un `user` (ID) que ocultar
+    // en este contexto — el `userId` ya se oculta por CAMPOS_TECNICOS_OCULTOS.
+    // El `campoBase` "user" no coincide con ninguna key real, así que es inocuo.
     const camposConNombreDisponible = new Set<string>();
     Object.keys(cambios).forEach((key) => {
       if (key.endsWith("Nombre")) {
@@ -454,7 +515,7 @@ export default function HistorialAuditoria() {
 
     return Object.entries(cambios)
       .filter(([key, val]) => {
-        // 🆕 M5.4.3 — Ocultamos IDs técnicos (ocupacionId, userId)
+        // 🆕 M5.4.3 / M6.7b — Ocultamos IDs técnicos (ocupacionId, userId, membresiaId)
         if (CAMPOS_TECNICOS_OCULTOS.has(key)) return false;
         // Si este campo tiene un `xxxNombre` correspondiente, lo ocultamos
         if (camposConNombreDisponible.has(key)) return false;
@@ -463,7 +524,13 @@ export default function HistorialAuditoria() {
         return true;
       })
       .map(([key, val]) => {
-        const label = labels[key] || key;
+        // 🆕 M6.7b — `userNombre` en contexto de admins se muestra como "Administrador"
+        //    (en ocupaciones era "Ocupante"). Distinguimos por presencia de `role`.
+        let label = labels[key] || key;
+        if (key === "userNombre" && "role" in cambios) {
+          label = "Administrador";
+        }
+
         // Formatear el valor
         let valorFormateado: string;
         if (val === "") {
@@ -473,6 +540,9 @@ export default function HistorialAuditoria() {
           valorFormateado = formatearFechaAuditoria(val);
         } else if (key === "tipo" && typeof val === "string") {
           // 🆕 M5.4.3 — Capitalizar el tipo de ocupación
+          valorFormateado = val.charAt(0).toUpperCase() + val.slice(1);
+        } else if (key === "role" && typeof val === "string") {
+          // 🆕 M6.7b — Capitalizar el rol del administrador
           valorFormateado = val.charAt(0).toUpperCase() + val.slice(1);
         } else {
           valorFormateado = String(val);
@@ -659,9 +729,14 @@ export default function HistorialAuditoria() {
               <option value="OCUPACION_CREADA">Ocupaciones registradas</option>
               <option value="OCUPACION_CERRADA">Ocupaciones finalizadas</option>
             </optgroup>
-            {/* 🆕 M6.0.4 — Consorcio */}
+            {/* 🆕 M6.0.4 + M6.7 + M6.7b — Consorcio */}
             <optgroup label="Consorcio">
+              <option value="CONSORCIO_CREADO">Altas de consorcio</option>
               <option value="CONSORCIO_EDITADO">Edición de datos</option>
+              <option value="CONSORCIO_ACTIVADO">Activaciones</option>
+              <option value="CONSORCIO_DESACTIVADO">Desactivaciones</option>
+              <option value="ADMIN_ASIGNADO">Asignación de admins</option>
+              <option value="ADMIN_REVOCADO">Revocación de admins</option>
             </optgroup>
           </select>
         </div>

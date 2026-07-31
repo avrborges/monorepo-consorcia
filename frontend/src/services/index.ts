@@ -38,4 +38,5 @@ export type {
 
 export type {
   ActualizarConsorcioPayload, // 🆕 M6.0
+  CrearConsorcioPayload
 } from "./consorcioService";

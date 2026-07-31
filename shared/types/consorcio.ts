@@ -61,11 +61,27 @@ export interface GetConsorcioResponse {
 }
 
 /**
- * Respuesta de PUT /consorcios/:id (M6.0) — resultado de la edición.
+ * Respuesta de PUT /consorcios/:id (M6.0), POST /consorcios (M6.1) y
+ * PATCH /consorcios/:id/estado (M6.1) — resultado con el consorcio afectado.
  */
 export interface ConsorcioResponse {
   ok: boolean;
   consorcio?: Consorcio;
+  msg?: string;
+  error?: string;
+}
+
+/* ============================================================
+ * 🆕 M6.1 — ABM de consorcios
+ * ============================================================ */
+
+/**
+ * Respuesta de GET /consorcios (M6.1) — listado completo de consorcios
+ * (activos e inactivos) para el ABM del super_admin_global.
+ */
+export interface ConsorciosListResponse {
+  ok: boolean;
+  consorcios?: Consorcio[];
   msg?: string;
   error?: string;
 }

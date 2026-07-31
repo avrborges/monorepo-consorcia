@@ -24,8 +24,15 @@ export type AccionAuditoria =
   // 🎯 Acciones sobre ocupaciones (auditadas bajo TipoEntidad "UNIDAD")
   | "OCUPACION_CREADA"
   | "OCUPACION_CERRADA"
-  // 🆕 M6.0 — Acciones sobre consorcios
-  | "CONSORCIO_EDITADO";
+  // 🎯 Acciones sobre consorcios (M6.0 + M6)
+  | "CONSORCIO_EDITADO"
+  | "CONSORCIO_CREADO"
+  | "CONSORCIO_ACTIVADO"
+  | "CONSORCIO_DESACTIVADO"
+  // 🆕 M6.3 — Asignación de administradores a un consorcio (vía Membresia,
+  // auditadas bajo TipoEntidad "CONSORCIO", entidadId = consorcioId)
+  | "ADMIN_ASIGNADO"
+  | "ADMIN_REVOCADO";
 
 /**
  * Detalles del registro de auditoría.
@@ -99,9 +106,17 @@ export type AccionUnidad = Extract<
 >;
 
 /**
- * 🆕 M6.0 — Acciones específicas de la entidad "CONSORCIO".
+ * Acciones específicas de la entidad "CONSORCIO".
+ *
+ * Incluye el ABM (crear, activar, desactivar) además de editar, y la
+ * gestión de administradores (asignar/revocar vía Membresia — M6.3).
  */
 export type AccionConsorcio = Extract<
   AccionAuditoria,
-  "CONSORCIO_EDITADO"
+  | "CONSORCIO_EDITADO"
+  | "CONSORCIO_CREADO"
+  | "CONSORCIO_ACTIVADO"
+  | "CONSORCIO_DESACTIVADO"
+  | "ADMIN_ASIGNADO"
+  | "ADMIN_REVOCADO"
 >;

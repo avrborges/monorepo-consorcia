@@ -1158,20 +1158,84 @@ export const cambiarConsorcio = async (
     }
 
     const userId = usuario._id.toString();
+    const esSuperGlobal = usuario.rolGlobal === "super_admin_global";
 
+    // Buscamos la membresía activa del usuario en ese consorcio (si existe).
     const membresia = await Membresia.findOne({
       userId,
       consorcioId,
       estado: "activa",
     }).populate("consorcioId", "nombre direccion activo");
 
+    /* ============================================================
+     * 🆕 M6.6 — BYPASS para super_admin_global sin membresía
+     * ============================================================
+     * El super global puede operar sobre cualquier consorcio activo.
+     * Si no tiene membresía, cargamos el consorcio directamente y usamos
+     * "superadmin" como rol contextual.
+     */
     if (!membresia) {
-      return res.status(403).json({
-        success: false,
-        message: "No tenés acceso a ese consorcio.",
+      if (!esSuperGlobal) {
+        return res.status(403).json({
+          success: false,
+          message: "No tenés acceso a ese consorcio.",
+        });
+      }
+
+      // Super global sin membresía → cargar el consorcio directo.
+      const consorcioDirecto = await Consorcio.findById(consorcioId).select(
+        "_id nombre direccion activo"
+      );
+
+      if (!consorcioDirecto) {
+        return res.status(404).json({
+          success: false,
+          message: "El consorcio no existe.",
+        });
+      }
+
+      if (!consorcioDirecto.activo) {
+        return res.status(403).json({
+          success: false,
+          message: "El consorcio seleccionado no está activo.",
+        });
+      }
+
+      const tokenSuper = generarJwtMultiTenant({
+        userId,
+        rolGlobal: usuario.rolGlobal,
+        activeConsorcioId: consorcioDirecto._id.toString(),
+        roleEnConsorcioActivo: "superadmin", // rol contextual del dueño de la plataforma
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: `Consorcio activo cambiado a "${consorcioDirecto.nombre}".`,
+        token: tokenSuper,
+        user: {
+          _id: usuario._id.toString(),
+          name: usuario.name,
+          email: usuario.email,
+          role: usuario.role,
+          rolGlobal: usuario.rolGlobal,
+          unidadFuncional: usuario.unidadFuncional,
+          telefono: usuario.telefono,
+          estado: usuario.estado,
+          debeCambiarPassword: usuario.debeCambiarPassword,
+        },
+        activeConsorcio: {
+          _id: consorcioDirecto._id.toString(),
+          nombre: consorcioDirecto.nombre,
+          direccion: consorcioDirecto.direccion,
+        },
+        roleEnConsorcioActivo: "superadmin",
+        rolGlobal: usuario.rolGlobal,
       });
     }
 
+    /* ============================================================
+     * Flujo normal: el usuario TIENE membresía en el consorcio.
+     * ============================================================ */
     const consorcio = membresia.consorcioId as unknown as {
       _id: mongoose.Types.ObjectId;
       nombre: string;

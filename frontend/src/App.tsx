@@ -18,6 +18,7 @@ const ListaUsuarios = lazy(() => import("@/pages/dashboard/ListaUsuarios"));
 const MapaEdificio = lazy(() => import("@/pages/dashboard/MapaEdificio"));
 const Auditoria = lazy(() => import("@/pages/dashboard/Auditoria"));
 const ConfiguracionConsorcio = lazy(() => import("@/pages/dashboard/ConfiguracionConsorcio")); // 🆕 M6.0
+const ConsorciosABM = lazy(() => import("@/pages/dashboard/ConsorciosABM")); // 🆕 M6.4b
 
 // 🔴 EAGER — ProtectedRoute es un guard chico, sin costo mantenerlo eager
 import ProtectedRoute from "@/components/layout/ProtectedRoute";
@@ -111,6 +112,11 @@ function App() {
                 <Route path="auditoria" element={<Auditoria />} />
                 {/* 🆕 M6.0 — Configuración / Datos del Consorcio */}
                 <Route path="configuracion" element={<ConfiguracionConsorcio />} />
+              </Route>
+
+              {/* 🆕 M6.4b — ABM de consorcios: EXCLUSIVO super_admin_global */}
+              <Route element={<ProtectedRoute requiereSuperGlobal />}>
+                <Route path="consorcios" element={<ConsorciosABM />} />
               </Route>
             </Route>
           </Route>

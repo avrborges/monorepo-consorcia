@@ -7,6 +7,7 @@ import {
   getToken,
   limpiarSesion,
   tieneRolPermitido,
+  esSuperAdminGlobal, // 🆕 M6.4b — gating por rol global
 } from "@/lib/session";
 
 // 🎯 Tipos de dominio compartidos entre backend y frontend
@@ -25,6 +26,16 @@ interface ProtectedRouteProps {
    *   <ProtectedRoute rolesPermitidos={["admin", "superadmin"]} />
    */
   rolesPermitidos?: Rol[];
+
+  /**
+   * 🆕 M6.4b — Si es true, la ruta es EXCLUSIVA del super_admin_global.
+   * Se valida contra el rol GLOBAL (rolGlobal), no contra el role de
+   * membresía. Útil para el ABM de consorcios.
+   *
+   * @example
+   *   <ProtectedRoute requiereSuperGlobal />
+   */
+  requiereSuperGlobal?: boolean;
 }
 
 /* ============================================================
@@ -71,7 +82,8 @@ function esTokenValido(token: string | null): boolean {
  *
  * Verifica:
  *  1. **Autenticación**: token válido y no expirado
- *  2. **Autorización**: si `rolesPermitidos` está definido, valida el rol del usuario
+ *  2. **Autorización**: si `rolesPermitidos` está definido, valida el rol del usuario;
+ *     si `requiereSuperGlobal` es true, valida que sea super_admin_global.
  *
  * Si falla la autenticación:
  *  - Limpia la sesión
@@ -81,7 +93,10 @@ function esTokenValido(token: string | null): boolean {
  * Si falla la autorización:
  *  - Redirige al índice del dashboard (sin limpiar sesión)
  */
-export default function ProtectedRoute({ rolesPermitidos }: ProtectedRouteProps) {
+export default function ProtectedRoute({
+  rolesPermitidos,
+  requiereSuperGlobal = false,
+}: ProtectedRouteProps) {
   const token = getToken();
   const location = useLocation();
 
@@ -113,7 +128,17 @@ export default function ProtectedRoute({ rolesPermitidos }: ProtectedRouteProps)
   }
 
   /* ------------------------------------------------------------
-   * 2. Verificación de autorización por rol
+   * 2. Autorización EXCLUSIVA de super_admin_global (M6.4b)
+   * ------------------------------------------------------------ */
+  if (requiereSuperGlobal) {
+    if (!esSuperAdminGlobal()) {
+      // No es super global → al índice del dashboard.
+      return <Navigate to="/dashboard" replace />;
+    }
+  }
+
+  /* ------------------------------------------------------------
+   * 3. Verificación de autorización por rol
    * ------------------------------------------------------------ */
   if (rolesPermitidos && rolesPermitidos.length > 0) {
     if (!tieneRolPermitido(rolesPermitidos)) {

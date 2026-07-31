@@ -21,8 +21,13 @@ const ACCIONES_AUDITORIA: AccionAuditoria[] = [
   "HABITANTES_VINCULADOS",
   "OCUPACION_CREADA",
   "OCUPACION_CERRADA",
-  // 🆕 M6.0 — Acciones sobre consorcios
   "CONSORCIO_EDITADO",
+  "CONSORCIO_CREADO",
+  "CONSORCIO_ACTIVADO",
+  "CONSORCIO_DESACTIVADO",
+  // 🆕 M6.3 — Asignación de administradores a un consorcio
+  "ADMIN_ASIGNADO",
+  "ADMIN_REVOCADO",
 ];
 
 const TIPOS_ENTIDAD: TipoEntidad[] = ["USUARIO", "UNIDAD", "CONSORCIO"];
